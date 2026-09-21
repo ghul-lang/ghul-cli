@@ -251,8 +251,8 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         palette__is_null_for_none_or_a_terminal_without_colour() is
-            assert !COLOUR_CHOICE.palette(ThemeChoice.NONE, ColourDepth.TRUE_COLOUR, () => null, null)?;
-            assert !COLOUR_CHOICE.palette(ThemeChoice.DARK, ColourDepth.NONE, () => null, null)?;
+            assert !COLOUR_CHOICE.palette(ThemeChoice.NONE, ColourDepth.TRUE_COLOUR, () -> string? => null, null)?;
+            assert !COLOUR_CHOICE.palette(ThemeChoice.DARK, ColourDepth.NONE, () -> string? => null, null)?;
         si
 
         @Test()
@@ -267,8 +267,8 @@ namespace Ghul.Cli.Tests is
         @Test()
         palette__picks_light_from_a_light_background_and_dark_otherwise() is
             let light = COLOUR_CHOICE.palette(ThemeChoice.AUTO, ColourDepth.TRUE_COLOUR, () => "]11;rgb:ffff/ffff/ffff\\", null)
-            let from_colorfgbg = COLOUR_CHOICE.palette(ThemeChoice.AUTO, ColourDepth.TRUE_COLOUR, () => null, "0;15")
-            let unknown = COLOUR_CHOICE.palette(ThemeChoice.AUTO, ColourDepth.TRUE_COLOUR, () => null, null)
+            let from_colorfgbg = COLOUR_CHOICE.palette(ThemeChoice.AUTO, ColourDepth.TRUE_COLOUR, () -> string? => null, "0;15")
+            let unknown = COLOUR_CHOICE.palette(ThemeChoice.AUTO, ColourDepth.TRUE_COLOUR, () -> string? => null, null)
 
             assert light!.colour(TokenKind.KEYWORD) == 0x0000FF;
             assert from_colorfgbg!.colour(TokenKind.KEYWORD) == 0x0000FF;

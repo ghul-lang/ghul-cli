@@ -1,7 +1,7 @@
 <Project>
   <ItemGroup>
     <PackageVersion Include="NetMQ" Version="4.0.4.3" />
-    <PackageVersion Include="ghul.runtime" Version="21.11.0" />
+    <PackageVersion Include="ghul.runtime" Version="21.12.1" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
     <PackageVersion Include="MSTest.TestAdapter" Version="4.4.0" />
     <PackageVersion Include="MSTest.TestFramework" Version="4.4.0" />
