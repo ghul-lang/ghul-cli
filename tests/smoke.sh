@@ -257,10 +257,10 @@ done
 if (( fail )); then
     exit 1
 fi
-tools_store="$fresh_home/.local/share/ghul-cli/tools/.store/ghul.compiler"
-installed_versions="$(ls "$tools_store" 2>/dev/null | wc -l)"
+compilers="$fresh_home/.local/share/ghul-cli/compilers"
+installed_versions="$(ls "$compilers" 2>/dev/null | wc -l)"
 if [[ "$installed_versions" != "1" ]]; then
-    echo "smoke: expected exactly one installed compiler version after concurrent installs, found $installed_versions under $tools_store" >&2
+    echo "smoke: expected exactly one installed compiler version after concurrent installs, found $installed_versions under $compilers" >&2
     exit 1
 fi
 

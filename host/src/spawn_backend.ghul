@@ -67,7 +67,7 @@ namespace Ghul.Repl.Host is
     // this tool does. About a second a cell, nearly all of it process
     // start-up and building the metadata context over the reference
     // pack.
-    class SPAWN_BACKEND(_compiler_shim: string, _files: SESSION_FILES): CompileBackend is
+    class SPAWN_BACKEND(_compiler: COMPILER_COMMAND, _files: SESSION_FILES): CompileBackend is
         close() is si
 
         compile(request: CELL_REQUEST) -> COMPILE_RESULT is
@@ -80,7 +80,12 @@ namespace Ghul.Repl.Host is
 
             let start_info = System.Diagnostics.ProcessStartInfo()
 
-            start_info.file_name = _compiler_shim
+            start_info.file_name = _compiler.file_name
+
+            for argument in _compiler.leading_arguments() do
+                start_info.argument_list.add(argument)
+            od
+
             start_info.use_shell_execute = false
             start_info.redirect_standard_output = true
             start_info.redirect_standard_error = true

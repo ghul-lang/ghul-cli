@@ -1,0 +1,246 @@
+namespace Ghul.Repl.Host is
+    use Collections.LIST
+    use IO.Directory
+    use IO.File
+    use IO.FileMode
+    use IO.FileAccess
+    use IO.FileShare
+    use IO.Path
+    use System.Text.Json.JsonDocument
+    use System.Text.Json.JsonElement
+    use System.Text.Json.JsonValueKind
+
+    // Installs a compiler version into a COMPILER_STORE straight from a
+    // NuGet flat-container feed, making no `dotnet tool` call, so a
+    // machine with only the .NET runtime installs a compiler the same as
+    // one with the whole SDK.
+    //
+    // A version's package is downloaded to a scratch file, its
+    // `tools/net10.0/any` directory extracted into a uniquely named
+    // scratch directory, and that renamed onto the version's store
+    // directory only once complete - so a reader never sees a
+    // half-written version, and a failed download leaves nothing behind:
+    // no scratch file, no scratch directory, no store entry. The caller
+    // holds the store's install lock across an install, so the rename
+    // lands under it.
+    class COMPILER_DOWNLOAD(_store: COMPILER_STORE, _feed: string?) is
+        DEFAULT_FEED: string static => "https://api.nuget.org/v3-flatcontainer"
+
+        // A download for this store, with the feed named by
+        // GHUL_COMPILER_FEED where that is set, so a test or a mirror can
+        // point it elsewhere.
+        of(store: COMPILER_STORE) -> COMPILER_DOWNLOAD static =>
+            COMPILER_DOWNLOAD(store, System.Environment.get_environment_variable("GHUL_COMPILER_FEED"))
+
+        feed() -> string => _feed ?? DEFAULT_FEED
+
+        // The newest release the feed carries: the last version in its
+        // index with no `-`, so a prerelease never wins over the release
+        // before it. Null where the index cannot be read, with `failure`
+        // saying why.
+        latest_release() -> (version: string?, failure: string?) is
+            let url = "{feed()}/ghul.compiler/index.json"
+
+            let client = System.Net.Http.HttpClient()
+
+            try
+                let text mut = ""
+
+                try
+                    let response = client.get_async(url).result
+
+                    if !response.is_success_status_code then
+                        return (
+                            version = null,
+                            failure = "the feed at {url} answered HTTP {cast int(response.status_code)}")
+                    fi
+
+                    text = response.content.read_as_string_async().result
+                catch e: System.Exception
+                    return (version = null, failure = "the feed at {url} could not be read ({e.get_type().name})")
+                yrt
+
+                let releases = LIST[string]()
+
+                for entry in _versions_of(text) do
+                    if !entry.contains("-") then
+                        releases.add(entry)
+                    fi
+                od
+
+                if releases.count == 0 then
+                    return (version = null, failure = "the feed at {url} lists no releases")
+                fi
+
+                return (version = releases[releases.count - 1], failure = null)
+            finally
+                client.dispose()
+            yrt
+        si
+
+        // Every version named in an index document, in the order the
+        // feed wrote them.
+        _versions_of(index_text: string) -> Collections.List[string] static is
+            let versions = LIST[string]()
+
+            let document = JsonDocument.parse(index_text, _)
+
+            try
+                let root = document.root_element
+                let listed: JsonElement mut
+
+                if root.try_get_property("versions", listed ref) /\ listed.value_kind == JsonValueKind.ARRAY then
+                    for entry in listed.enumerate_array() do
+                        if let name: string = entry.get_string() then
+                            versions.add(name)
+                        fi
+                    od
+                fi
+            finally
+                document.dispose()
+            yrt
+
+            return versions
+        si
+
+        // Installs `version`: downloads its package, extracts
+        // `tools/net10.0/any` from it, and renames that onto the
+        // version's store directory. Returns null on success, or the
+        // failure to report, which names the version and, where the feed
+        // answered, the HTTP status.
+        install(version: string, say: (string) -> void) -> string? is
+            // The version names a directory and a URL, so anything that
+            // could reach outside a single name is refused outright.
+            if version.length == 0 \/ version.contains("/") \/ version.contains("\\") \/ version.contains("..") then
+                return "ghul.compiler {version} is not a version"
+            fi
+
+            Directory.create_directory(_store.root)
+
+            let package_scratch =
+                Path.join([_store.root, ".download-{System.Environment.process_id}-{System.Guid.new_guid().to_string("N")}.nupkg"])
+
+            try
+                say("downloading ghul.compiler {version}...")
+
+                let download_failure = _download_package(version, package_scratch)
+
+                if let problem: string = download_failure then
+                    return problem
+                fi
+
+                let scratch_directory =
+                    Path.join([_store.root, "{version}.tmp-{System.Environment.process_id}-{System.Guid.new_guid().to_string("N")}"])
+
+                try
+                    let extract_failure = _extract_tools_directory(package_scratch, scratch_directory)
+
+                    if let problem: string = extract_failure then
+                        return problem
+                    fi
+
+                    if !File.exists(Path.join([scratch_directory, "ghul.dll"])) then
+                        return "the ghul.compiler {version} package carries no compiler"
+                    fi
+
+                    try
+                        Directory.move(scratch_directory, _store.directory(version))
+                    catch e: IO.IOException
+                        // Another process installed the same version
+                        // first; its copy is complete, ours is redundant.
+                        _delete_directory(scratch_directory)
+                    yrt
+
+                    return null
+                finally
+                    _delete_directory(scratch_directory)
+                yrt
+            finally
+                if File.exists(package_scratch) then
+                    File.delete(package_scratch)
+                fi
+            yrt
+        si
+
+        _package_url(version: string) -> string =>
+            "{feed()}/ghul.compiler/{version}/ghul.compiler.{version}.nupkg"
+
+        _download_package(version: string, destination: string) -> string? is
+            let client = System.Net.Http.HttpClient()
+
+            try
+                let response = client.get_async(_package_url(version)).result
+
+                if !response.is_success_status_code then
+                    return "ghul.compiler {version} is not on the feed (HTTP {cast int(response.status_code)})"
+                fi
+
+                let bytes = response.content.read_as_byte_array_async().result
+
+                File.write_all_bytes(destination, bytes)
+
+                return null
+            catch e: System.Exception
+                return "ghul.compiler {version} could not be downloaded ({e.get_type().name})"
+            finally
+                client.dispose()
+            yrt
+        si
+
+        // The directory of a package that holds the compiler and what it
+        // needs beside it: what a version's store directory is filled
+        // with.
+        TOOLS_DIRECTORY_PREFIX: string static => "tools/net10.0/any/"
+
+        _extract_tools_directory(package: string, destination: string) -> string? is
+            let zip = System.IO.Compression.ZipFile.open_read(package)
+
+            try
+                for entry in zip.entries do
+                    let name = entry.full_name
+
+                    if !name.starts_with(TOOLS_DIRECTORY_PREFIX) then
+                        continue
+                    fi
+
+                    let relative = name.substring(TOOLS_DIRECTORY_PREFIX.length)
+
+                    if relative.length == 0 \/ relative.contains("..") then
+                        continue
+                    fi
+
+                    if relative.ends_with("/") then
+                        Directory.create_directory(Path.join([destination, relative]))
+                        continue
+                    fi
+
+                    let target = Path.join([destination, relative])
+
+                    Directory.create_directory(Path.get_directory_name(target) ?? destination)
+
+                    let output = File.open(target, FileMode.CREATE, FileAccess.WRITE, FileShare.NONE)
+                    let input = entry.open()
+
+                    try
+                        input.copy_to(output)
+                    finally
+                        input.close()
+                        output.close()
+                    yrt
+                od
+
+                return null
+            catch e: System.Exception
+                return "the ghul.compiler package could not be read ({e.get_type().name})"
+            finally
+                zip.dispose()
+            yrt
+        si
+
+        _delete_directory(path: string) is
+            if Directory.exists(path) then
+                Directory.delete(path, true)
+            fi
+        si
+    si
+si

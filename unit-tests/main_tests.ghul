@@ -52,10 +52,11 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        installed_compiler_version__is_absent_when_no_tools_are_installed() is
-            let tools_dir = IO.Path.combine(IO.Path.get_temp_path(), System.Guid.new_guid().to_string());
+        highest_version__is_absent_when_no_compilers_are_installed() is
+            let store = Ghul.Repl.Host.COMPILER_STORE(
+                IO.Path.combine(IO.Path.get_temp_path(), "ghul-empty-{System.Guid.new_guid().to_string("N")}"));
 
-            assert !Ghul.Cli.installed_compiler_version(tools_dir)?;
+            assert !store.highest_version()?;
         si
 
         _make_executable(path: string) is

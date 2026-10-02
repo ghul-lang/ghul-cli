@@ -7,7 +7,17 @@ namespace Ghul.Repl.Host is
         // declared pure where a pure one is asked for costs nothing a
         // cell would notice, and saying so at every `map(f)` teaches a
         // newcomer to ignore warnings.
-        quieted: Collections.List[string] static =>
-            Collections.LIST[string](["--suppress", "impure-function-argument"])
+        quieted: Collections.List[string] static is
+            let arguments = Collections.LIST[string](["--suppress", "impure-function-argument"])
+
+            // Where the machine has no SDK ref pack for the compiler to
+            // find, it is pointed at the runtime's own assemblies.
+            if let references = REFERENCE_ASSEMBLIES.directory() then
+                arguments.add("--sdk-ref-path")
+                arguments.add(references)
+            fi
+
+            return arguments
+        si
     si
 si

@@ -14,7 +14,7 @@ namespace Ghul.Repl.Host is
     // answer it cannot give - the compiler not starting, a reply it does
     // not recognise - counts as complete, so the text goes to the compiler
     // and whatever is wrong is reported from there.
-    class COMPLETENESS_CHECK(_compiler_shim: string, _directory: string) is
+    class COMPLETENESS_CHECK(_compiler: COMPILER_COMMAND, _directory: string) is
         check(text: string) -> Completeness is
             try
                 IO.Directory.create_directory(_directory)
@@ -25,7 +25,12 @@ namespace Ghul.Repl.Host is
 
                 let start_info = System.Diagnostics.ProcessStartInfo()
 
-                start_info.file_name = _compiler_shim
+                start_info.file_name = _compiler.file_name
+
+                for argument in _compiler.leading_arguments() do
+                    start_info.argument_list.add(argument)
+                od
+
                 start_info.use_shell_execute = false
                 start_info.redirect_standard_output = true
                 start_info.redirect_standard_error = true

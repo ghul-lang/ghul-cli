@@ -1,4 +1,6 @@
 namespace Ghul.Jupyter is
+    use Ghul.Repl.Host.COMPILER_COMMAND
+    use Ghul.Repl.Host.COMPILER_STORE
     use IO.Directory
     use IO.File
     use IO.Path
@@ -6,46 +8,64 @@ namespace Ghul.Jupyter is
     // Where the compiler is, and the runtime beside it that a cell's
     // assembly needs to load. `_known_version` is the compiler's version
     // where finding the runtime already asked for it.
-    class COMPILER_LOCATION(shim: string, runtime_assembly: string?, _known_version: string?) is
+    class COMPILER_LOCATION(command: COMPILER_COMMAND, runtime_assembly: string?, _known_version: string?) is
         // `GHUL_COMPILER` first, for a machine that keeps its compiler
-        // somewhere of its own; then the private copy `ghul.cli`
-        // installs, which is the usual answer on a machine with the tool;
-        // then whatever `ghul-compiler` is on the path.
+        // somewhere of its own; then the copy `ghul.cli` installs into
+        // its compiler store, which is the usual answer on a machine with
+        // the tool; then a store as `ghul.cli` installed it before it had
+        // one, for a machine that has not run a new `ghul` since; then
+        // whatever `ghul-compiler` is on the path.
         find() -> COMPILER_LOCATION? static is
             if let named = System.Environment.get_environment_variable("GHUL_COMPILER") /\
                 named.trim().length > 0
             then
-                return COMPILER_LOCATION(named, _runtime_beside(named), null)
+                if named.ends_with(".dll") then
+                    return COMPILER_LOCATION(COMPILER_COMMAND("dotnet", named), _runtime_beside(named), null)
+                fi
+
+                return COMPILER_LOCATION(COMPILER_COMMAND(named, null), _runtime_beside(named), null)
+            fi
+
+            let store = COMPILER_STORE.for_this_user()
+
+            if let installed = store.highest_version() then
+                return COMPILER_LOCATION(store.command(installed), store.runtime_assembly(installed), installed)
             fi
 
             let tools = Path.join([_home(), ".local", "share", "ghul-cli", "tools"])
             let shim = Path.join([tools, "ghul-compiler"])
 
             if File.exists(shim) then
-                let version = version_of(shim)
+                let command = COMPILER_COMMAND(shim, null)
+                let version = version_of(command)
 
-                return COMPILER_LOCATION(shim, runtime_under(tools, version), version)
+                return COMPILER_LOCATION(command, runtime_under(tools, version), version)
             fi
 
             if let on_path = _on_path("ghul-compiler") then
-                return COMPILER_LOCATION(on_path, _runtime_beside(on_path), null)
+                return COMPILER_LOCATION(COMPILER_COMMAND(on_path, null), _runtime_beside(on_path), null)
             fi
 
             return null
         si
 
-        version() -> string? => _known_version ?? version_of(shim)
+        version() -> string? => _known_version ?? version_of(command)
 
         // What a compiler answers when asked for its version, which
         // is the first line it prints when given no arguments at all.
         // Null where it cannot be run or says nothing recognisable: an
         // answer that is not a version is not one to refuse to start
         // over.
-        version_of(shim: string) -> string? static is
+        version_of(compiler: COMPILER_COMMAND) -> string? static is
             try
                 let start_info = System.Diagnostics.ProcessStartInfo()
 
-                start_info.file_name = shim
+                start_info.file_name = compiler.file_name
+
+                for argument in compiler.leading_arguments() do
+                    start_info.argument_list.add(argument)
+                od
+
                 start_info.use_shell_execute = false
                 start_info.redirect_standard_output = true
                 start_info.redirect_standard_error = true
@@ -78,8 +98,8 @@ namespace Ghul.Jupyter is
         _home() -> string static =>
             System.Environment.get_folder_path(System.Environment_SpecialFolder.USER_PROFILE)
 
-        _runtime_beside(shim: string) -> string? static is
-            if let directory = Path.get_directory_name(shim) then
+        _runtime_beside(assembly: string) -> string? static is
+            if let directory = Path.get_directory_name(assembly) then
                 let candidate = Path.join([directory, "ghul-runtime.dll"])
 
                 if File.exists(candidate) then

@@ -1,0 +1,150 @@
+namespace Ghul.Cli.Tests is
+    use IO.Directory
+    use IO.File
+    use IO.Path
+
+    use Ghul.Repl.Host.COMPILER_STORE
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // What a compiler store answers over a scratch directory: which
+    // versions are installed, which is the highest, and how a version is
+    // reached.
+    @TestClass()
+    class COMPILER_STORE_TESTS is
+        init() is si
+
+        _store(versions: string[]) -> (store: COMPILER_STORE, root: string) is
+            let root = Path.combine(Path.get_temp_path(), "ghul-store-{System.Guid.new_guid().to_string("N")}")
+
+            for v in versions do
+                _install(root, v)
+            od
+
+            return (store = COMPILER_STORE(root), root = root)
+        si
+
+        _delete(root: string) is
+            if IO.Directory.exists(root) then
+                IO.Directory.delete(root, true)
+            fi
+        si
+
+        // One installed version: its compiler dll, with the runtime
+        // beside it the way a package carries it.
+        _install(root: string, version: string) is
+            let directory = Path.combine(root, version)
+
+            Directory.create_directory(directory)
+            File.write_all_text(Path.combine(directory, "ghul.dll"), "compiler {version}")
+            File.write_all_text(Path.combine(directory, "ghul-runtime.dll"), "runtime {version}")
+        si
+
+        @Test()
+        versions__of_an_empty_store__is_empty() is
+            let (store, root) = _store([])
+
+            try
+                assert store.versions().count == 0;
+                assert !store.highest_version()?;
+            finally
+                _delete(root)
+            yrt
+        si
+
+        @Test()
+        highest_version__is_the_newest_installed() is
+            let (store, root) = _store(["1.0.0", "1.9.0", "1.10.0"])
+
+            try
+                assert (store.highest_version() ?? "none") =~ "1.10.0";
+                assert store.versions()[0] =~ "1.0.0";
+            finally
+                _delete(root)
+            yrt
+        si
+
+        @Test()
+        highest_version__prefers_a_release_over_a_prerelease_of_a_newer_number() is
+            let (store, root) = _store(["2.0.0-beta.1", "1.5.0"])
+
+            try
+                assert (store.highest_version() ?? "none") =~ "1.5.0";
+            finally
+                _delete(root)
+            yrt
+        si
+
+        @Test()
+        several_versions_are_installed_at_once() is
+            let (store, root) = _store(["1.0.0", "2.0.0"])
+
+            try
+                assert store.is_installed("1.0.0");
+                assert store.is_installed("2.0.0");
+                assert !store.is_installed("3.0.0");
+            finally
+                _delete(root)
+            yrt
+        si
+
+        @Test()
+        versions__ignores_scratch_and_incomplete_directories() is
+            let (store, root) = _store(["1.0.0"])
+
+            try
+                // A scratch directory an interrupted install left behind,
+                // and a directory with no compiler in it.
+                let scratch = Path.combine(root, "2.0.0.tmp-123-abcd")
+
+                Directory.create_directory(scratch)
+                File.write_all_text(Path.combine(scratch, "ghul.dll"), "half-written")
+
+                Directory.create_directory(Path.combine(root, "empty"))
+
+                let versions = store.versions()
+
+                assert versions.count == 1;
+                assert versions[0] =~ "1.0.0";
+            finally
+                _delete(root)
+            yrt
+        si
+
+        @Test()
+        directory__command__and_runtime__name_the_version() is
+            let (store, root) = _store(["1.2.3"])
+
+            try
+                assert store.directory("1.2.3") =~ Path.combine(root, "1.2.3");
+
+                let command = store.command("1.2.3")
+
+                assert command.file_name =~ "dotnet";
+                assert (command.assembly ?? "none") =~ Path.combine(root, "1.2.3", "ghul.dll");
+
+                let leading = command.leading_arguments()
+
+                assert leading.count == 1;
+                assert leading[0] =~ Path.combine(root, "1.2.3", "ghul.dll");
+
+                assert File.read_all_text(store.runtime_assembly("1.2.3")!) =~ "runtime 1.2.3";
+                assert !store.runtime_assembly("9.9.9")?;
+            finally
+                _delete(root)
+            yrt
+        si
+
+        @Test()
+        install_lock_path__is_inside_the_store() is
+            let (store, root) = _store([])
+
+            try
+                assert store.install_lock_path() =~ Path.combine(root, ".install.lock");
+            finally
+                _delete(root)
+            yrt
+        si
+    si
+si

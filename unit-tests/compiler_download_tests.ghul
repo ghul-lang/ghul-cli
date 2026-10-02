@@ -1,0 +1,343 @@
+namespace Ghul.Cli.Tests is
+    use Collections.MAP
+    use Ghul.Pipes.collect
+    use Ghul.Pipes.repeat
+    use IO.Directory
+    use IO.File
+    use IO.Path
+    use System.IO.Compression.ZipArchive
+    use System.IO.Compression.ZipArchiveMode
+    use System.IO.Compression.ZipFile
+
+    use Ghul.Repl.Host.COMPILER_DOWNLOAD
+    use Ghul.Repl.Host.COMPILER_STORE
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // Installing a compiler from a feed, against a local HTTP server
+    // standing in for one: nothing here reaches a real feed.
+    @TestClass()
+    class COMPILER_DOWNLOAD_TESTS is
+        init() is si
+
+        _say_nothing(line: string) -> void static is si
+
+        // A feed carrying `index_versions` in its index and a package for
+        // each of `package_versions`.
+        _feed(index_versions: string[], package_versions: string[]) -> (server: FEED_SERVER, scratch: string) is
+            let scratch = Path.combine(Path.get_temp_path(), "ghul-feed-{System.Guid.new_guid().to_string("N")}")
+
+            Directory.create_directory(scratch)
+
+            let packages = MAP[string, ubyte[]]()
+
+            for v in package_versions do
+                let (path, body) = _package(scratch, v)
+
+                packages.add(path, body)
+            od
+
+            let listed = System.Text.Json.JsonSerializer.serialize(
+                index_versions,
+                cast System.Text.Json.JsonSerializerOptions(null))
+            let index = _bytes("{{\"versions\":{listed}}}")
+
+            let handler = (path: string) -> ubyte[]? is
+                if path =~ "/ghul.compiler/index.json" then
+                    return index
+                fi
+
+                if packages.contains_key(path) then
+                    return packages[path]
+                fi
+
+                return null
+            si
+
+            let server = FEED_SERVER(handler)
+            server.start()
+
+            return (server = server, scratch = scratch)
+        si
+
+        // A small hand-made package: what a compiler one carries under
+        // `tools/net10.0/any`, plus a file outside that the install
+        // leaves in the package.
+        _package(scratch: string, version: string) -> (path: string, body: ubyte[]) is
+            let file = Path.combine(scratch, "ghul.compiler.{version}.nupkg")
+
+            let zip = ZipFile.open(file, ZipArchiveMode.CREATE)
+
+            try
+                _entry(zip, "tools/net10.0/any/ghul.dll", "compiler {version}")
+                _entry(zip, "tools/net10.0/any/ghul-runtime.dll", "runtime {version}")
+                _entry(zip, "tools/net10.0/any/nested/dependency.dll", "dependency {version}")
+                _entry(zip, "packaged/shared.dll", "not part of the compiler")
+            finally
+                zip.dispose()
+            yrt
+
+            return (path = "/ghul.compiler/{version}/ghul.compiler.{version}.nupkg", body = File.read_all_bytes(file))
+        si
+
+        _entry(zip: ZipArchive, name: string, text: string) static is
+            let entry = zip.create_entry(name)
+            let stream = entry.open()
+
+            try
+                let content = System.Text.Encoding.utf8.get_bytes(text)
+
+                stream.write(content, 0, content.count)
+            finally
+                stream.close()
+            yrt
+        si
+
+        _bytes(text: string) -> ubyte[] static =>
+            System.Text.Encoding.utf8.get_bytes(text)
+
+        _store() -> (store: COMPILER_STORE, root: string) is
+            let root = Path.combine(Path.get_temp_path(), "ghul-download-{System.Guid.new_guid().to_string("N")}")
+
+            return (store = COMPILER_STORE(root), root = root)
+        si
+
+        _delete(root: string) is
+            if Directory.exists(root) then
+                Directory.delete(root, true)
+            fi
+        si
+
+        @Test()
+        install__extracts_the_package_tools_directory_into_the_store() is
+            let (server, feed_scratch) = _feed(["1.0.0", "2.0.0"], ["2.0.0"])
+            let (store, root) = _store()
+
+            try
+                let download = COMPILER_DOWNLOAD(store, server.url())
+
+                let failure = download.install("2.0.0", _say_nothing)
+
+                assert failure == null;
+
+                assert store.is_installed("2.0.0");
+
+                let directory = store.directory("2.0.0")
+
+                assert File.read_all_text(Path.combine(directory, "ghul.dll")) =~ "compiler 2.0.0";
+                assert File.read_all_text(Path.combine(directory, "ghul-runtime.dll")) =~ "runtime 2.0.0";
+                assert File.read_all_text(Path.combine(directory, "nested", "dependency.dll")) =~ "dependency 2.0.0";
+
+                // What the package carries outside tools/net10.0/any is
+                // not installed.
+                assert !Directory.exists(Path.combine(directory, "packaged"));
+            finally
+                server.stop()
+                Directory.delete(feed_scratch, true)
+                _delete(root)
+            yrt
+        si
+
+        @Test()
+        install__of_a_version_not_on_the_feed_names_the_status_and_leaves_nothing() is
+            let (server, feed_scratch) = _feed(["1.0.0"], [])
+            let (store, root) = _store()
+
+            try
+                let download = COMPILER_DOWNLOAD(store, server.url())
+
+                let failure = download.install("9.9.9", _say_nothing)
+
+                assert failure? /\ failure.contains("9.9.9") /\ failure.contains("404");
+
+                assert !store.highest_version()?;
+
+                // Nothing behind: no scratch directory, no scratch file,
+                // no store entry.
+                assert Directory.get_directories(root).count == 0;
+                assert Directory.get_files(root).count == 0;
+            finally
+                server.stop()
+                Directory.delete(feed_scratch, true)
+                _delete(root)
+            yrt
+        si
+
+        @Test()
+        latest_release__is_the_last_version_with_no_dash() is
+            let (server, feed_scratch) = _feed(["1.0.0", "2.0.0", "3.0.0-rc.1"], [])
+            let (store, root) = _store()
+
+            try
+                let (version, failure) = COMPILER_DOWNLOAD(store, server.url()).latest_release()
+
+                assert failure == null;
+                assert (version ?? "none") =~ "2.0.0";
+            finally
+                server.stop()
+                Directory.delete(feed_scratch, true)
+                _delete(root)
+            yrt
+        si
+
+        @Test()
+        latest_release__of_a_feed_whose_only_versions_are_prereleases__fails() is
+            let (server, feed_scratch) = _feed(["1.0.0-beta.1"], [])
+            let (store, root) = _store()
+
+            try
+                let (version, failure) = COMPILER_DOWNLOAD(store, server.url()).latest_release()
+
+                assert !version?;
+                assert failure?;
+            finally
+                server.stop()
+                Directory.delete(feed_scratch, true)
+                _delete(root)
+            yrt
+        si
+
+        @Test()
+        of__takes_the_feed_from_the_environment() is
+            let previous = System.Environment.get_environment_variable("GHUL_COMPILER_FEED")
+
+            System.Environment.set_environment_variable("GHUL_COMPILER_FEED", "http://127.0.0.1:9")
+
+            try
+                let (store, root) = _store()
+
+                try
+                    assert COMPILER_DOWNLOAD.of(store).feed() =~ "http://127.0.0.1:9";
+                finally
+                    _delete(root)
+                yrt
+            finally
+                System.Environment.set_environment_variable("GHUL_COMPILER_FEED", previous)
+            yrt
+        si
+
+        @Test()
+        install__of_a_version_that_is_not_a_single_name__is_refused() is
+            let (store, root) = _store()
+
+            try
+                let download = COMPILER_DOWNLOAD(store, "http://127.0.0.1:9")
+
+                for bad in ["../elsewhere", "1.0.0/extra", ""] do
+                    let failure = download.install(bad, _say_nothing)
+
+                    assert failure? /\ failure.contains("not a version");
+                od
+
+                // The store is not even created: a refused version does
+                // nothing at all.
+                assert !Directory.exists(root);
+            finally
+                _delete(root)
+            yrt
+        si
+
+        @Test()
+        feed__is_the_public_nuget_feed_where_none_is_named() is
+            let (store, root) = _store()
+
+            try
+                assert COMPILER_DOWNLOAD(store, null).feed() =~ "https://api.nuget.org/v3-flatcontainer";
+            finally
+                _delete(root)
+            yrt
+        si
+    si
+
+    // Enough of an HTTP server to stand in for a feed: one background
+    // thread, answering GET requests against a handler that returns the
+    // body for a path or null for a 404, and closing the connection after
+    // each answer.
+    class FEED_SERVER is
+        _handler: (string) -> ubyte[]?
+        _listener: System.Net.Sockets.TcpListener
+        _thread: System.Threading.Thread?
+
+        init(handler: (string) -> ubyte[]?) is
+            _handler = handler
+            _listener = System.Net.Sockets.TcpListener(System.Net.IPAddress.loopback, 0)
+            _listener.start()
+        si
+
+        url() -> string is
+            let endpoint = cast System.Net.IPEndPoint?(_listener.local_endpoint)
+
+            return "http://127.0.0.1:{endpoint?.port ?? 0}"
+        si
+
+        // Serves until stopped.
+        start() is
+            let thread =
+                System.Threading.Thread(
+                    () -> void is
+                        do
+                            try
+                                let client = _listener.accept_tcp_client()
+
+                                _answer(client)
+                            catch e: System.Exception
+                                return
+                            yrt
+                        od
+                    si)
+
+            thread.is_background = true
+            thread.start()
+
+            _thread = thread
+        si
+
+        stop() is
+            _listener.stop()
+        si
+
+        // Answers a request the moment its header has arrived, which is
+        // all a GET needs.
+        _answer(client: System.Net.Sockets.TcpClient) is
+            try
+                let stream = client.get_stream()
+                let buffer = repeat(0ub, 1024) |> collect()
+                let header mut = ""
+
+                while !header.contains("\r\n\r\n") do
+                    let read = stream.read(buffer, 0, buffer.count)
+
+                    if read == 0 then
+                        client.close()
+                        return
+                    fi
+
+                    header = "{header}{System.Text.Encoding.utf8.get_string(buffer, 0, read)}"
+                od
+
+                let path = header.split([' '])[1]
+
+                let status mut = "404 Not Found"
+                let answered mut = _bytes("")
+
+                if let body: ubyte[] = _handler(path) then
+                    status = "200 OK"
+                    answered = body
+                fi
+
+                let head = _bytes(
+                    "HTTP/1.1 {status}\r\nContent-Type: application/octet-stream\r\nConnection: close\r\nContent-Length: {answered.count}\r\n\r\n")
+
+                stream.write(head, 0, head.count)
+                stream.write(answered, 0, answered.count)
+
+                client.close()
+            catch e: System.Exception
+            yrt
+        si
+
+        _bytes(text: string) -> ubyte[] static =>
+            System.Text.Encoding.utf8.get_bytes(text)
+    si
+si

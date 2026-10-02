@@ -30,8 +30,12 @@ namespace Ghul.Repl.Host is
         _process: System.Diagnostics.Process
         _next: Tasks.TASK[string?]?
 
-        init(compiler_shim: string, directory: string) is
-            let start_info = DETACHED_START.of(compiler_shim)
+        init(compiler: COMPILER_COMMAND, directory: string) is
+            let start_info = DETACHED_START.of(compiler.file_name)
+
+            for argument in compiler.leading_arguments() do
+                start_info.argument_list.add(argument)
+            od
 
             start_info.argument_list.add("--analyse")
 

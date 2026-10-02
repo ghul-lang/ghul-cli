@@ -34,9 +34,15 @@ looks for them.
   argument parser only recognises the `.ghul` extension (see the
   `resolve_source__materializes_a_dot_ghul_file_for_an_extensionless_script`
   unit test for why this needs a real regression test, not just a
-  same-content smoke test). Resolves `~/.local/share/ghul-cli/tools` and
-  installs `ghul.compiler` into it on first use (or on-demand for a
-  specific version via `install-compiler`), computes a cache key from the
+  same-content smoke test). Finds its compiler through
+  `Ghul.Repl.Host.COMPILER_STORE` (`~/.local/share/ghul-cli/compilers/<version>/`,
+  one directory per version holding the package's `tools/net10.0/any`, several
+  versions at once, highest winning where none is named) and installs into it
+  on first use (or on-demand for a specific version via `install-compiler`)
+  with `Ghul.Repl.Host.COMPILER_DOWNLOAD`, which fetches the package straight
+  from the NuGet flat-container feed - no `dotnet tool` call, so a machine
+  with only the .NET runtime works; `GHUL_COMPILER_FEED` names another feed.
+  Computes a cache key from the
   script's bytes and the installed compiler version, compiles into
   `~/.cache/ghul-cli/scripts/<key>` when that cache entry doesn't already
   exist (or unconditionally under `--no-cache`), and runs the result. Both
@@ -76,7 +82,16 @@ looks for them.
   reference under the referenced file's own name.
 - `host/` — the `ghul.repl.host` package: hosting a session in this
   process with an installed compiler, shared with the Jupyter kernel.
-  `HOST_SESSIONS.start` assembles one. `SERVER_BACKEND` compiles on one
+  `COMPILER_STORE` owns where compilers live
+  (`~/.local/share/ghul-cli/compilers/<version>/`, several at once,
+  highest winning where none is named) and `COMPILER_DOWNLOAD` installs
+  one straight from the NuGet flat-container feed with no `dotnet tool`
+  call (`GHUL_COMPILER_FEED` names another feed); `COMPILER_COMMAND` is
+  how one is run (`dotnet` and its `ghul.dll`), threaded through
+  everything that starts the compiler. `REFERENCE_ASSEMBLIES` finds the
+  reference assemblies to point the compiler at where the machine has no
+  SDK ref pack, so a script compiles with only the .NET runtime
+  installed. `HOST_SESSIONS.start` assembles one. `SERVER_BACKEND` compiles on one
   `ghul-compiler --compile-server` started with the session, falling back to
   `SPAWN_BACKEND` (the compiler per cell, about a second each) for good
   when the server fails. The server also answers completeness checks
@@ -132,7 +147,8 @@ looks for them.
   the ordinary path out closes the session, since a kernel that is not
   closed leaves its compile server running. Cells are hosted through
   `ghul.repl.host`, and the compiler is found by `COMPILER_LOCATION` -
-  `GHUL_COMPILER`, then the copy `ghul.cli` installs, then the path.
+  `GHUL_COMPILER`, then the copy `ghul.cli` installs into its compiler
+  store, then a store as an older `ghul.cli` installed one, then the path.
 - `tests/jupyter-client/` — a front end, enough of one to drive the kernel
   over ZeroMQ from `tests/jupyter.sh`: kernel_info, cells that chain, a
   cell that does not compile, one that throws, one that writes,

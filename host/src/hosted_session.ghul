@@ -500,7 +500,7 @@ namespace Ghul.Repl.Host is
     // What the host is told about that goes to `say`.
     class HOST_SESSIONS is
         start(
-            compiler_shim: string,
+            compiler: COMPILER_COMMAND,
             runtime_assembly: string?,
             want_server: bool,
             want_default_use: bool,
@@ -508,11 +508,11 @@ namespace Ghul.Repl.Host is
         ) -> HOSTED_SESSION static is
             let directory = new_session_directory()
             let files = SESSION_FILES(directory, runtime_assembly)
-            let spawn = SPAWN_BACKEND(compiler_shim, files)
+            let spawn = SPAWN_BACKEND(compiler, files)
 
             let backend: CompileBackend =
                 if want_server then
-                    let server = SERVER_BACKEND(_start_server(compiler_shim, files), spawn, files, say)
+                    let server = SERVER_BACKEND(_start_server(compiler, files), spawn, files, say)
 
                     let _ = server.warm_up()
 
@@ -527,9 +527,9 @@ namespace Ghul.Repl.Host is
 
             let session = HOSTED_SESSION(backend, directory, want_default_use)
 
-            session.completeness_fallback = COMPLETENESS_CHECK(compiler_shim, IO.Path.join([directory, "check"]))
+            session.completeness_fallback = COMPLETENESS_CHECK(compiler, IO.Path.join([directory, "check"]))
 
-            session.start_analysis(() => _start_analyser(compiler_shim, IO.Path.join([directory, "analysis"])), say)
+            session.start_analysis(() => _start_analyser(compiler, IO.Path.join([directory, "analysis"])), say)
 
             return session
         si
@@ -540,11 +540,11 @@ namespace Ghul.Repl.Host is
         new_session_directory() -> string static =>
             IO.Path.join([IO.Path.get_temp_path(), "{REPL_SESSION_PREFIX}{System.Guid.new_guid().to_string("N")}"])
 
-        _start_analyser(compiler_shim: string, directory: string) -> AnalyserConnection? static is
+        _start_analyser(compiler: COMPILER_COMMAND, directory: string) -> AnalyserConnection? static is
             try
                 IO.Directory.create_directory(directory)
 
-                return ANALYSER_PROCESS(compiler_shim, directory)
+                return ANALYSER_PROCESS(compiler, directory)
             catch e: System.Exception
                 return null
             yrt
@@ -552,11 +552,11 @@ namespace Ghul.Repl.Host is
 
         // Null when it cannot be started at all, which the backend
         // reports once and then compiles without it.
-        _start_server(compiler_shim: string, files: SESSION_FILES) -> ServerConnection? static is
+        _start_server(compiler: COMPILER_COMMAND, files: SESSION_FILES) -> ServerConnection? static is
             try
                 files.prepare()
 
-                return SERVER_PROCESS(compiler_shim, files.directory)
+                return SERVER_PROCESS(compiler, files.directory)
             catch e: System.Exception
                 return null
             yrt

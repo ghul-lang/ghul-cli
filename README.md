@@ -40,8 +40,11 @@ compiler, a script writes its own `use` lines.
 dotnet tool install -g ghul.cli
 ```
 
-The first time it runs, `ghul` installs its own copy of `ghul.compiler` into
-`~/.local/share/ghul-cli/tools`. There is nothing else to set up.
+The first time it runs, `ghul` downloads its own copy of `ghul.compiler` into
+`~/.local/share/ghul-cli/compilers`, straight from the NuGet feed, so the
+.NET SDK is not needed - only the .NET runtime it already runs on. There is
+nothing else to set up. Several compiler versions can be installed at once;
+where none is named, the highest installed is the one used.
 
 ## commands
 
@@ -71,11 +74,12 @@ the result. The path is the only thing it writes to standard output, so
 `$(ghul compile script.ghul)` captures it. Compiler messages go to standard
 error.
 
-`ghul install-compiler` installs `ghul.compiler` into `ghul`'s own tool
-directory, so that the first script does not wait for the install. With no
+`ghul install-compiler` installs `ghul.compiler` into `ghul`'s own compiler
+store, so that the first script does not wait for the install. With no
 version, it installs the latest release, or updates to it. With a version, it
 installs exactly that version, older or newer, and does nothing if that
-version is already installed.
+version is already installed. `GHUL_COMPILER_FEED` names a different feed to
+download from, for a mirror or an offline network.
 
 A `-` in place of the script reads the source from standard input. This
 works for running and for compiling:

@@ -25,8 +25,6 @@ namespace Ghul.Cli is
         return System.Environment.get_folder_path(System.Environment_SpecialFolder.USER_PROFILE)
     si
 
-    tools_directory() -> string => "{home_directory()}/.local/share/ghul-cli/tools"
-
     cache_root() -> string is
         let xdg = System.Environment.get_environment_variable("XDG_CACHE_HOME")
 
@@ -49,22 +47,6 @@ namespace Ghul.Cli is
 
     cache_entry_dir(script_path: string, compiler_version: string) -> string =>
         cache_entry_dir_for_bytes(File.read_all_bytes(script_path), compiler_version)
-
-    installed_compiler_version(tools_dir: string) -> string? is
-        let store_dir = "{tools_dir}/.store/ghul.compiler"
-
-        if !Directory.exists(store_dir) then
-            return null
-        fi
-
-        let versions = Directory.get_directories(store_dir)
-
-        if versions.count == 0 then
-            return null
-        fi
-
-        return Path.get_file_name(versions[0])
-    si
 
     // The conventional stdin marker: a lone `-` names standard input rather
     // than a file, matching every other CLI that reads a script this way. A
@@ -147,117 +129,97 @@ namespace Ghul.Cli is
         od
     si
 
-    install_compiler(tools_dir: string, version: string?, show_output: bool) -> bool is
-        Directory.create_directory(tools_dir)
-
-        let start_info = System.Diagnostics.ProcessStartInfo()
-        start_info.file_name = "dotnet"
-        start_info.use_shell_execute = false
-        start_info.argument_list.add("tool")
-
-        if installed_compiler_version(tools_dir)? then
-            start_info.argument_list.add("update")
-        else
-            start_info.argument_list.add("install")
-        fi
-
-        start_info.argument_list.add("--tool-path")
-        start_info.argument_list.add(tools_dir)
-
-        if let v: string = version then
-            start_info.argument_list.add("--version")
-            start_info.argument_list.add(v)
-
-            // A named version is the one wanted, older or not, and an
-            // update refuses to go backwards unless told it can.
-            if installed_compiler_version(tools_dir)? then
-                start_info.argument_list.add("--allow-downgrade")
-            fi
-        fi
-
-        start_info.argument_list.add("ghul.compiler")
-
-        // For a script run, dotnet's own install chatter (and, on a fresh
-        // machine, its first-time-experience banner) is captured and only
-        // surfaced on failure, so it never contends with the run script's
-        // own stdout. An explicit `install-compiler` has nothing else
-        // writing to the console, so it is left to stream straight through.
-        if !show_output then
-            start_info.redirect_standard_output = true
-            start_info.redirect_standard_error = true
-        fi
-
-        if let process: System.Diagnostics.Process = System.Diagnostics.Process.start(start_info) then
-            if !show_output then
-                let stdout_task = process.standard_output.read_to_end_async()
-                let stderr_task = process.standard_error.read_to_end_async()
-
-                process.wait_for_exit()
-
-                if process.exit_code == 0 then
-                    return true
-                fi
-
-                Std.error.write(stdout_task.result)
-                Std.error.write(stderr_task.result)
-
-                return false
+    // The installed version the caller asked for: the one named, where
+    // that is installed, and otherwise nothing. With no version named,
+    // the highest installed is the one to use.
+    usable_installed_version(store: Host.COMPILER_STORE, version: string?) -> string? is
+        if let wanted: string = version then
+            if store.is_installed(wanted) then
+                return wanted
             fi
 
-            process.wait_for_exit()
-
-            return process.exit_code == 0
+            return null
         fi
 
-        Std.error.write_line("ghul: failed to install ghul.compiler")
-        return false
+        return store.highest_version()
     si
 
     // Double-checked: a cheap unlocked look first (the overwhelmingly
     // common case is "already installed and matches"), then the same
     // check again once the lock is held, since another process may have
     // finished installing while we were waiting for it.
-    ensure_compiler_installed(tools_dir: string, version: string?, show_output: bool) -> string? is
-        if let current: string = installed_compiler_version(tools_dir) then
-            if !version? \/ current =~ version then
-                return current
-            fi
+    //
+    // Progress goes to `say`, which the explicit `install-compiler` wires
+    // to standard error and a script run leaves quiet; a failure is
+    // returned to the caller whatever `say` does with the chatter.
+    ensure_compiler_installed(store: Host.COMPILER_STORE, version: string?, show_output: bool) -> string? is
+        if let current: string = usable_installed_version(store, version) then
+            return current
         fi
 
-        Directory.create_directory(tools_dir)
+        Directory.create_directory(store.root)
 
         let lock_stream = acquire_lock(
-            "{tools_dir}/.install.lock",
+            store.install_lock_path(),
             "ghul: waiting for another ghul process to finish installing the compiler...")
 
         try
-            if let current: string = installed_compiler_version(tools_dir) then
-                if !version? \/ current =~ version then
-                    return current
-                fi
+            if let current: string = usable_installed_version(store, version) then
+                return current
             fi
 
-            if !install_compiler(tools_dir, version, show_output) then
+            let download = Host.COMPILER_DOWNLOAD.of(store)
+
+            let wanted mut = version
+
+            if !wanted? then
+                let (newest, failure) = download.latest_release()
+
+                if let problem: string = failure then
+                    Std.error.write_line("ghul: {problem}")
+                    return null
+                fi
+
+                wanted = newest
+            fi
+
+            let say = (line: string) -> void => if show_output then Std.error.write_line(line) fi
+
+            if let problem: string = download.install(wanted!, say) then
+                Std.error.write_line("ghul: {problem}")
                 return null
             fi
 
-            return installed_compiler_version(tools_dir)
+            return wanted
         finally
             lock_stream.close()
         yrt
     si
 
-    compile_script_into(compiler_shim: string, script_path: string, run_dir: string, tools_dir: string, compiler_version: string) -> bool is
+    compile_script_into(compiler: Host.COMPILER_COMMAND, script_path: string, run_dir: string, store: Host.COMPILER_STORE, compiler_version: string) -> bool is
         Directory.create_directory(run_dir)
 
         let output = "{run_dir}/run.exe"
 
         let start_info = System.Diagnostics.ProcessStartInfo()
-        start_info.file_name = compiler_shim
+        start_info.file_name = compiler.file_name
         start_info.use_shell_execute = false
+
+        for argument in compiler.leading_arguments() do
+            start_info.argument_list.add(argument)
+        od
+
         start_info.argument_list.add(script_path)
         start_info.argument_list.add("-o")
         start_info.argument_list.add(output)
+
+        // Where the machine has no SDK ref pack for the compiler to find,
+        // it is pointed at the runtime's own assemblies, so a script
+        // compiles with only the .NET runtime installed.
+        if let references: string = Host.REFERENCE_ASSEMBLIES.directory() then
+            start_info.argument_list.add("--sdk-ref-path")
+            start_info.argument_list.add(references)
+        fi
 
         if wants_implicit_default_use(compiler_version) then
             start_info.argument_list.add("--implicit-default-use")
@@ -270,11 +232,9 @@ namespace Ghul.Cli is
                 return false
             fi
 
-            // Every ghul.compiler tool package carries ghul-runtime.dll beside
+            // Every ghul.compiler package carries ghul-runtime.dll beside
             // its own dll; a compiled script needs a copy sitting beside it too.
-            let runtime_dll = "{tools_dir}/.store/ghul.compiler/{compiler_version}/ghul.compiler/{compiler_version}/tools/net10.0/any/ghul-runtime.dll"
-
-            if File.exists(runtime_dll) then
+            if let runtime_dll: string = store.runtime_assembly(compiler_version) then
                 File.copy(runtime_dll, "{run_dir}/ghul-runtime.dll", true)
             fi
 
@@ -317,7 +277,7 @@ namespace Ghul.Cli is
     // `force` skips the "already compiled" fast path and, once a fresh
     // compile has succeeded, discards whatever is already at `run_dir`
     // before the rename - the explicit `--no-cache` escape hatch.
-    ensure_compiled(compiler_shim: string, materialize: (string) -> string, run_dir: string, tools_dir: string, compiler_version: string, force: bool) -> bool is
+    ensure_compiled(compiler: Host.COMPILER_COMMAND, materialize: (string) -> string, run_dir: string, store: Host.COMPILER_STORE, compiler_version: string, force: bool) -> bool is
         let output = "{run_dir}/run.exe"
 
         if !force /\ File.exists(output) then
@@ -337,7 +297,7 @@ namespace Ghul.Cli is
             let scratch_dir = "{run_dir}.tmp-{System.Environment.process_id}-{System.Guid.new_guid().to_string("N")}"
             let script_path = materialize(scratch_dir)
 
-            if !compile_script_into(compiler_shim, script_path, scratch_dir, tools_dir, compiler_version) then
+            if !compile_script_into(compiler, script_path, scratch_dir, store, compiler_version) then
                 if Directory.exists(scratch_dir) then
                     Directory.delete(scratch_dir, true)
                 fi
@@ -446,14 +406,14 @@ namespace Ghul.Cli is
 
     cmd_install_compiler(rest: Collections.List[string]) -> int is
         let version: string? = if rest.count > 0 then rest[0] else null fi
-        let tools_dir = tools_directory()
+        let store = Host.COMPILER_STORE.for_this_user()
 
-        let before = installed_compiler_version(tools_dir)
-
-        if let current: string = before /\ version? /\ current =~ version then
-            Std.error.write_line("ghul: ghul.compiler {current} is already installed")
+        if let wanted: string = version /\ store.is_installed(wanted) then
+            Std.error.write_line("ghul: ghul.compiler {wanted} is already installed")
             return 0
         fi
+
+        let before = store.highest_version()
 
         // With no version named, the latest is wanted whatever is
         // installed, so an installed compiler does not end the matter
@@ -461,7 +421,7 @@ namespace Ghul.Cli is
         if before? /\ !version? then
             Std.error.write_line("ghul: checking for a newer ghul.compiler than {before}...")
 
-            if let installed: string = update_compiler_to_latest(tools_dir) then
+            if let installed: string = update_compiler_to_latest(store) then
                 if installed =~ before then
                     Std.error.write_line("ghul: ghul.compiler {installed} is already installed and is the latest")
                 else
@@ -477,7 +437,7 @@ namespace Ghul.Cli is
 
         Std.error.write_line("ghul: installing ghul.compiler{if version? then " {version}" else "" fi}...")
 
-        if let installed: string = ensure_compiler_installed(tools_dir, version, true) then
+        if let installed: string = ensure_compiler_installed(store, version, true) then
             Std.error.write_line("ghul: ghul.compiler {installed} is installed")
             return 0
         fi
@@ -488,17 +448,33 @@ namespace Ghul.Cli is
 
     // Under the install lock, since a script run elsewhere may be
     // installing or reading the compiler at the same time.
-    update_compiler_to_latest(tools_dir: string) -> string? is
+    update_compiler_to_latest(store: Host.COMPILER_STORE) -> string? is
         let lock_stream = acquire_lock(
-            "{tools_dir}/.install.lock",
+            store.install_lock_path(),
             "ghul: waiting for another ghul process to finish installing the compiler...")
 
         try
-            if !install_compiler(tools_dir, null, true) then
+            let download = Host.COMPILER_DOWNLOAD.of(store)
+
+            let (newest, failure) = download.latest_release()
+
+            if let problem: string = failure then
+                Std.error.write_line("ghul: {problem}")
                 return null
             fi
 
-            return installed_compiler_version(tools_dir)
+            let latest = newest!
+
+            if store.is_installed(latest) then
+                return latest
+            fi
+
+            if let problem: string = download.install(latest, line => Std.error.write_line(line)) then
+                Std.error.write_line("ghul: {problem}")
+                return null
+            fi
+
+            return latest
         finally
             lock_stream.close()
         yrt
@@ -523,9 +499,9 @@ namespace Ghul.Cli is
     cmd_version() -> int is
         Std.out.write_line("ghul {cli_version()}")
 
-        let tools_dir = tools_directory()
+        let store = Host.COMPILER_STORE.for_this_user()
 
-        if let compiler_version: string = installed_compiler_version(tools_dir) then
+        if let compiler_version: string = store.highest_version() then
             Std.out.write_line("ghul.compiler {compiler_version}")
         else
             Std.out.write_line("ghul.compiler not installed")
@@ -548,13 +524,13 @@ namespace Ghul.Cli is
         fi
 
         let source = resolve_source(script_ref)
-        let tools_dir = tools_directory()
+        let store = Host.COMPILER_STORE.for_this_user()
 
-        if let compiler_version: string = ensure_compiler_installed(tools_dir, null, false) then
-            let compiler_shim = "{tools_dir}/ghul-compiler"
+        if let compiler_version: string = ensure_compiler_installed(store, null, false) then
+            let compiler = store.command(compiler_version)
             let run_dir = cache_entry_dir_for_bytes(source.key_bytes, compiler_version)
 
-            if !ensure_compiled(compiler_shim, source.materialize, run_dir, tools_dir, compiler_version, no_cache) then
+            if !ensure_compiled(compiler, source.materialize, run_dir, store, compiler_version, no_cache) then
                 return 1
             fi
 
@@ -587,13 +563,13 @@ namespace Ghul.Cli is
         fi
 
         let source = resolve_source(script_ref)
-        let tools_dir = tools_directory()
+        let store = Host.COMPILER_STORE.for_this_user()
 
-        if let compiler_version: string = ensure_compiler_installed(tools_dir, null, false) then
-            let compiler_shim = "{tools_dir}/ghul-compiler"
+        if let compiler_version: string = ensure_compiler_installed(store, null, false) then
+            let compiler = store.command(compiler_version)
             let run_dir = cache_entry_dir_for_bytes(source.key_bytes, compiler_version)
 
-            if !ensure_compiled(compiler_shim, source.materialize, run_dir, tools_dir, compiler_version, no_cache) then
+            if !ensure_compiled(compiler, source.materialize, run_dir, store, compiler_version, no_cache) then
                 return 1
             fi
 
@@ -712,9 +688,9 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        let tools_dir = tools_directory()
+        let store = Host.COMPILER_STORE.for_this_user()
 
-        if let installed: string = installed_compiler_version(tools_dir) /\ is_too_old_for_repl(installed) then
+        if let installed: string = store.highest_version() /\ is_too_old_for_repl(installed) then
             Std.error.write_line(
                 "ghul: the session needs ghul.compiler {MINIMUM_REPL_COMPILER} or newer; {installed} is installed")
 
@@ -723,17 +699,16 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        if let compiler_version: string = ensure_compiler_installed(tools_dir, null, false) then
-            let compiler_shim = "{tools_dir}/ghul-compiler"
+        if let compiler_version: string = ensure_compiler_installed(store, null, false) then
+            let compiler = store.command(compiler_version)
 
-            let runtime_assembly =
-                "{tools_dir}/.store/ghul.compiler/{compiler_version}/ghul.compiler/{compiler_version}/tools/net10.0/any/ghul-runtime.dll"
+            let runtime_assembly = store.runtime_assembly(compiler_version)
 
             let say = (line: string) -> void => Std.error.write_line(line)
 
             let make_session = () -> Host.HOSTED_SESSION =>
                 Host.HOST_SESSIONS.start(
-                    compiler_shim,
+                    compiler,
                     runtime_assembly,
                     options.want_server,
                     options.want_default_use,

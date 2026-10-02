@@ -82,7 +82,7 @@ namespace Ghul.Jupyter is
         // stderr, which Jupyter shows in the kernel log.
         let session =
             HOST_SESSIONS.start(
-                compiler.shim,
+                compiler.command,
                 compiler.runtime_assembly,
                 true,
                 true,
@@ -92,7 +92,7 @@ namespace Ghul.Jupyter is
             KERNEL(
                 connection,
                 session,
-                COMPLETENESS_CHECK(compiler.shim, HOST_SESSIONS.new_session_directory()),
+                COMPLETENESS_CHECK(compiler.command, HOST_SESSIONS.new_session_directory()),
                 version(),
                 too_old)
 

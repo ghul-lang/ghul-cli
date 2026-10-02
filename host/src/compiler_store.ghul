@@ -1,0 +1,139 @@
+namespace Ghul.Repl.Host is
+    use Collections.LIST
+    use IO.Directory
+    use IO.File
+    use IO.Path
+
+    // How a compiler is started: the program that runs it, and the
+    // compiler assembly that program loads first where it is `dotnet`. A
+    // compiler in the store is `dotnet` and the version's own `ghul.dll`;
+    // one found some other way can be an executable of its own, with no
+    // assembly.
+    class COMPILER_COMMAND(file_name: string, assembly: string?) is
+        // What goes on the command line before the caller's own
+        // arguments: the assembly where there is one, nothing where there
+        // is not.
+        leading_arguments() -> string[] =>
+            if let dll: string = assembly then [dll] else [] fi
+    si
+
+    // Where the compilers ghul-cli installs live: one directory per
+    // version under `~/.local/share/ghul-cli/compilers`, each holding
+    // what that version's package carries in `tools/net10.0/any` - the
+    // compiler's own dll with the runtime and its dependencies beside it
+    // - so several versions are installed at once, `dotnet
+    // <dir>/ghul.dll` runs one with nothing but the .NET runtime
+    // installed, and the highest version is the one used where none is
+    // named.
+    class COMPILER_STORE(root: string) is
+        // This user's store: under HOME where it is set, which is
+        // everywhere but Windows, and the user profile directory where it
+        // is not.
+        for_this_user() -> COMPILER_STORE static is
+            let home = System.Environment.get_environment_variable("HOME")
+
+            let directory =
+                if home? /\ home.length > 0 then
+                    home
+                else
+                    System.Environment.get_folder_path(System.Environment_SpecialFolder.USER_PROFILE)
+                fi
+
+            return COMPILER_STORE(Path.join([directory, ".local", "share", "ghul-cli", "compilers"]))
+        si
+
+        directory(version: string) -> string => Path.join([root, version])
+
+        // The lock that serialises installing into this store. Held for
+        // as long as the returned stream stays open.
+        install_lock_path() -> string => Path.join([root, ".install.lock"])
+
+        compiler_assembly(version: string) -> string => Path.join([root, version, "ghul.dll"])
+
+        // The runtime the version's package carries beside its compiler,
+        // which a program the version compiled needs beside it too.
+        runtime_assembly(version: string) -> string? is
+            let beside = Path.join([directory(version), "ghul-runtime.dll"])
+
+            if File.exists(beside) then
+                return beside
+            fi
+
+            return null
+        si
+
+        // How a version is run: the .NET host, and the version's dll.
+        command(version: string) -> COMPILER_COMMAND =>
+            COMPILER_COMMAND("dotnet", compiler_assembly(version))
+
+        is_installed(version: string) -> bool => File.exists(compiler_assembly(version))
+
+        // Every installed version, lowest first. A directory counts as a
+        // version when its `ghul.dll` is there, so a scratch directory an
+        // interrupted install left behind is not mistaken for one.
+        versions() -> string[] is
+            let found = LIST[string]()
+
+            try
+                for entry in Directory.get_directories(root) do
+                    let name = Path.get_file_name(entry) ?? entry
+
+                    if !name.starts_with(".") /\ !name.contains(".tmp-") /\ File.exists(Path.join([entry, "ghul.dll"])) then
+                        found.add(name)
+                    fi
+                od
+            catch e: IO.DirectoryNotFoundException
+            yrt
+
+            found.sort(_compare_versions)
+
+            return found.to_array()
+        si
+
+        highest_version() -> string? is
+            let installed = versions()
+
+            if installed.count == 0 then
+                return null
+            fi
+
+            return installed[installed.count - 1]
+        si
+
+        // A release before a prerelease of the same number: a version
+        // that does not parse - a prerelease, most often - sorts below
+        // one that does, so the highest installed is the newest release.
+        _compare_versions(left: string, right: string) -> int static is
+            let parsed_left: System.Version? mut
+            let parsed_right: System.Version? mut
+
+            if !System.Version.try_parse(left, parsed_left ref) then
+                parsed_left = null
+            fi
+
+            if !System.Version.try_parse(right, parsed_right ref) then
+                parsed_right = null
+            fi
+
+            if let release_left: System.Version = parsed_left then
+                if let release_right: System.Version = parsed_right then
+                    let order = release_left.compare_to(release_right)
+
+                    if order != 0 then
+                        return order
+                    fi
+
+                    return left.compare_to(right)
+                fi
+
+                return 1
+            fi
+
+            if parsed_right? then
+                return -1
+            fi
+
+            return left.compare_to(right)
+        si
+    si
+si

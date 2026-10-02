@@ -1,0 +1,103 @@
+namespace Ghul.Repl.Host is
+    use IO.Directory
+    use IO.Path
+
+    // The reference assemblies to compile against, where the machine has
+    // none the compiler can find for itself. The compiler looks for the
+    // SDK's Microsoft.NETCore.App.Ref pack under the .NET installation it
+    // runs on; a machine with only the .NET runtime has no pack, and
+    // there the runtime's own framework assemblies serve, handed to the
+    // compiler with --sdk-ref-path.
+    class REFERENCE_ASSEMBLIES is
+        // The directory to point the compiler at, or null where the
+        // compiler's own discovery will do: null where the SDK's ref pack
+        // sits where the compiler looks, and null where no runtime
+        // framework directory can be found either.
+        directory() -> string? static is
+            let root = _dotnet_root()
+
+            if !root? then
+                return null
+            fi
+
+            if Directory.exists(Path.join([root, "packs", "Microsoft.NETCore.App.Ref"])) then
+                return null
+            fi
+
+            let shared = Path.join([root, "shared", "Microsoft.NETCore.App"])
+
+            if !Directory.exists(shared) then
+                return null
+            fi
+
+            let best: string? mut = null
+            let best_version: System.Version? mut = null
+
+            for framework in Directory.get_directories(shared) do
+                try
+                    let version = System.Version.parse(Path.get_file_name(framework) ?? "")
+
+                    if !best_version? \/ version.compare_to(best_version) > 0 then
+                        best_version = version
+                        best = framework
+                    fi
+                catch e: System.Exception
+                    // not a version directory; skip
+                yrt
+            od
+
+            return best
+        si
+
+        // The .NET installation this process runs on: the root
+        // DOTNET_ROOT names, where that exists, otherwise the one the
+        // running runtime's directory is under - the same walk the
+        // compiler makes when it looks for the ref pack.
+        _dotnet_root() -> string? static is
+            let named = System.Environment.get_environment_variable("DOTNET_ROOT")
+
+            if named? /\ named.length > 0 /\ Directory.exists(named) then
+                return named
+            fi
+
+            let running = _strip_trailing_separators(
+                System.Runtime.InteropServices.RuntimeEnvironment.get_runtime_directory())
+
+            if running.length == 0 then
+                return null
+            fi
+
+            // The runtime directory is shared/Microsoft.NETCore.App/<version>/
+            // under the installation root, so the root is three levels up.
+            let current mut = running
+
+            for i in 0..3 do
+                let parent = Path.get_directory_name(current)
+
+                if !parent? \/ parent.length == 0 then
+                    return null
+                fi
+
+                current = parent
+            od
+
+            return if Directory.exists(current) then current else null fi
+        si
+
+        _strip_trailing_separators(path: string) -> string static is
+            let result mut = path
+
+            while result.length > 0 /\ is_separator(result[result.length - 1]) do
+                result = result.substring(0, result.length - 1)
+            od
+
+            return result
+        si
+
+        // Both separators of the running platform: on Windows that covers
+        // the native backslash as well as the slash, and on Unix a
+        // backslash is a legal filename character and stays.
+        is_separator(c: char) -> bool static =>
+            c == Path.directory_separator_char \/ c == Path.alt_directory_separator_char
+    si
+si
