@@ -260,7 +260,9 @@ collections.
 ### native executables
 
 A project that lists the `llvm` target builds a native executable for Linux
-x86-64 into `out/llvm/`, and `ghul run --target llvm` runs it directly. The
+x86-64 into `out/llvm/`, and `ghul run --target llvm` runs it directly. With
+ghul.compiler 65.8.0 or newer the executable needs an x86-64-v3 CPU (AVX2 and
+BMI2, from about 2013 on). The
 first such build also fetches the `ghul-llvm` release pinned for the compiler,
 the linker and runtime it links with, into the same cache; setting `GHUL_LLVM`
 to a `ghul-llvm` executable uses that one instead. The compiler's code
