@@ -73,7 +73,8 @@ namespace Ghul.Cli is
         // and the runtime archives agree on adds a line.
         _pins() -> (earliest_compiler: string, tag: string)[] static =>
             [
-                (earliest_compiler = "65.5.0", tag = "v0.6.0")
+                (earliest_compiler = "65.5.0", tag = "v0.6.0"),
+                (earliest_compiler = "65.8.0", tag = "v0.8.1")
             ]
 
         /// The name of the archive a release publishes for `triple`.
