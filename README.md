@@ -36,15 +36,71 @@ compiler, a script writes its own `use` lines.
 
 ## installing
 
+There are two ways to install `ghul`, and which to use depends on whether the
+machine has .NET.
+
+### as a .NET tool
+
 ```sh
 dotnet tool install -g ghul.cli
 ```
 
+This is the complete tool: scripts, `#!` scripts, projects for both targets,
+the REPL and the Jupyter kernel. `dotnet tool` comes with the .NET 10 SDK;
+once installed, `ghul` runs on the .NET runtime alone.
+
 The first time it runs, `ghul` downloads its own copy of `ghul.compiler` into
-`~/.local/share/ghul-cli/compilers`, straight from the NuGet feed, so the
-.NET SDK is not needed - only the .NET runtime it already runs on. There is
-nothing else to set up. Several compiler versions can be installed at once;
-where none is named, the highest installed is the one used.
+`~/.cache/ghul-cli/compilers` (`$XDG_CACHE_HOME/ghul-cli/compilers` where that
+is set), straight from the NuGet feed. There is nothing else to set up.
+Several compiler versions can be installed at once; where none is named, the
+highest installed is the one used.
+
+`dotnet tool update -g ghul.cli` updates it.
+
+### without .NET
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ghul-lang/ghul-cli/main/install.sh | sh
+```
+
+This installs `ghul` and the compiler as native executables, built with .NET
+Native AOT, which need nothing installed but the C library: no .NET runtime
+and no SDK. It is built for Linux on x64 only. The tool goes into
+`~/.local/opt/ghul`, linked from `~/.local/bin/ghul`, and the compiler it
+ships goes into the compiler cache above. `sh install.sh --help` lists the
+options, and `--dry-run` reports what it would do.
+
+`ghul update` updates it in place.
+
+Without .NET, `ghul` builds projects for the wasm target only, and runs them
+with Node.js 22 or newer, which has to be installed separately. `ghul new`
+creates a wasm project there, and `ghul build` and `ghul run` build and run
+it, as in [hello world on WebAssembly](#hello-world-on-webassembly).
+
+What does not work without .NET, today:
+
+- **Scripts.** `ghul script.ghul`, a `#!/usr/bin/env ghul` script, a script
+  read from standard input and `ghul compile` all compile for .NET, and fail.
+- **The REPL and the Jupyter kernel.** Each cell is compiled to a .NET
+  assembly and run inside the tool, which the native build cannot do.
+- **The dotnet target.** Building one needs the .NET reference assemblies
+  that come with .NET.
+
+Scripts and the REPL on wasm are planned in
+[ghul-lang/ghul#3480](https://github.com/ghul-lang/ghul/issues/3480).
+
+A wasm program can use only what the wasm target supports, which is much less
+than .NET:
+
+- the core library is a small subset of the .NET base class library, so most
+  `System.*` APIs do not exist there, and a program naming one is told the
+  name is not found
+- files live in memory: a program can read only what it has written itself,
+  and what it writes is also written beneath the working directory
+- asynchronous functions, `await` and `decimal` are not supported yet
+
+[ghul.dev/webassembly.html](https://ghul.dev/webassembly.html) lists what the
+wasm target supports, and is kept current as the gaps close.
 
 ## commands
 
@@ -86,14 +142,14 @@ installs exactly that version, older or newer, and does nothing if that
 version is already installed. `GHUL_COMPILER_FEED` names a different feed to
 download from, for a mirror or an offline network.
 
-`ghul update` updates a `ghul` that `install.sh` installed to the latest
-release, or to the release `--version` names, older or newer. It runs that
-release's own install script, after checking it against the published
-sha256, so the tool is replaced the same way a fresh install puts it in
-place. `--check` reports whether there is anything to update and changes
-nothing. A `ghul` installed as a .NET tool is updated by `dotnet tool update
--g ghul.cli` instead, which `ghul update` prints. `GHUL_CLI_API` and
-`GHUL_CLI_RELEASES` name a mirror, as they do for `install.sh`.
+`ghul update` updates a `ghul` installed without .NET to the latest release,
+or to the release `--version` names, older or newer. It runs that release's
+own install script, after checking it against the published sha256, so the
+tool is replaced the same way a fresh install puts it in place. `--check`
+reports whether there is anything to update and changes nothing. A `ghul`
+installed as a .NET tool is updated by `dotnet tool update -g ghul.cli`
+instead, which `ghul update` prints. `GHUL_CLI_API` and `GHUL_CLI_RELEASES`
+name a mirror, as they do for `install.sh`.
 
 A `-` in place of the script reads the source from standard input. This
 works for running and for compiling:
@@ -174,7 +230,8 @@ ghul run --target wasm      # builds into out/wasm/ and runs it under Node.js
 ghul run --target dotnet    # builds into out/dotnet/ and runs it with dotnet
 ```
 
-`--target` takes `dotnet`, `wasm` or `dotnet,wasm`, and defaults to `dotnet`.
+`--target` takes `dotnet`, `wasm` or `dotnet,wasm`, and defaults to `dotnet`,
+or to `wasm` on a machine without .NET.
 The new directory holds the manifest, `ghul-project.json`; `src/main.ghul`,
 whose entry writes `hello`; and a `.gitignore` for `out/`. A directory that
 already exists and is not empty is refused. The program is:
