@@ -75,6 +75,17 @@ namespace Ghul.Project is
             return DEPENDENCY.PATH(value.get_string()!)
         si
 
+        _optimisation_level(key: string, value: JsonElement) -> int? is
+            let level: int mut = 0
+
+            if value.value_kind != JsonValueKind.NUMBER \/ !value.try_get_int32(level ref) \/ level < 0 \/ level > 3 then
+                _report(key, "the value is not an optimisation level from 0 to 3")
+                return null
+            fi
+
+            return level
+        si
+
         _option_boolean(key: string, value: JsonElement) -> bool is
             if value.value_kind != JsonValueKind.TRUE /\ value.value_kind != JsonValueKind.FALSE then
                 _report(key, "the value is not a boolean")
@@ -239,6 +250,7 @@ namespace Ghul.Project is
             known.add("global-namespace")
             known.add("suppress")
             known.add("warn-as-error")
+            known.add("optimise")
 
             _check_keys(options, known)
         si
@@ -340,16 +352,17 @@ namespace Ghul.Project is
             let define mut = LIST[string]()
             let suppress mut = LIST[string]()
             let warn_as_error mut = LIST[string]()
+            let optimise: int? mut = null
 
             let value: JsonElement mut
 
             if !root.try_get_property("options", value ref) then
-                return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error)
+                return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error, optimise)
             fi
 
             if value.value_kind != JsonValueKind.OBJECT then
                 _report("options", "the value is not an object")
-                return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error)
+                return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error, optimise)
             fi
 
             _check_option_keys(value)
@@ -367,10 +380,12 @@ namespace Ghul.Project is
                     suppress = _string_list_option(member.name, member.value)
                 elif member.name =~ "warn-as-error" then
                     warn_as_error = _string_list_option(member.name, member.value)
+                elif member.name =~ "optimise" then
+                    optimise = _optimisation_level(member.name, member.value)
                 fi
             od
 
-            return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error)
+            return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error, optimise)
         si
 
         _string_option(name: string, value: JsonElement) -> string? is

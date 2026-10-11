@@ -2,6 +2,7 @@ namespace Ghul.Cli.Tests is
     use Collections.LIST
     use Collections.MAP
 
+    use Ghul.Project.BUILD_MODE
     use Ghul.Project.BuildTarget
     use Ghul.Project.CORE_LIBRARY
     use Ghul.Project.RUNTIME_LIBRARY
@@ -43,7 +44,7 @@ namespace Ghul.Cli.Tests is
                     LIST[BuildTarget]([target]),
                     LIST[string](["src/**/*.ghul"]),
                     null,
-                    MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string]()),
+                    MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](), null),
                     MAP[string, DEPENDENCY]()),
                 IO.Path.combine("/", "project"),
                 target)
@@ -81,19 +82,30 @@ namespace Ghul.Cli.Tests is
         output_goes_under_out_and_the_target() is
             let root = IO.Path.combine("/", "project", "out")
 
-            _same(IO.Path.combine(root, "dotnet", "app.exe"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.DOTNET), false))
-            _same(IO.Path.combine(root, "dotnet", "app.dll"), PROJECT_BUILD.output_path(_project(ManifestKind.LIBRARY, BuildTarget.DOTNET), false))
-            _same(IO.Path.combine(root, "wasm", "app.wasm"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.WASM), false))
-            _same(IO.Path.combine(root, "llvm", "app"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.LLVM), false))
-            _same(IO.Path.combine(root, "llvm", "app.ll"), PROJECT_BUILD.output_path(_project(ManifestKind.LIBRARY, BuildTarget.LLVM), false))
+            _same(IO.Path.combine(root, "dotnet", "app.exe"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.DOTNET), BUILD_MODE.release))
+            _same(IO.Path.combine(root, "dotnet", "app.dll"), PROJECT_BUILD.output_path(_project(ManifestKind.LIBRARY, BuildTarget.DOTNET), BUILD_MODE.release))
+            _same(IO.Path.combine(root, "wasm", "app.wasm"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.WASM), BUILD_MODE.release))
+            _same(IO.Path.combine(root, "llvm", "app"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.LLVM), BUILD_MODE.release))
+            _same(IO.Path.combine(root, "llvm", "app.ll"), PROJECT_BUILD.output_path(_project(ManifestKind.LIBRARY, BuildTarget.LLVM), BUILD_MODE.release))
+        si
+
+        @Test()
+        a_build_at_another_level_goes_beside_the_others() is
+            let root = IO.Path.combine("/", "project", "out")
+            let project = _project(ManifestKind.PROGRAM, BuildTarget.LLVM)
+
+            _same(IO.Path.combine(root, "llvm-O3", "app"), PROJECT_BUILD.output_path(project, BUILD_MODE(false, 3)))
+            _same(IO.Path.combine(root, "llvm", "app"), PROJECT_BUILD.output_path(project, BUILD_MODE(false, 2)))
+            _same(IO.Path.combine(root, "llvm-debug", "app"), PROJECT_BUILD.output_path(project, BUILD_MODE(true, 0)))
+            _same(IO.Path.combine(root, "llvm-debug-O2", "app"), PROJECT_BUILD.output_path(project, BUILD_MODE(true, 2)))
         si
 
         @Test()
         a_debug_build_goes_beside_the_release_build() is
             let root = IO.Path.combine("/", "project", "out")
 
-            _same(IO.Path.combine(root, "llvm-debug", "app"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.LLVM), true))
-            _same(IO.Path.combine(root, "dotnet-debug", "app.exe"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.DOTNET), true))
+            _same(IO.Path.combine(root, "llvm-debug", "app"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.LLVM), BUILD_MODE(true, null)))
+            _same(IO.Path.combine(root, "dotnet-debug", "app.exe"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.DOTNET), BUILD_MODE(true, null)))
         si
 
         @Test()
@@ -252,6 +264,17 @@ namespace Ghul.Cli.Tests is
             let parsed = PROJECT_COMMAND_LINE.parse(LIST[string](["--", "a"]), false)
 
             _same("unexpected argument --", parsed.problem ?? "")
+        si
+
+        @Test()
+        the_command_line_takes_an_optimisation_level() is
+            let parsed = PROJECT_COMMAND_LINE.parse(LIST[string](["--optimise", "1"]), false)
+
+            assert !parsed.problem?
+            assert parsed.optimise =~ 1
+            assert !PROJECT_COMMAND_LINE.parse(LIST[string](), false).optimise?
+            _same("--optimise needs a level from 0 to 3", PROJECT_COMMAND_LINE.parse(LIST[string](["--optimise", "4"]), false).problem ?? "")
+            assert PROJECT_COMMAND_LINE.names_project(LIST[string](["--optimise", "1"]))
         si
 
         @Test()

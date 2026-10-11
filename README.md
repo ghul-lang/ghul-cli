@@ -109,14 +109,15 @@ ghul [--no-cache] [--] <script> [args...]   # run a script (see below)
 ghul run [--no-cache] <script> [args...]    # run any file as a script
 ghul compile [--no-cache] <script.ghul>     # compile, and print the path to the result
 ghul new <name> [--target <names>]           # create a project to build and run
-ghul build [--target <name>] [--debug] [overrides]    # build the project in this directory
-ghul run [--target <name>] [--debug] [overrides] [-- args...]  # build the project, then run it
+ghul build [--target <name>] [--debug] [--optimise <0-3>] [overrides]  # build the project in this directory
+ghul run [--target <name>] [--debug] [--optimise <0-3>] [overrides] [-- args...]  # build, then run it
 ghul project response-file|compiler         # what editors read (see below)
 ghul install-compiler [version]             # install or update ghul.compiler
 ghul update [--version <tag>] [--check]     # update ghul itself
 ghul cache clear                            # empty the compiled-script cache
 ghul repl [--no-server] [--no-default-use]  # start an interactive session
 ghul version                                # print the versions of ghul and ghul.compiler
+ghul --help, or -h after ghul or any command  # print the usage
 ```
 
 With no command, `ghul` runs a file only if it looks like a script. A script
@@ -191,6 +192,11 @@ used.
 
 `--debug` builds with debug information into `out/<target>-debug/`, beside
 the ordinary build rather than over it, and `ghul run --debug` runs that build.
+`--optimise <0-3>` sets the llvm target's optimisation level, which is
+otherwise 2, or 0 for a debug build; a level other than that default adds
+`-O<n>` to the directory, as in `out/llvm-O3/` or `out/llvm-debug-O2/`. The
+manifest's `options` may name a default level, `"optimise": 3`, which the
+command line overrides. A chosen level needs ghul.compiler 65.16.0 or newer.
 
 The `dotnet` target writes `<name>.exe` (or `<name>.dll` for a library), with
 `ghul-runtime.dll` beside it, and runs with `dotnet`. The `wasm` target writes
@@ -272,10 +278,11 @@ to a `ghul-llvm` executable uses that one instead. The compiler's code
 generation for this target is in its early stages, and a build reports what it
 cannot yet compile.
 
-A debug build for llvm is unoptimised and carries DWARF line tables and
-variables, and needs ghul.compiler 65.14.0 or newer. Where the manifest names no compiler and
-the newest installed is older, the newest release is installed for it. `objdump` shows the source beside the machine code,
-and `gdb` steps through it:
+A debug build for llvm carries DWARF line tables and variables, is
+unoptimised unless `--optimise` says otherwise, and needs ghul.compiler
+65.14.0 or newer. Where the manifest names no compiler and the newest installed
+is older, the newest release is installed for it. `objdump` shows the source
+beside the machine code, and `gdb` steps through it:
 
 ```sh
 ghul build --debug

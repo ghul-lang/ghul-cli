@@ -29,15 +29,16 @@ namespace Ghul.Project is
 
     // The compiler options a manifest sets, one member per option. A
     // member the manifest leaves out reads as the compiler's own default:
-    // null for `underscore-access`, false for `global-namespace` and an
-    // empty list for each of the others.
+    // null for `underscore-access` and `optimise`, false for
+    // `global-namespace` and an empty list for each of the others.
     class MANIFEST_OPTIONS(
         underscore_access: string?,
         global_namespace: bool,
         default_use: Collections.List[string],
         define: Collections.List[string],
         suppress: Collections.List[string],
-        warn_as_error: Collections.List[string]
+        warn_as_error: Collections.List[string],
+        optimise: int?
     ) is si
 
     // Where a library comes from: a git repository at a tag or a branch,
