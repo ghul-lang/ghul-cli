@@ -1,0 +1,219 @@
+namespace Ghul.Cli is
+    use IO.Directory
+    use IO.File
+    use IO.Path
+
+    use System.Text.Json.JsonDocument
+    use System.Text.Json.JsonElement
+    use System.Text.Json.JsonValueKind
+
+    /// Updates a ghul-cli that `install.sh` installed, by running the
+    /// install script of the release being moved to. The script stages the
+    /// new tool, swaps it into place by rename and rolls back on failure, so
+    /// this class only decides whether there is anything to do and hands a
+    /// checked copy of the script the work.
+    ///
+    /// - api: the releases API base, which `GHUL_CLI_API` overrides
+    /// - releases: the release download base, which `GHUL_CLI_RELEASES` overrides
+    class SELF_UPDATE(api: string, releases: string) is
+        REPOSITORY: string static => "ghul-lang/ghul-cli"
+
+        /// The name the install script is published under in a release.
+        INSTALL_SCRIPT: string static => "ghul-cli-install.sh"
+
+        /// The command that updates ghul-cli where it was installed as a
+        /// .NET tool.
+        TOOL_UPDATE_COMMAND: string static => "dotnet tool update -g ghul.cli"
+
+        /// An update reading releases from where `install.sh` reads them:
+        /// GitHub, or the mirror `GHUL_CLI_API` and `GHUL_CLI_RELEASES` name.
+        from_environment() -> SELF_UPDATE static =>
+            SELF_UPDATE(
+                System.Environment.get_environment_variable("GHUL_CLI_API") ??
+                    "https://api.github.com/repos/{REPOSITORY}",
+                System.Environment.get_environment_variable("GHUL_CLI_RELEASES") ??
+                    "https://github.com/{REPOSITORY}/releases/download")
+
+        /// Whether this process is the Native AOT build, which is the only
+        /// build `install.sh` installs.
+        is_native() -> bool static =>
+            !System.Runtime.CompilerServices.RuntimeFeature.is_dynamic_code_supported
+
+        /// The directory `install.sh` installed the running executable into,
+        /// or the reason it is not one. The script replaces that whole
+        /// directory, so a directory holding anything but the `ghul`
+        /// executable is refused rather than replaced.
+        ///
+        /// - executable: the running executable's path
+        install_root(executable: string?) -> (root: string?, problem: string?) static is
+            if !executable? \/ executable.length == 0 then
+                return (root = null, problem = "the running executable could not be found")
+            fi
+
+            let resolved = _resolve_link(executable)
+            let root = Path.get_directory_name(resolved)
+
+            if !root? \/ Path.get_file_name(resolved) !~ "ghul" then
+                return (root = null, problem = "{resolved} was not installed by install.sh")
+            fi
+
+            for entry in Directory.get_file_system_entries(root) do
+                if Path.get_file_name(entry) !~ "ghul" then
+                    return (
+                        root = null,
+                        problem = "{root} holds more than the ghul executable, so it was not installed by install.sh")
+                fi
+            od
+
+            return (root = root, problem = null)
+        si
+
+        _resolve_link(path: string) -> string static is
+            let target = File.resolve_link_target(path, true)
+
+            if target? then
+                return target.full_name
+            fi
+
+            return Path.get_full_path(path)
+        si
+
+        /// Whether a release tag names the version the running tool reports.
+        /// A tag carries a leading `v` and a reported version may carry
+        /// build metadata after a `+`; neither takes part.
+        ///
+        /// - tag: a release tag, such as `v0.48.8`
+        /// - running: the version the running tool reports
+        is_running_version(tag: string, running: string) -> bool static is
+            let tagged = if tag.starts_with("v") then tag.substring(1) else tag fi
+            let plus = running.index_of('+')
+            let reported = if plus >= 0 then running.substring(0, plus) else running fi
+
+            return tagged =~ reported
+        si
+
+        /// The tag a releases API response names, or null where it names
+        /// none.
+        ///
+        /// - body: the JSON a `releases/latest` request answered with
+        tag_of_release(body: string) -> string? static is
+            try
+                let document = JsonDocument.parse(body, _)
+
+                try
+                    let tag: JsonElement mut
+
+                    let root = document.root_element
+
+                    if root.value_kind == JsonValueKind.OBJECT /\
+                        root.try_get_property("tag_name", tag ref) /\
+                        tag.value_kind == JsonValueKind.STRING
+                    then
+                        let name = tag.get_string()
+
+                        if name? /\ name.length > 0 then
+                            return name
+                        fi
+                    fi
+                finally
+                    document.dispose()
+                yrt
+            catch e: System.Text.Json.JsonException
+                return null
+            yrt
+
+            return null
+        si
+
+        /// Whether `content` has the SHA-256 a published `.sha256` file
+        /// gives. The file is `sha256sum` output: the digest, then the name.
+        ///
+        /// - content: the bytes downloaded
+        /// - published: the text of the `.sha256` file
+        matches_checksum(content: ubyte[], published: string) -> bool static is
+            let expected = published.trim().split([' ', '\t'])[0].to_lower_invariant()
+            let actual = System.Convert.to_hex_string(System.Security.Cryptography.SHA256.hash_data(content)).to_lower_invariant()
+
+            return expected.length > 0 /\ expected =~ actual
+        si
+
+        /// The tag of the latest release, or the reason it could not be read.
+        latest_tag() -> (tag: string?, problem: string?) is
+            let url = "{api}/releases/latest"
+            let (body, problem) = fetch(url)
+
+            if problem? then
+                return (tag = null, problem = problem)
+            fi
+
+            if let tag: string = tag_of_release(System.Text.Encoding.utf8.get_string(body!)) then
+                return (tag = tag, problem = null)
+            fi
+
+            return (tag = null, problem = "{url} named no release")
+        si
+
+        /// The install script published with `tag`, checked against its
+        /// published SHA-256, or the reason it could not be had. A script
+        /// with no checksum is refused, since it is what gets run.
+        ///
+        /// - tag: the release to fetch it from
+        install_script(tag: string) -> (script: ubyte[]?, problem: string?) is
+            let url = "{releases}/{tag}/{INSTALL_SCRIPT}"
+
+            let (script, script_problem) = fetch(url)
+
+            if script_problem? then
+                return (script = null, problem = script_problem)
+            fi
+
+            let (checksum, checksum_problem) = fetch("{url}.sha256")
+
+            if checksum_problem? then
+                return (script = null, problem = checksum_problem)
+            fi
+
+            if !matches_checksum(script!, System.Text.Encoding.utf8.get_string(checksum!)) then
+                return (script = null, problem = "{url} does not match its published sha256")
+            fi
+
+            return (script = script, problem = null)
+        si
+
+        /// The bytes at `url`, or the reason they could not be read. A
+        /// `file://` URL is read from the file it names, so a mirror on a
+        /// file system serves releases as `install.sh` lets it.
+        ///
+        /// - url: an `http`, `https` or `file` URL
+        fetch(url: string) -> (bytes: ubyte[]?, problem: string?) static is
+            if url.starts_with("file://") then
+                let path = System.Uri(url).local_path
+
+                if !File.exists(path) then
+                    return (bytes = null, problem = "{url} does not exist")
+                fi
+
+                return (bytes = File.read_all_bytes(path), problem = null)
+            fi
+
+            let client = System.Net.Http.HttpClient()
+
+            try
+                // GitHub's API refuses a request that names no client.
+                client.default_request_headers.user_agent.parse_add("ghul-cli")
+
+                let response = client.get_async(url).result
+
+                if !response.is_success_status_code then
+                    return (bytes = null, problem = "{url} answered HTTP {cast int(response.status_code)}")
+                fi
+
+                return (bytes = response.content.read_as_byte_array_async().result, problem = null)
+            catch e: System.Exception
+                return (bytes = null, problem = "{url} could not be read ({e.get_type().name})")
+            finally
+                client.dispose()
+            yrt
+        si
+    si
+si

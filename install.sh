@@ -226,6 +226,17 @@ if [ ! -d "${work}/unpack/compilers" ]; then
     fail "the archive holds no compilers directory beside ghul"
 fi
 
+# Checked before anything is replaced, so an archive with no compiler in it
+# leaves the installed tool as it was.
+shipped_any=""
+for shipped in "${work}"/unpack/compilers/*; do
+    [ -d "${shipped}" ] && shipped_any="true"
+done
+
+if [ -z "${shipped_any}" ]; then
+    fail "the archive ships no compiler"
+fi
+
 # --- install -----------------------------------------------------------------
 
 # Unpacked into a new directory and moved into place, so an install is either
@@ -273,10 +284,6 @@ for shipped in "${work}"/unpack/compilers/*; do
 
     seeded="${seeded} ${version}"
 done
-
-if [ -z "${seeded}" ]; then
-    fail "the archive ships no compiler"
-fi
 
 # --- put it on PATH ----------------------------------------------------------
 

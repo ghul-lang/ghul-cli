@@ -409,6 +409,7 @@ namespace Ghul.Cli is
         Std.error.write_line("       ghul project response-file --output <path> [--source-globs <path>] [--target <name>]")
         Std.error.write_line("       ghul project compiler")
         Std.error.write_line("       ghul install-compiler [version]")
+        Std.error.write_line("       ghul update [--version <tag>] [--check]")
         Std.error.write_line("       ghul cache clear")
         Std.error.write_line("       ghul repl")
         Std.error.write_line("       ghul version")
@@ -571,6 +572,134 @@ namespace Ghul.Cli is
             return latest
         finally
             lock_stream.close()
+        yrt
+    si
+
+    // Updates an install.sh install of this tool to the latest release, or
+    // to the one `--version` names, by running that release's install script.
+    // `--check` reports whether there is anything to update and stops.
+    cmd_update(rest: Collections.List[string]) -> int is
+        let wanted: string? mut = null
+        let check_only mut = false
+        let i mut = 0
+
+        while i < rest.count do
+            let argument = rest[i]
+
+            if argument =~ "--check" then
+                check_only = true
+            elif argument =~ "--version" /\ i + 1 < rest.count then
+                wanted = rest[i + 1]
+                i = i + 1
+            elif argument.starts_with("--version=") then
+                wanted = argument.substring("--version=".length)
+            else
+                Std.error.write_line("usage: ghul update [--version <tag>] [--check]")
+                return 1
+            fi
+
+            i = i + 1
+        od
+
+        // The .NET tool is replaced by dotnet, which a running tool cannot
+        // ask to replace itself.
+        if !SELF_UPDATE.is_native() then
+            Std.error.write_line("ghul: this ghul is a .NET tool; update it with:")
+            Std.error.write_line("")
+            Std.error.write_line("    {SELF_UPDATE.TOOL_UPDATE_COMMAND}")
+            return 0
+        fi
+
+        let (root, root_problem) = SELF_UPDATE.install_root(System.Environment.process_path)
+
+        if let problem: string = root_problem then
+            Std.error.write_line("ghul: cannot update: {problem}")
+            return 1
+        fi
+
+        let install_root = root!
+        let update = SELF_UPDATE.from_environment()
+        let running = cli_version()
+
+        let tag mut = ""
+
+        if let named: string = wanted then
+            tag = named
+        else
+            let (latest, latest_problem) = update.latest_tag()
+
+            if let problem: string = latest_problem then
+                Std.error.write_line("ghul: the latest release could not be found: {problem}")
+                return 1
+            fi
+
+            tag = latest!
+        fi
+
+        if SELF_UPDATE.is_running_version(tag, running) then
+            if wanted? then
+                Std.error.write_line("ghul: ghul {running} is installed, which is {tag}")
+            else
+                Std.error.write_line("ghul: ghul {running} is installed, and is the latest release")
+            fi
+
+            return 0
+        fi
+
+        if check_only then
+            let which = if wanted? then "was asked for" else "is the latest release" fi
+
+            Std.error.write_line("ghul: ghul {running} is installed; {tag} {which}")
+            Std.error.write_line("ghul: 'ghul update{if wanted? then " --version {tag}" else "" fi}' installs it")
+            return 0
+        fi
+
+        let (script, script_problem) = update.install_script(tag)
+
+        if let problem: string = script_problem then
+            Std.error.write_line("ghul: cannot update to {tag}: {problem}")
+            return 1
+        fi
+
+        let script_path = Path.join([Path.get_temp_path(), "ghul-cli-install-{System.Environment.process_id}-{System.Guid.new_guid().to_string("N")}.sh"])
+
+        try
+            File.write_all_bytes(script_path, script!)
+
+            Std.error.write_line("ghul: updating ghul {running} to {tag} in {install_root}...")
+
+            let start = System.Diagnostics.ProcessStartInfo("sh")
+
+            start.argument_list.add(script_path)
+            start.argument_list.add("--version")
+            start.argument_list.add(tag)
+            start.argument_list.add("--dir")
+            start.argument_list.add(install_root)
+            start.use_shell_execute = false
+
+            // The script reports its progress on stdout, which this tool
+            // keeps for a script's own output, so it is passed on to stderr
+            // as it arrives.
+            start.redirect_standard_output = true
+
+            let process = System.Diagnostics.Process.start(start)
+
+            if !process? then
+                Std.error.write_line("ghul: cannot update: sh could not be started")
+                return 1
+            fi
+
+            while let line = process.standard_output.read_line() do
+                Std.error.write_line(line)
+            od
+
+            process.wait_for_exit()
+
+            return process.exit_code
+        finally
+            if File.exists(script_path) then
+                File.delete(script_path)
+            fi
         yrt
     si
 
@@ -1124,6 +1253,10 @@ namespace Ghul.Cli is
 
         if verb =~ "install-compiler" then
             return cmd_install_compiler(rest)
+        fi
+
+        if verb =~ "update" then
+            return cmd_update(rest)
         fi
 
         if verb =~ "compile" then

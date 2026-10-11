@@ -1,0 +1,253 @@
+namespace Ghul.Cli.Tests is
+    use IO.Directory
+    use IO.File
+    use IO.Path
+
+    use Ghul.Cli.SELF_UPDATE
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    @TestClass()
+    class SELF_UPDATE_TESTS is
+        init() is si
+
+        _scratch() -> string is
+            let path = Path.combine(Path.get_temp_path(), "ghul-update-{System.Guid.new_guid().to_string("N")}")
+
+            Directory.create_directory(path)
+
+            return path
+        si
+
+        _bytes(text: string) -> ubyte[] static => System.Text.Encoding.utf8.get_bytes(text)
+
+        _sha256_line(content: ubyte[], name: string) -> string static =>
+            "{System.Convert.to_hex_string(System.Security.Cryptography.SHA256.hash_data(content)).to_lower_invariant()}  {name}\n"
+
+        @Test()
+        is_running_version__ignores_the_tag_prefix_and_build_metadata() is
+            assert SELF_UPDATE.is_running_version("v0.48.8", "0.48.8")
+            assert SELF_UPDATE.is_running_version("v0.48.8", "0.48.8+4280d9c")
+            assert SELF_UPDATE.is_running_version("0.48.8", "0.48.8")
+        si
+
+        @Test()
+        is_running_version__is_false_for_another_version() is
+            assert !SELF_UPDATE.is_running_version("v0.48.9", "0.48.8")
+            assert !SELF_UPDATE.is_running_version("v0.48.8", "0.48.80")
+        si
+
+        @Test()
+        tag_of_release__reads_the_tag_name() is
+            let tag = SELF_UPDATE.tag_of_release("{{\"tag_name\": \"v1.2.3\", \"name\": \"v1.2.3\"}}")
+
+            assert tag =~ "v1.2.3"
+        si
+
+        @Test()
+        tag_of_release__is_null_where_the_body_names_no_tag() is
+            assert !SELF_UPDATE.tag_of_release("{{\"message\": \"Not Found\"}}")?
+            assert !SELF_UPDATE.tag_of_release("{{\"tag_name\": \"\"}}")?
+            assert !SELF_UPDATE.tag_of_release("[]")?
+            assert !SELF_UPDATE.tag_of_release("not json")?
+        si
+
+        @Test()
+        matches_checksum__accepts_sha256sum_output_in_either_case() is
+            let content = _bytes("echo hello\n")
+            let line = _sha256_line(content, "ghul-cli-install.sh")
+
+            assert SELF_UPDATE.matches_checksum(content, line)
+            assert SELF_UPDATE.matches_checksum(content, line.to_upper_invariant())
+        si
+
+        @Test()
+        matches_checksum__refuses_other_content_and_an_empty_file() is
+            let line = _sha256_line(_bytes("echo hello\n"), "ghul-cli-install.sh")
+
+            assert !SELF_UPDATE.matches_checksum(_bytes("echo goodbye\n"), line)
+            assert !SELF_UPDATE.matches_checksum(_bytes("echo hello\n"), "")
+        si
+
+        @Test()
+        install_root__is_the_directory_holding_only_ghul() is
+            let root = _scratch()
+
+            try
+                let executable = Path.join([root, "ghul"])
+                File.write_all_text(executable, "")
+
+                let (found, problem) = SELF_UPDATE.install_root(executable)
+
+                assert !problem?
+                assert found =~ Path.get_full_path(root)
+            finally
+                Directory.delete(root, true)
+            yrt
+        si
+
+        @Test()
+        install_root__follows_a_link_to_the_executable() is
+            let scratch = _scratch()
+
+            try
+                let root = Path.join([scratch, "opt"])
+                Directory.create_directory(root)
+
+                let executable = Path.join([root, "ghul"])
+                File.write_all_text(executable, "")
+
+                let link = Path.join([scratch, "ghul-link"])
+                File.create_symbolic_link(link, executable)
+
+                let (found, problem) = SELF_UPDATE.install_root(link)
+
+                assert !problem?
+                assert found =~ Path.get_full_path(root)
+            finally
+                Directory.delete(scratch, true)
+            yrt
+        si
+
+        @Test()
+        install_root__refuses_a_directory_holding_anything_else() is
+            let root = _scratch()
+
+            try
+                let executable = Path.join([root, "ghul"])
+                File.write_all_text(executable, "")
+                File.write_all_text(Path.join([root, "notes.txt"]), "")
+
+                let (found, problem) = SELF_UPDATE.install_root(executable)
+
+                assert !found?
+                assert problem?
+            finally
+                Directory.delete(root, true)
+            yrt
+        si
+
+        @Test()
+        install_root__refuses_an_executable_not_named_ghul() is
+            let root = _scratch()
+
+            try
+                let executable = Path.join([root, "ghul-cli"])
+                File.write_all_text(executable, "")
+
+                let (found, problem) = SELF_UPDATE.install_root(executable)
+
+                assert !found?
+                assert problem?
+            finally
+                Directory.delete(root, true)
+            yrt
+        si
+
+        @Test()
+        fetch__reads_a_file_url_and_reports_a_missing_file() is
+            let root = _scratch()
+
+            try
+                let path = Path.join([root, "latest"])
+                File.write_all_text(path, "body")
+
+                let (bytes, problem) = SELF_UPDATE.fetch(System.Uri(path).absolute_uri)
+
+                assert !problem?
+                assert System.Text.Encoding.utf8.get_string(bytes!) =~ "body"
+
+                let (missing, missing_problem) = SELF_UPDATE.fetch(System.Uri(Path.join([root, "absent"])).absolute_uri)
+
+                assert !missing?
+                assert missing_problem?
+            finally
+                Directory.delete(root, true)
+            yrt
+        si
+
+        // A release mirror over HTTP, serving the latest-release document and
+        // the install script of v1.2.3, with `checksum` as its .sha256.
+        _mirror(script: ubyte[], checksum: string?) -> FEED_SERVER static is
+            let server = FEED_SERVER(path is
+                if path =~ "/api/releases/latest" then
+                    return _bytes("{{\"tag_name\": \"v1.2.3\"}}")
+                elif path =~ "/download/v1.2.3/ghul-cli-install.sh" then
+                    return script
+                elif path =~ "/download/v1.2.3/ghul-cli-install.sh.sha256" /\ checksum? then
+                    return _bytes(checksum)
+                fi
+
+                return null
+            si)
+
+            server.start()
+
+            return server
+        si
+
+        @Test()
+        latest_tag__reads_the_releases_api() is
+            let server = _mirror(_bytes(""), null)
+
+            try
+                let update = SELF_UPDATE("{server.url()}/api", "{server.url()}/download")
+                let (tag, problem) = update.latest_tag()
+
+                assert !problem?
+                assert tag =~ "v1.2.3"
+            finally
+                server.stop()
+            yrt
+        si
+
+        @Test()
+        install_script__is_the_script_when_it_matches_its_checksum() is
+            let script = _bytes("#!/bin/sh\necho installing\n")
+            let server = _mirror(script, _sha256_line(script, "ghul-cli-install.sh"))
+
+            try
+                let update = SELF_UPDATE("{server.url()}/api", "{server.url()}/download")
+                let (fetched, problem) = update.install_script("v1.2.3")
+
+                assert !problem?
+                assert System.Text.Encoding.utf8.get_string(fetched!) =~ System.Text.Encoding.utf8.get_string(script)
+            finally
+                server.stop()
+            yrt
+        si
+
+        @Test()
+        install_script__is_refused_when_it_does_not_match_its_checksum() is
+            let script = _bytes("#!/bin/sh\necho installing\n")
+            let server = _mirror(script, _sha256_line(_bytes("something else"), "ghul-cli-install.sh"))
+
+            try
+                let update = SELF_UPDATE("{server.url()}/api", "{server.url()}/download")
+                let (fetched, problem) = update.install_script("v1.2.3")
+
+                assert !fetched?
+                assert problem?
+            finally
+                server.stop()
+            yrt
+        si
+
+        @Test()
+        install_script__is_refused_when_no_checksum_is_published() is
+            let script = _bytes("#!/bin/sh\necho installing\n")
+            let server = _mirror(script, null)
+
+            try
+                let update = SELF_UPDATE("{server.url()}/api", "{server.url()}/download")
+                let (fetched, problem) = update.install_script("v1.2.3")
+
+                assert !fetched?
+                assert problem?
+            finally
+                server.stop()
+            yrt
+        si
+    si
+si

@@ -48,6 +48,16 @@ if (( elapsed_ms > 2000 )); then
     exit 1
 fi
 
+echo "smoke: 'ghul update' under .NET names the dotnet tool command..." >&2
+update_out="$(dotnet "$cli" update 2>&1)" || {
+    echo "smoke: 'ghul update' under .NET exited non-zero: $update_out" >&2
+    exit 1
+}
+if ! grep -q "dotnet tool update -g ghul.cli" <<< "$update_out"; then
+    echo "smoke: expected 'ghul update' under .NET to name the dotnet tool command, got: $update_out" >&2
+    exit 1
+fi
+
 echo "smoke: missing script reports an error..." >&2
 if dotnet "$cli" "$scratch/does-not-exist.ghul" 2>/dev/null; then
     echo "smoke: expected a non-zero exit for a missing script" >&2

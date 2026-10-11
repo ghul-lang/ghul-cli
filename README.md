@@ -57,6 +57,7 @@ ghul build [--target <name>] [overrides]    # build the project in this director
 ghul run [--target <name>] [overrides] [-- args...]  # build the project, then run it
 ghul project response-file|compiler         # what editors read (see below)
 ghul install-compiler [version]             # install or update ghul.compiler
+ghul update [--version <tag>] [--check]     # update ghul itself
 ghul cache clear                            # empty the compiled-script cache
 ghul repl [--no-server] [--no-default-use]  # start an interactive session
 ghul version                                # print the versions of ghul and ghul.compiler
@@ -69,8 +70,8 @@ is a file whose name ends in `.ghul`, or an executable file that starts with
 `ghul run` runs the file it is given, whatever the file looks like. A
 `#!/usr/bin/env ghul` line runs the script this way.
 
-To run a script named `run`, `new`, `compile`, `cache`, `install-compiler` or
-`version`, write `ghul -- <name>`.
+To run a script named `run`, `new`, `compile`, `cache`, `install-compiler`,
+`update` or `version`, write `ghul -- <name>`.
 
 `ghul compile` compiles the script and prints the path to the compiled
 binary. It installs the compiler first if it needs to, and it does not run
@@ -84,6 +85,15 @@ version, it installs the latest release, or updates to it. With a version, it
 installs exactly that version, older or newer, and does nothing if that
 version is already installed. `GHUL_COMPILER_FEED` names a different feed to
 download from, for a mirror or an offline network.
+
+`ghul update` updates a `ghul` that `install.sh` installed to the latest
+release, or to the release `--version` names, older or newer. It runs that
+release's own install script, after checking it against the published
+sha256, so the tool is replaced the same way a fresh install puts it in
+place. `--check` reports whether there is anything to update and changes
+nothing. A `ghul` installed as a .NET tool is updated by `dotnet tool update
+-g ghul.cli` instead, which `ghul update` prints. `GHUL_CLI_API` and
+`GHUL_CLI_RELEASES` name a mirror, as they do for `install.sh`.
 
 A `-` in place of the script reads the source from standard input. This
 works for running and for compiling:

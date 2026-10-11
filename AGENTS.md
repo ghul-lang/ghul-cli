@@ -238,6 +238,14 @@ looks for them.
   for dotnet and wasm, one depending on the source library in
   `tests/libraries`, and a build that fails, each with the output or
   diagnostics expected of it.
+- `tests/update.sh` — end-to-end test of `ghul update`, given a Native AOT
+  `ghul`: installs it with `install.sh` from a release mirror on the file
+  system, then checks `--check`, an already-current install, a checksum
+  mismatch that leaves the tool alone, and an update to a newer release.
+  The release job runs it, since only that job builds the AOT tool; locally,
+  `dotnet publish cli/ghul-cli.ghulproj -c Release -r linux-x64
+  -p:PublishAot=true -o <dir>` builds one, with `-p:CppCompilerAndLinker=gcc`
+  on a machine with no clang.
 - `tests/smoke.sh` — end-to-end test: builds the tool, points it at a real
   script under a scratch `HOME` with no `ghul.compiler` pre-installed, and
   drives it through the install/compile path, the cache path, each verb,
