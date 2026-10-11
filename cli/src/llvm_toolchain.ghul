@@ -1,0 +1,281 @@
+namespace Ghul.Cli is
+    use Host = Ghul.Repl.Host
+
+    use IO.Directory
+    use IO.File
+    use IO.Path
+
+    use Ghul.Project.FILE_LOCK
+    use Ghul.Project.LIBRARY_CACHE
+
+    /// The `ghul-llvm` tool a build for the llvm target links with: an IR
+    /// assembler, optimiser and linker in one executable, released with the
+    /// runtime archives it links against beside it.
+    ///
+    /// A build gets the release this tool pins for the compiler it builds
+    /// with, fetched once into `<root>/<tag>/` and kept there. Setting
+    /// `GHUL_LLVM` to a `ghul-llvm` executable uses that instead.
+    ///
+    /// - root: where fetched releases are kept
+    /// - releases: the release download base, which `GHUL_LLVM_RELEASES`
+    ///   overrides; a `file://` base reads releases from a directory
+    class LLVM_TOOLCHAIN(root: string, releases: string) is
+        /// The toolchain kept in this user's cache, fetched from where
+        /// `GHUL_LLVM_RELEASES` says, or from ghul-llvm's own releases.
+        for_this_user() -> LLVM_TOOLCHAIN static is
+            let named = System.Environment.get_environment_variable("GHUL_LLVM_RELEASES")
+
+            let releases =
+                if named? /\ named.length > 0 then
+                    named
+                else
+                    "https://github.com/ghul-lang/ghul-llvm/releases/download"
+                fi
+
+            return LLVM_TOOLCHAIN(Path.join([LIBRARY_CACHE.cache_home(), "tools", "ghul-llvm"]), releases)
+        si
+
+        /// The platform `ghul-llvm` is released for that this machine is,
+        /// as a target triple, or null where there is no release for it.
+        triple() -> string? static is
+            if Host.HOST.rid() =~ "linux-x64" then
+                return "x86_64-unknown-linux-musl"
+            fi
+
+            return null
+        si
+
+        /// The release of `ghul-llvm` to link with for a compiler: the newest
+        /// whose earliest compiler is no newer than `compiler_version`, or
+        /// null where the version is earlier than all of them or is not a
+        /// release number.
+        ///
+        /// - compiler_version: the `ghul.compiler` version the build uses
+        pinned_tag(compiler_version: string) -> string? static is
+            let result: string? mut = null
+            let compiler: System.Version? mut
+
+            if !System.Version.try_parse(compiler_version, compiler ref) \/ !compiler? then
+                return result
+            fi
+
+            for pin in _pins() do
+                if System.Version.parse(pin.earliest_compiler) <= compiler then
+                    result = pin.tag
+                fi
+            od
+
+            return result
+        si
+
+        // Each release of ghul-llvm and the earliest compiler that links
+        // with it, oldest first. A release that changes what the compiler
+        // and the runtime archives agree on adds a line.
+        _pins() -> (earliest_compiler: string, tag: string)[] static =>
+            [
+                (earliest_compiler = "65.5.0", tag = "v0.6.0")
+            ]
+
+        /// The name of the archive a release publishes for `triple`.
+        ///
+        /// - triple: the platform, as `triple()` gives it
+        archive_name(triple: string) -> string static =>
+            "ghul-llvm-{triple}.tar.gz"
+
+        /// The `ghul-llvm` executable to link with for `compiler_version`,
+        /// fetching its release first if it is not already kept, or the
+        /// reason there is none.
+        ///
+        /// - compiler_version: the compiler the build uses
+        executable(compiler_version: string) -> (path: string?, problem: string?) is
+            let named = System.Environment.get_environment_variable("GHUL_LLVM")
+
+            if named? /\ named.length > 0 then
+                return (path = named, problem = null)
+            fi
+
+            let platform = triple()
+
+            if !platform? then
+                return (path = null, problem = "the llvm target builds only on Linux x86-64")
+            fi
+
+            let tag = pinned_tag(compiler_version)
+
+            if !tag? then
+                return (path = null, problem = "no ghul-llvm release is pinned for ghul.compiler {compiler_version}, which the llvm target needs {Ghul.Project.BUILD_TARGETS.minimum_compiler(Ghul.Project.BuildTarget.LLVM)} or newer for")
+            fi
+
+            return executable(tag, platform)
+        si
+
+        /// The `ghul-llvm` executable of release `tag` for `triple`,
+        /// fetching it first if it is not already kept, or the reason it
+        /// could not be had.
+        ///
+        /// - tag: the release
+        /// - triple: the platform
+        executable(tag: string, triple: string) -> (path: string?, problem: string?) is
+            let directory = Path.join([root, tag, triple])
+            let binary = Path.join([directory, "bin", "ghul-llvm"])
+
+            if File.exists(binary) then
+                return (path = binary, problem = null)
+            fi
+
+            Directory.create_directory(root)
+
+            let lock = FILE_LOCK.acquire(Path.join([root, ".lock"]), "ghul: waiting for another ghul process to fetch ghul-llvm {tag}...")
+
+            try
+                if File.exists(binary) then
+                    return (path = binary, problem = null)
+                fi
+
+                if let problem: string = _fetch_into(tag, triple, directory) then
+                    return (path = null, problem = problem)
+                fi
+
+                if !File.exists(binary) then
+                    return (path = null, problem = "ghul-llvm {tag} has no bin/ghul-llvm")
+                fi
+
+                return (path = binary, problem = null)
+            finally
+                lock.close()
+            yrt
+        si
+
+        // Downloads the release archive, checks it against its published
+        // SHA-256, unpacks it into a scratch directory beside the final one
+        // and renames it into place. Null on success.
+        _fetch_into(tag: string, triple: string, directory: string) -> string? is
+            let url = "{releases}/{tag}/{archive_name(triple)}"
+
+            let (archive, archive_problem) = fetch(url)
+
+            if let problem: string = archive_problem then
+                return "cannot fetch ghul-llvm: {problem}"
+            fi
+
+            let (checksum, checksum_problem) = fetch("{url}.sha256")
+
+            if let problem: string = checksum_problem then
+                return "cannot fetch ghul-llvm: {problem}"
+            fi
+
+            if !matches_checksum(archive!, System.Text.Encoding.utf8.get_string(checksum!)) then
+                return "{url} does not match its published sha256"
+            fi
+
+            let parent = Path.get_directory_name(directory)!
+            let scratch = Path.join([parent, ".tmp-{System.Guid.new_guid().to_string("N").substring(0, 8)}"])
+
+            try
+                Directory.create_directory(scratch)
+
+                let unpacked = unpack(archive!, scratch)
+
+                if !unpacked? then
+                    return "{url} holds no single top-level directory"
+                fi
+
+                _make_executable(Path.join([unpacked, "bin", "ghul-llvm"]))
+
+                try
+                    Directory.move(unpacked, directory)
+                catch e: IO.IOException
+                    // Another process unpacked the same release first; its
+                    // copy is complete, and this one is left to be deleted.
+                yrt
+
+                return null
+            catch e: Ghul.Exception
+                return "cannot unpack {url}: {e.message}"
+            finally
+                if Directory.exists(scratch) then
+                    Directory.delete(scratch, true)
+                fi
+            yrt
+        si
+
+        /// Unpacks a gzipped tar archive into `into`, answering the one
+        /// directory it holds at its top level, or null where it holds
+        /// anything else there.
+        ///
+        /// - archive: the archive's bytes
+        /// - into: an empty directory to unpack into
+        unpack(archive: ubyte[], into: string) -> string? static is
+            let compressed = use IO.MemoryStream(archive)
+            let decompressed = use System.IO.Compression.GZipStream(compressed, System.IO.Compression.CompressionMode.DECOMPRESS)
+
+            System.Formats.Tar.TarFile.extract_to_directory(decompressed, into, false)
+
+            let entries = Directory.get_file_system_entries(into)
+
+            if entries.count != 1 \/ !Directory.exists(entries[0]) then
+                return null
+            fi
+
+            return entries[0]
+        si
+
+        /// Whether `content` has the SHA-256 a published `.sha256` file
+        /// gives. The file is `sha256sum` output: the digest, then the name.
+        ///
+        /// - content: the bytes downloaded
+        /// - published: the text of the `.sha256` file
+        matches_checksum(content: ubyte[], published: string) -> bool static is
+            let expected = published.trim().split([' ', '\t'])[0].to_lower_invariant()
+            let actual = System.Convert.to_hex_string(System.Security.Cryptography.SHA256.hash_data(content)).to_lower_invariant()
+
+            return expected.length > 0 /\ expected =~ actual
+        si
+
+        /// The bytes at `url`, or the reason they could not be read. A
+        /// `file://` URL is read from the file it names.
+        ///
+        /// - url: an `http`, `https` or `file` URL
+        fetch(url: string) -> (bytes: ubyte[]?, problem: string?) static is
+            if url.starts_with("file://") then
+                let path = System.Uri(url).local_path
+
+                if !File.exists(path) then
+                    return (bytes = null, problem = "{url} does not exist")
+                fi
+
+                return (bytes = File.read_all_bytes(path), problem = null)
+            fi
+
+            let client = System.Net.Http.HttpClient()
+
+            try
+                client.default_request_headers.user_agent.parse_add("ghul-cli")
+
+                let response = client.get_async(url).result
+
+                if !response.is_success_status_code then
+                    return (bytes = null, problem = "{url} answered HTTP {cast int(response.status_code)}")
+                fi
+
+                return (bytes = response.content.read_as_byte_array_async().result, problem = null)
+            catch e: Ghul.Exception
+                return (bytes = null, problem = "{url} could not be read ({e.get_type().name})")
+            finally
+                client.dispose()
+            yrt
+        si
+
+        _make_executable(path: string) static is
+            if File.exists(path) /\ !System.OperatingSystem.is_windows() then
+                File.set_unix_file_mode(
+                    path,
+                    cast IO.UnixFileMode(
+                        cast int(File.get_unix_file_mode(path)) |
+                        cast int(IO.UnixFileMode.USER_EXECUTE) |
+                        cast int(IO.UnixFileMode.GROUP_EXECUTE) |
+                        cast int(IO.UnixFileMode.OTHER_EXECUTE)))
+            fi
+        si
+    si
+si

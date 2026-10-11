@@ -1,0 +1,50 @@
+namespace Ghul.Project is
+    /// What a build needs to know about each target, asked of the target
+    /// rather than read off its name.
+    class BUILD_TARGETS is
+        /// A target as the compiler and a manifest spell it.
+        ///
+        /// - target: the target to name
+        name(target: BuildTarget) -> string static =>
+            case target
+            when BuildTarget.DOTNET then "dotnet"
+            when BuildTarget.WASM then "wasm"
+            when BuildTarget.LLVM then "llvm"
+            esac
+
+        /// The target spelled `spelling`, or null where no target is.
+        ///
+        /// - spelling: a target as the compiler and a manifest spell it
+        named(spelling: string) -> BuildTarget? static is
+            for target in [BuildTarget.DOTNET, BuildTarget.WASM, BuildTarget.LLVM] do
+                if spelling =~ name(target) then
+                    return target
+                fi
+            od
+
+            return null
+        si
+
+        /// Every target's name, separated by commas, for a message.
+        names: string static => "dotnet, wasm, llvm"
+
+        /// Whether a build for `target` compiles its core library, its
+        /// runtime and its library dependencies in from source, rather than
+        /// referencing .NET assemblies.
+        ///
+        /// - target: the target being built
+        has_source_libraries(target: BuildTarget) -> bool static =>
+            target != BuildTarget.DOTNET
+
+        /// The earliest compiler that builds for `target`, or null where any
+        /// compiler does.
+        ///
+        /// - target: the target being built
+        minimum_compiler(target: BuildTarget) -> string? static =>
+            case target
+            when BuildTarget.DOTNET then null
+            when BuildTarget.WASM then CORE_LIBRARY.MINIMUM_COMPILER
+            when BuildTarget.LLVM then "65.5.0"
+            esac
+    si
+si

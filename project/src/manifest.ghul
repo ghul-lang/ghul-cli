@@ -23,7 +23,8 @@ namespace Ghul.Project is
     // What a build produces, as a name a build asks for by.
     enum BuildTarget is
         DOTNET,
-        WASM
+        WASM,
+        LLVM
     si
 
     // The compiler options a manifest sets, one member per option. A

@@ -14,8 +14,8 @@ namespace Ghul.Project is
     si
 
     /// Chooses the compiler for a build from what the manifest names and
-    /// what is installed. A wasm build needs at least
-    /// `CORE_LIBRARY.MINIMUM_COMPILER`; a dotnet build takes any.
+    /// what is installed. A build for a target with a minimum compiler
+    /// needs at least that one; a dotnet build takes any.
     class COMPILER_CHOICE is
         /// The compiler a build of `target` uses.
         ///
@@ -23,16 +23,16 @@ namespace Ghul.Project is
         /// - named: the version the manifest names, or null
         /// - installed: the newest installed version, or null when none is
         choose(target: BuildTarget, named: string?, installed: string?) -> CompilerChoice static is
-            if target != BuildTarget.WASM then
+            let minimum = BUILD_TARGETS.minimum_compiler(target)
+
+            if !minimum? then
                 return CompilerChoice.REQUESTED(named)
             fi
-
-            let minimum = CORE_LIBRARY.MINIMUM_COMPILER
 
             if let version: string = named then
                 if is_older_than(version, minimum) then
                     return CompilerChoice.PROBLEM(
-                        "the manifest names ghul.compiler {version}, but the wasm target needs {minimum} or newer")
+                        "the manifest names ghul.compiler {version}, but the {BUILD_TARGETS.name(target)} target needs {minimum} or newer")
                 fi
 
                 return CompilerChoice.REQUESTED(version)

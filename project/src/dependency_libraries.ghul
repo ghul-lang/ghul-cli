@@ -6,8 +6,8 @@ namespace Ghul.Project is
     use IO.Path
 
     /// The source libraries a manifest's own `dependencies` name, other than
-    /// ghul-core and ghul-runtime, which are compiled into every wasm build
-    /// whether declared or not.
+    /// ghul-core and ghul-runtime, which are compiled into every build for a
+    /// target with source libraries whether declared or not.
     ///
     /// Each is a directory holding a `ghul-project.json`, declared by `path`
     /// or as a `git` repository at a `tag`, and fetched into the library cache
@@ -15,8 +15,9 @@ namespace Ghul.Project is
     /// found the same way, a `path` read relative to that library, and come
     /// before it, so every library follows everything it uses.
     class DEPENDENCY_LIBRARIES is
-        /// Whether `name` is one of the libraries every wasm build compiles
-        /// in, which a manifest declares only to choose where it comes from.
+        /// Whether `name` is one of the libraries every build for a target
+        /// with source libraries compiles in, which a manifest declares only
+        /// to choose where it comes from.
         ///
         /// - name: a key of a manifest's `dependencies`
         is_implicit(name: string) -> bool static =>
@@ -29,12 +30,14 @@ namespace Ghul.Project is
         /// - manifest_directory: the directory holding the manifest, which a
         ///   path dependency is relative to
         /// - cache: where fetched libraries are kept
+        /// - target: the target being built, which every library has to list
         find(
             manifest: MANIFEST,
             manifest_directory: string,
-            cache: LIBRARY_CACHE
+            cache: LIBRARY_CACHE,
+            target: BuildTarget
         ) -> (libraries: Collections.List[SOURCE_LIBRARY], problem: string?) static is
-            let walk = _DEPENDENCY_WALK(cache)
+            let walk = _DEPENDENCY_WALK(cache, target)
 
             walk.visit_all(manifest.dependencies, manifest_directory, manifest.name)
 
@@ -46,14 +49,16 @@ namespace Ghul.Project is
     // its own dependencies have been added.
     class _DEPENDENCY_WALK is
         _cache: LIBRARY_CACHE
+        _target: BuildTarget
         _roots: MAP[string, string]
         _visiting: SET[string]
 
         ordered: LIST[SOURCE_LIBRARY]
         problem: string?
 
-        init(cache: LIBRARY_CACHE) is
+        init(cache: LIBRARY_CACHE, target: BuildTarget) is
             _cache = cache
+            _target = target
             _roots = MAP[string, string]()
             _visiting = SET[string]()
 
@@ -118,8 +123,8 @@ namespace Ghul.Project is
 
             let manifest = cast ReadOutcome.OK(outcome).manifest
 
-            if !(manifest.targets |> Ghul.Pipes.any(t => t == BuildTarget.WASM)) then
-                problem = "{name} does not build for the wasm target"
+            if !(manifest.targets |> Ghul.Pipes.any(t => t == _target)) then
+                problem = "{name} does not build for the {BUILD_TARGETS.name(_target)} target"
                 return
             fi
 

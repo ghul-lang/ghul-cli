@@ -26,8 +26,9 @@ namespace Ghul.Cli is
     si
 
     // What this tool caches lives under one directory: the compiled
-    // scripts, the libraries a wasm build fetches, and the compilers a
-    // manifest's `compiler_version` resolves to. All of it is
+    // scripts, the libraries a wasm or llvm build fetches, the ghul-llvm
+    // releases an llvm build links with, and the compilers a manifest's
+    // `compiler_version` resolves to. All of it is
     // re-materialisable and none of it is installed, so `ghul cache clear`
     // takes the lot and one `rm -rf` undoes the lot.
     cache_home() -> string is
@@ -403,7 +404,7 @@ namespace Ghul.Cli is
         Std.error.write_line("usage: ghul [--no-cache] [--] <script> [args...]")
         Std.error.write_line("       ghul run [--no-cache] <script> [args...]")
         Std.error.write_line("       ghul compile [--no-cache] <script.ghul>")
-        Std.error.write_line("       ghul new <name> [--target dotnet|wasm|dotnet,wasm]")
+        Std.error.write_line("       ghul new <name> [--target <target>[,<target>...]]")
         Std.error.write_line("       ghul build [--target <name>]")
         Std.error.write_line("       ghul run [--target <name>] [-- args...]")
         Std.error.write_line("       ghul project response-file --output <path> [--source-globs <path>] [--target <name>]")
@@ -476,7 +477,7 @@ namespace Ghul.Cli is
 
         if let problem: string = command_line.problem then
             Std.error.write_line("ghul: {problem}")
-            Std.error.write_line("usage: ghul new <name> [--target dotnet|wasm|dotnet,wasm]")
+            Std.error.write_line("usage: ghul new <name> [--target <target>[,<target>...]]")
             return 1
         fi
 
@@ -485,7 +486,12 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        let run = if command_line.targets.count > 1 then "ghul run --target wasm" else "ghul run" fi
+        let run =
+            if command_line.targets.count > 1 then
+                "ghul run --target {Ghul.Project.BUILD_TARGETS.name(command_line.targets[command_line.targets.count - 1])}"
+            else
+                "ghul run"
+            fi
 
         Std.error.write_line("ghul: created {command_line.directory}; cd into it and {run}")
 
@@ -1006,6 +1012,21 @@ namespace Ghul.Cli is
         let store = Host.COMPILER_STORE.for_this_user()
 
         if let (compiler, compiler_version, runtime_assembly) = build_compiler(store, project, overrides, say) then
+            let linker: string? mut = null
+
+            // A program for the llvm target is linked by the compiler, with
+            // the ghul-llvm release pinned for it.
+            if project.target == Ghul.Project.BuildTarget.LLVM /\ project.manifest.kind == Ghul.Project.ManifestKind.PROGRAM then
+                let found = LLVM_TOOLCHAIN.for_this_user().executable(compiler_version)
+
+                if let problem: string = found.problem then
+                    say(problem)
+                    return 1
+                fi
+
+                linker = found.path
+            fi
+
             let exit_code =
                 Ghul.Project.PROJECT_BUILD.build(
                     project,
@@ -1013,6 +1034,7 @@ namespace Ghul.Cli is
                     compiler_version,
                     runtime_assembly,
                     Ghul.Project.LIBRARY_CACHE.for_this_user(),
+                    linker,
                     say)
 
             if exit_code != 0 \/ !wants_run then
@@ -1135,8 +1157,8 @@ namespace Ghul.Cli is
 
         if let newest: Ghul.Project.CompilerChoice.NEWEST = choice then
             say(
-                "ghul.compiler {newest.installed} is too old for the wasm target, "
-                "which needs {Ghul.Project.CORE_LIBRARY.MINIMUM_COMPILER} or newer; installing the newest")
+                "ghul.compiler {newest.installed} is too old for the {Ghul.Project.BUILD_TARGETS.name(project.target)} target, "
+                "which needs {Ghul.Project.BUILD_TARGETS.minimum_compiler(project.target)} or newer; installing the newest")
 
             return update_compiler_to_latest(store)
         fi

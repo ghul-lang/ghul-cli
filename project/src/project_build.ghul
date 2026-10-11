@@ -16,22 +16,25 @@ namespace Ghul.Project is
             let directory = Path.join([project.directory, "out", COMPILER_ARGUMENTS.target_name(project.target)])
             let name = project.manifest.name
 
-            if project.target == BuildTarget.WASM then
-                return Path.join([directory, "{name}.wasm"])
-            fi
+            let is_library = project.manifest.kind == ManifestKind.LIBRARY
 
-            if project.manifest.kind == ManifestKind.LIBRARY then
-                return Path.join([directory, "{name}.dll"])
-            fi
-
-            return Path.join([directory, "{name}.exe"])
+            return
+                case project.target
+                when BuildTarget.WASM then Path.join([directory, "{name}.wasm"])
+                when BuildTarget.LLVM then
+                    // A library build writes the module's text, and a program
+                    // is a native executable.
+                    if is_library then Path.join([directory, "{name}.ll"]) else Path.join([directory, name]) fi
+                when BuildTarget.DOTNET then
+                    if is_library then Path.join([directory, "{name}.dll"]) else Path.join([directory, "{name}.exe"]) fi
+                esac
         si
 
-        /// The source libraries a build of `project` compiles in: for the
-        /// wasm target the core library, the runtime library and then the
-        /// libraries the manifest's own dependencies name, and nothing for
-        /// `dotnet`. Null, with the problem reported to `say`, where any of
-        /// them cannot be found.
+        /// The source libraries a build of `project` compiles in: for a
+        /// target with source libraries the core library, the runtime library
+        /// and then the libraries the manifest's own dependencies name, and
+        /// nothing for `dotnet`. Null, with the problem reported to `say`,
+        /// where any of them cannot be found.
         ///
         /// - project: the project being built
         /// - compiler_version: the compiler the build uses
@@ -45,7 +48,7 @@ namespace Ghul.Project is
         ) -> Collections.List[SOURCE_LIBRARY]? static is
             let result = LIST[SOURCE_LIBRARY]()
 
-            if project.target != BuildTarget.WASM then
+            if !BUILD_TARGETS.has_source_libraries(project.target) then
                 return result
             fi
 
@@ -69,7 +72,7 @@ namespace Ghul.Project is
                 result.add(library.library)
             fi
 
-            let dependencies = DEPENDENCY_LIBRARIES.find(project.manifest, project.directory, cache)
+            let dependencies = DEPENDENCY_LIBRARIES.find(project.manifest, project.directory, cache, project.target)
 
             if let problem: string = dependencies.problem then
                 say(problem)
@@ -88,10 +91,12 @@ namespace Ghul.Project is
         /// - project: the project to build
         /// - compiler: how the compiler is started
         /// - compiler_version: the compiler's version, which picks the core
-        ///   library for the wasm target
+        ///   library for a target with source libraries
         /// - runtime_assembly: the runtime copied beside a `dotnet` build,
         ///   where there is one
         /// - cache: where fetched libraries are kept
+        /// - linker: the `ghul-llvm` executable an llvm build links with,
+        ///   handed to the compiler as `GHUL_LLVM`, or null
         /// - say: where a problem of the build's own is reported
         build(
             project: LOADED_PROJECT,
@@ -99,6 +104,7 @@ namespace Ghul.Project is
             compiler_version: string,
             runtime_assembly: string?,
             cache: LIBRARY_CACHE,
+            linker: string?,
             say: (string) -> void
         ) -> int static is
             let compiled_in = libraries(project, compiler_version, cache, say)
@@ -123,7 +129,7 @@ namespace Ghul.Project is
 
                 File.write_all_text(response_file, RESPONSE_FILE.text(arguments))
 
-                let exit_code = _compile(compiler, response_file, project.directory, say)
+                let exit_code = _compile(compiler, response_file, project.directory, linker, say)
 
                 if exit_code == 0 /\ project.target == BuildTarget.DOTNET then
                     if let runtime: string = runtime_assembly /\ File.exists(runtime) then
@@ -140,13 +146,17 @@ namespace Ghul.Project is
         // Runs the compiler on the response file. Its standard output goes
         // to standard error, so this tool's own standard output is left to
         // the program a `run` starts.
-        _compile(compiler: COMPILER_PROCESS, response_file: string, directory: string, say: (string) -> void) -> int static is
+        _compile(compiler: COMPILER_PROCESS, response_file: string, directory: string, linker: string?, say: (string) -> void) -> int static is
             let start_info = System.Diagnostics.ProcessStartInfo()
 
             start_info.file_name = compiler.file_name
             start_info.use_shell_execute = false
             start_info.redirect_standard_output = true
             start_info.working_directory = directory
+
+            if let path: string = linker then
+                start_info.environment["GHUL_LLVM"] = path
+            fi
 
             for argument in compiler.leading_arguments do
                 start_info.argument_list.add(argument)
@@ -168,9 +178,9 @@ namespace Ghul.Project is
         si
     si
 
-    /// Runs a project's build: a `dotnet` program with the .NET host, and a
-    /// wasm program with Node, through the loader the compiler writes beside
-    /// the module.
+    /// Runs a project's build: a `dotnet` program with the .NET host, a wasm
+    /// program with Node, through the loader the compiler writes beside the
+    /// module, and an llvm program directly.
     class PROJECT_RUN is
         /// The program that runs `output` and the arguments it is given, or
         /// null with the reason the build cannot be run.
@@ -190,13 +200,16 @@ namespace Ghul.Project is
             fi
 
             let file_name =
-                if project.target == BuildTarget.WASM then
+                case project.target
+                when BuildTarget.WASM then
                     all.add(Path.change_extension(output, ".mjs") ?? output)
                     "node"
-                else
+                when BuildTarget.LLVM then
+                    output
+                when BuildTarget.DOTNET then
                     all.add(output)
                     "dotnet"
-                fi
+                esac
 
             for argument in arguments do
                 all.add(argument)
@@ -243,6 +256,8 @@ namespace Ghul.Project is
             catch e: System.ComponentModel.Win32Exception
                 if project.target == BuildTarget.WASM then
                     say("node was not found; running the wasm target needs Node.js")
+                elif project.target == BuildTarget.LLVM then
+                    say("{to_run.file_name} could not be run")
                 else
                     say("dotnet was not found")
                 fi

@@ -126,7 +126,6 @@ namespace Ghul.Project is
         si
 
         /// A target as the compiler and a manifest spell it.
-        target_name(target: BuildTarget) -> string static =>
-            if target == BuildTarget.WASM then "wasm" else "dotnet" fi
+        target_name(target: BuildTarget) -> string static => BUILD_TARGETS.name(target)
     si
 si

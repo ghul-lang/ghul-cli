@@ -69,10 +69,10 @@ namespace Ghul.Project is
                 return _failed(message)
             fi
 
-            if chosen.target != BuildTarget.WASM then
+            if !BUILD_TARGETS.has_source_libraries(chosen.target) then
                 for name in manifest.dependencies.keys do
                     if !DEPENDENCY_LIBRARIES.is_implicit(name) then
-                        return _failed("{name}: source library dependencies are supported only for the wasm target")
+                        return _failed("{name}: source library dependencies are not supported for the dotnet target")
                     fi
                 od
             fi

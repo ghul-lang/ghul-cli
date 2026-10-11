@@ -1,0 +1,152 @@
+namespace Ghul.Cli.Tests is
+    use IO.Directory
+    use IO.File
+    use IO.Path
+
+    use Ghul.Cli.LLVM_TOOLCHAIN
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // The ghul-llvm release a build for the llvm target links with: which
+    // release a compiler gets, and fetching one from a release directory
+    // into the cache.
+    @TestClass()
+    class LLVM_TOOLCHAIN_TESTS is
+        init() is si
+
+        TRIPLE: string static => "test-triple"
+
+        @Test()
+        the_release_follows_the_compiler_version() is
+            assert (LLVM_TOOLCHAIN.pinned_tag("65.5.0") ?? "none") =~ "v0.6.0"
+            assert (LLVM_TOOLCHAIN.pinned_tag("70.0.0") ?? "none") =~ "v0.6.0"
+        si
+
+        @Test()
+        a_compiler_older_than_every_pin_or_not_a_release_gets_none() is
+            assert !LLVM_TOOLCHAIN.pinned_tag("65.4.9")?
+            assert !LLVM_TOOLCHAIN.pinned_tag("0.0.0-local")?
+        si
+
+        @Test()
+        a_checksum_is_the_first_word_of_its_file() is
+            let content = System.Text.Encoding.utf8.get_bytes("hello")
+            let digest = System.Convert.to_hex_string(System.Security.Cryptography.SHA256.hash_data(content)).to_lower_invariant()
+
+            assert LLVM_TOOLCHAIN.matches_checksum(content, "{digest}  ghul-llvm.tar.gz\n")
+            assert !LLVM_TOOLCHAIN.matches_checksum(content, "0000  ghul-llvm.tar.gz\n")
+            assert !LLVM_TOOLCHAIN.matches_checksum(content, "")
+        si
+
+        @Test()
+        a_release_is_fetched_unpacked_and_kept() is
+            let scratch = _scratch()
+
+            try
+                _publish(Path.combine(scratch, "releases"), "v1.0.0", true)
+
+                let toolchain = LLVM_TOOLCHAIN(Path.combine(scratch, "cache"), System.Uri(Path.combine(scratch, "releases")).absolute_uri)
+                let fetched = toolchain.executable("v1.0.0", TRIPLE)
+
+                assert !fetched.problem? else fetched.problem ?? ""
+                assert (fetched.path ?? "") =~ Path.join([scratch, "cache", "v1.0.0", TRIPLE, "bin", "ghul-llvm"])
+                assert File.read_all_text(fetched.path!) =~ "linker"
+
+                if !System.OperatingSystem.is_windows() then
+                    assert (cast int(File.get_unix_file_mode(fetched.path!)) & cast int(IO.UnixFileMode.USER_EXECUTE)) != 0
+                fi
+
+                Directory.delete(Path.combine(scratch, "releases"), true)
+
+                assert (toolchain.executable("v1.0.0", TRIPLE).path ?? "") =~ fetched.path!
+            finally
+                Directory.delete(scratch, true)
+            yrt
+        si
+
+        @Test()
+        a_release_that_does_not_match_its_checksum_is_refused() is
+            let scratch = _scratch()
+
+            try
+                _publish(Path.combine(scratch, "releases"), "v1.0.0", false)
+
+                let toolchain = LLVM_TOOLCHAIN(Path.combine(scratch, "cache"), System.Uri(Path.combine(scratch, "releases")).absolute_uri)
+                let fetched = toolchain.executable("v1.0.0", TRIPLE)
+
+                assert !fetched.path?
+                assert (fetched.problem ?? "").contains("does not match its published sha256") else fetched.problem ?? "no problem"
+                assert !Directory.exists(Path.combine(scratch, "cache", "v1.0.0", TRIPLE))
+            finally
+                Directory.delete(scratch, true)
+            yrt
+        si
+
+        @Test()
+        a_missing_release_is_a_problem() is
+            let scratch = _scratch()
+
+            try
+                Directory.create_directory(Path.combine(scratch, "releases"))
+
+                let toolchain = LLVM_TOOLCHAIN(Path.combine(scratch, "cache"), System.Uri(Path.combine(scratch, "releases")).absolute_uri)
+                let fetched = toolchain.executable("v9.9.9", TRIPLE)
+
+                assert !fetched.path?
+                assert (fetched.problem ?? "").starts_with("cannot fetch ghul-llvm") else fetched.problem ?? "no problem"
+            finally
+                Directory.delete(scratch, true)
+            yrt
+        si
+
+        // Writes a release laid out as ghul-llvm publishes one: a gzipped
+        // tar holding one directory with `bin/ghul-llvm` in it, and its
+        // checksum beside it, right or wrong.
+        _publish(releases: string, tag: string, checksum_matches: bool) is
+            let staging = Path.combine(Path.get_directory_name(releases)!, "staging")
+            let top = Path.combine(staging, "ghul-llvm-{TRIPLE}")
+
+            Directory.create_directory(Path.combine(top, "bin"))
+            File.write_all_text(Path.combine(top, "bin", "ghul-llvm"), "linker")
+
+            let tar = IO.MemoryStream()
+
+            System.Formats.Tar.TarFile.create_from_directory(top, tar, true)
+
+            let compressed = IO.MemoryStream()
+            let gzip = System.IO.Compression.GZipStream(compressed, System.IO.Compression.CompressionMode.COMPRESS)
+
+            let bytes = tar.to_array()
+
+            gzip.write(bytes, 0, bytes.count)
+            gzip.dispose()
+
+            let archive = compressed.to_array()
+            let directory = Path.combine(releases, tag)
+            let name = LLVM_TOOLCHAIN.archive_name(TRIPLE)
+
+            Directory.create_directory(directory)
+            File.write_all_bytes(Path.combine(directory, name), archive)
+
+            let digest =
+                if checksum_matches then
+                    System.Convert.to_hex_string(System.Security.Cryptography.SHA256.hash_data(archive)).to_lower_invariant()
+                else
+                    string('0', 64)
+                fi
+
+            File.write_all_text(Path.combine(directory, "{name}.sha256"), "{digest}  {name}\n")
+
+            Directory.delete(staging, true)
+        si
+
+        _scratch() -> string is
+            let path = Path.combine(Path.get_temp_path(), "ghul-llvm-toolchain-{System.Guid.new_guid().to_string("N")}")
+
+            Directory.create_directory(path)
+
+            return path
+        si
+    si
+si

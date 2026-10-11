@@ -84,6 +84,8 @@ namespace Ghul.Cli.Tests is
             _same(IO.Path.combine(root, "dotnet", "app.exe"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.DOTNET)))
             _same(IO.Path.combine(root, "dotnet", "app.dll"), PROJECT_BUILD.output_path(_project(ManifestKind.LIBRARY, BuildTarget.DOTNET)))
             _same(IO.Path.combine(root, "wasm", "app.wasm"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.WASM)))
+            _same(IO.Path.combine(root, "llvm", "app"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.LLVM)))
+            _same(IO.Path.combine(root, "llvm", "app.ll"), PROJECT_BUILD.output_path(_project(ManifestKind.LIBRARY, BuildTarget.LLVM)))
         si
 
         @Test()
@@ -102,6 +104,15 @@ namespace Ghul.Cli.Tests is
             assert !command.problem?
             _same("node", command.file_name)
             _same("/p/out/wasm/app.mjs a", string.join(" ", command.arguments))
+        si
+
+        @Test()
+        an_llvm_program_runs_directly() is
+            let command = PROJECT_RUN.command(_project(ManifestKind.PROGRAM, BuildTarget.LLVM), "/p/out/llvm/app", LIST[string](["a", "b"]))
+
+            assert !command.problem?
+            _same("/p/out/llvm/app", command.file_name)
+            _same("a b", string.join(" ", command.arguments))
         si
 
         @Test()
@@ -195,7 +206,9 @@ namespace Ghul.Cli.Tests is
             _same("v25.5.0", RUNTIME_LIBRARY.pinned_tag("65.4.2") ?? "none")
             _same("v25.5.0", RUNTIME_LIBRARY.pinned_tag("65.4.4") ?? "none")
             _same("v25.6.0", RUNTIME_LIBRARY.pinned_tag("65.4.5") ?? "none")
-            _same("v25.6.0", RUNTIME_LIBRARY.pinned_tag("70.0.0") ?? "none")
+            _same("v25.6.0", RUNTIME_LIBRARY.pinned_tag("65.4.9") ?? "none")
+            _same("v25.7.0", RUNTIME_LIBRARY.pinned_tag("65.5.0") ?? "none")
+            _same("v25.7.0", RUNTIME_LIBRARY.pinned_tag("70.0.0") ?? "none")
         si
 
         @Test()

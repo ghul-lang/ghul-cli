@@ -111,7 +111,7 @@ JSON
 if err="$(cd "$dependent" && dotnet "$cli" build 2>&1)"; then
     fail "expected a dotnet build with a source library dependency to fail"
 fi
-[[ "$err" == *"ghul: scratch: source library dependencies are supported only for the wasm target"* ]] || fail "unexpected message for dependencies: $err"
+[[ "$err" == *"ghul: scratch: source library dependencies are not supported for the dotnet target"* ]] || fail "unexpected message for dependencies: $err"
 
 echo "project: a target the manifest does not list is refused..." >&2
 if err="$(cd "$program" && dotnet "$cli" build --target wasm 2>&1)"; then
@@ -216,6 +216,14 @@ if err="$(cd "$old_wasm" && dotnet "$cli" build --target wasm 2>&1)"; then
     fail "expected a wasm build naming an old compiler to fail"
 fi
 [[ "$err" == *"names ghul.compiler 64.11.0, but the wasm target needs"* ]] || fail "unexpected message for an old compiler: $err"
+
+echo "project: an llvm build fetches the ghul-llvm release pinned for its compiler..." >&2
+(cd "$scratch" && dotnet "$cli" new native --target llvm 2>/dev/null) || fail "ghul new --target llvm failed"
+grep -q '"targets": \["llvm"\]' "$scratch/native/ghul-project.json" || fail "ghul new --target llvm wrote no llvm target"
+if err="$(cd "$scratch/native" && GHUL_LLVM_RELEASES="file://$scratch/no-releases" dotnet "$cli" build 2>&1)"; then
+    fail "expected an llvm build with no ghul-llvm release to fail"
+fi
+[[ "$err" == *"cannot fetch ghul-llvm: file://$scratch/no-releases/"* ]] || fail "unexpected message for a missing ghul-llvm release: $err"
 
 echo "project: the programs under tests/projects build and print what they should..." >&2
 (cd "$repo_root" && dotnet tool restore >/dev/null && dotnet ghul-test --use-ghul-cli --ghul "dotnet $cli" tests/projects) >&2 \

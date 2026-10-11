@@ -424,10 +424,8 @@ namespace Ghul.Project is
             for entry in value.enumerate_array() do
                 if entry.value_kind != JsonValueKind.STRING then
                     _report("targets", "an entry is not a string")
-                elif entry.get_string() =~ "dotnet" then
-                    targets.add(BuildTarget.DOTNET)
-                elif entry.get_string() =~ "wasm" then
-                    targets.add(BuildTarget.WASM)
+                elif let target = BUILD_TARGETS.named(entry.get_string() ?? "") then
+                    targets.add(target)
                 else
                     _report("targets", "unknown target '{entry.get_string()}'")
                 fi

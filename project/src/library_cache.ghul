@@ -21,11 +21,17 @@ namespace Ghul.Project is
     class LIBRARY_CACHE(root: string) is
         /// The cache under `XDG_CACHE_HOME` where that is set, and under
         /// `~/.cache` where it is not.
-        for_this_user() -> LIBRARY_CACHE static is
+        for_this_user() -> LIBRARY_CACHE static =>
+            LIBRARY_CACHE(Path.join([cache_home(), "libraries"]))
+
+        /// The directory this tool keeps what it fetches in:
+        /// `ghul-cli` under `XDG_CACHE_HOME` where that is set, and under
+        /// `~/.cache` where it is not.
+        cache_home() -> string static is
             let xdg = System.Environment.get_environment_variable("XDG_CACHE_HOME")
 
             if xdg? /\ xdg.length > 0 then
-                return LIBRARY_CACHE(Path.join([xdg, "ghul-cli", "libraries"]))
+                return Path.join([xdg, "ghul-cli"])
             fi
 
             let home = System.Environment.get_environment_variable("HOME")
@@ -37,7 +43,7 @@ namespace Ghul.Project is
                     System.Environment.get_folder_path(System.Environment_SpecialFolder.USER_PROFILE)
                 fi
 
-            return LIBRARY_CACHE(Path.join([base, ".cache", "ghul-cli", "libraries"]))
+            return Path.join([base, ".cache", "ghul-cli"])
         si
 
         /// The files of the commit `tag` names in the repository at `url`,
