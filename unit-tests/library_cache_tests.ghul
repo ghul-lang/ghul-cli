@@ -99,6 +99,70 @@ namespace Ghul.Cli.Tests is
             yrt
         si
 
+        // A record found empty is one another process is still writing: it
+        // must read as not there, not as the repository directory.
+        @Test()
+        an_empty_tag_record_is_not_taken_as_a_commit() is
+            let scratch = _scratch()
+
+            try
+                let repository = _repository(scratch)
+                let url = _url(repository)
+                let cache = LIBRARY_CACHE(Path.combine(scratch, "cache"))
+
+                _found(cache.fetch_tag(url, "v1"))
+
+                let record = Path.join([scratch, "cache", LIBRARY_CACHE.repository_directory_name(url), "tags", "v1"])
+
+                File.write_all_text(record, "")
+
+                let found = _found(cache.fetch_tag(url, "v1"))
+
+                assert found.commit =~ _commit_of(repository, "v1")
+                assert File.exists(Path.combine(found.directory, "lib.ghul"))
+            finally
+                _delete(scratch)
+            yrt
+        si
+
+        // Fetches of one tag racing each other, as parallel builds do: every
+        // one of them finds the library whole.
+        @Test()
+        concurrent_fetches_of_one_tag_all_find_the_whole_library() is
+            let scratch = _scratch()
+
+            try
+                let repository = _repository(scratch)
+                let url = _url(repository)
+                let commit = _commit_of(repository, "v1")
+                let cache = LIBRARY_CACHE(Path.combine(scratch, "cache"))
+                let problems = System.Collections.Concurrent.ConcurrentBag[string]()
+                let tasks = LIST[Tasks.TASK]()
+
+                for worker in 0..8 do
+                    tasks.add(Tasks.TASK.run(() -> void is
+                        for attempt in 0..20 do
+                            let outcome = cache.fetch_tag(url, "v1")
+
+                            if let found: CacheOutcome.FOUND = outcome then
+                                if found.commit !~ commit \/ !File.exists(Path.combine(found.directory, "lib.ghul")) then
+                                    problems.add("found {found.directory} at '{found.commit}'")
+                                fi
+                            else
+                                problems.add(cast CacheOutcome.PROBLEM(outcome).message)
+                            fi
+                        od
+                    si))
+                od
+
+                Tasks.TASK.wait_all(tasks.to_array())
+
+                assert problems.count == 0 else string.join("; ", problems)
+            finally
+                _delete(scratch)
+            yrt
+        si
+
         @Test()
         an_annotated_tag_stands_for_its_commit() is
             let scratch = _scratch()
