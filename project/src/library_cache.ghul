@@ -55,13 +55,8 @@ namespace Ghul.Project is
             let repository = Path.join([root, repository_directory_name(url)])
             let tag_record = Path.join([repository, "tags", tag])
 
-            if File.exists(tag_record) then
-                let commit = File.read_all_text(tag_record).trim()
-                let directory = Path.join([repository, commit])
-
-                if Directory.exists(directory) then
-                    return CacheOutcome.FOUND(directory, commit)
-                fi
+            if let found: CacheOutcome.FOUND = _recorded(repository, tag_record) then
+                return found
             fi
 
             let lock = FILE_LOCK.acquire(Path.join([repository, ".lock"]), "ghul: waiting for another ghul process to fetch {url}...")
@@ -82,13 +77,47 @@ namespace Ghul.Project is
                     fi
                 fi
 
-                Directory.create_directory(Path.get_directory_name(tag_record)!)
-                File.write_all_text(tag_record, commit)
+                _record(tag_record, commit)
 
                 return CacheOutcome.FOUND(directory, commit)
             finally
                 lock.close()
             yrt
+        si
+
+        // The commit a tag was recorded as resolving to, where it was and its
+        // files are here. A record another process is writing reads as not
+        // there yet, never as an empty commit.
+        _recorded(repository: string, tag_record: string) -> CacheOutcome? static is
+            if !File.exists(tag_record) then
+                return null
+            fi
+
+            let commit = File.read_all_text(tag_record).trim()
+
+            if commit.length == 0 then
+                return null
+            fi
+
+            let directory = Path.join([repository, commit])
+
+            if !Directory.exists(directory) then
+                return null
+            fi
+
+            return CacheOutcome.FOUND(directory, commit)
+        si
+
+        // Records the commit a tag resolved to, writing it beside the record
+        // and renaming it into place, so a reader sees the whole record or
+        // none.
+        _record(tag_record: string, commit: string) static is
+            Directory.create_directory(Path.get_directory_name(tag_record)!)
+
+            let scratch = "{tag_record}.tmp-{System.Guid.new_guid().to_string("N").substring(0, 8)}"
+
+            File.write_all_text(scratch, commit)
+            File.move(scratch, tag_record, true)
         si
 
         /// The directory a repository's commits are kept under: its URL with
