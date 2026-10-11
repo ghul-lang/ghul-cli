@@ -81,11 +81,19 @@ namespace Ghul.Cli.Tests is
         output_goes_under_out_and_the_target() is
             let root = IO.Path.combine("/", "project", "out")
 
-            _same(IO.Path.combine(root, "dotnet", "app.exe"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.DOTNET)))
-            _same(IO.Path.combine(root, "dotnet", "app.dll"), PROJECT_BUILD.output_path(_project(ManifestKind.LIBRARY, BuildTarget.DOTNET)))
-            _same(IO.Path.combine(root, "wasm", "app.wasm"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.WASM)))
-            _same(IO.Path.combine(root, "llvm", "app"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.LLVM)))
-            _same(IO.Path.combine(root, "llvm", "app.ll"), PROJECT_BUILD.output_path(_project(ManifestKind.LIBRARY, BuildTarget.LLVM)))
+            _same(IO.Path.combine(root, "dotnet", "app.exe"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.DOTNET), false))
+            _same(IO.Path.combine(root, "dotnet", "app.dll"), PROJECT_BUILD.output_path(_project(ManifestKind.LIBRARY, BuildTarget.DOTNET), false))
+            _same(IO.Path.combine(root, "wasm", "app.wasm"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.WASM), false))
+            _same(IO.Path.combine(root, "llvm", "app"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.LLVM), false))
+            _same(IO.Path.combine(root, "llvm", "app.ll"), PROJECT_BUILD.output_path(_project(ManifestKind.LIBRARY, BuildTarget.LLVM), false))
+        si
+
+        @Test()
+        a_debug_build_goes_beside_the_release_build() is
+            let root = IO.Path.combine("/", "project", "out")
+
+            _same(IO.Path.combine(root, "llvm-debug", "app"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.LLVM), true))
+            _same(IO.Path.combine(root, "dotnet-debug", "app.exe"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.DOTNET), true))
         si
 
         @Test()
@@ -239,6 +247,16 @@ namespace Ghul.Cli.Tests is
             let parsed = PROJECT_COMMAND_LINE.parse(LIST[string](["--", "a"]), false)
 
             _same("unexpected argument --", parsed.problem ?? "")
+        si
+
+        @Test()
+        the_command_line_takes_debug() is
+            let parsed = PROJECT_COMMAND_LINE.parse(LIST[string](["--debug", "--target", "llvm"]), false)
+
+            assert !parsed.problem?
+            assert parsed.debug
+            assert !PROJECT_COMMAND_LINE.parse(LIST[string](["--target", "llvm"]), false).debug
+            assert PROJECT_COMMAND_LINE.names_project(LIST[string](["--debug"]))
         si
 
         @Test()

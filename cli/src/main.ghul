@@ -405,8 +405,8 @@ namespace Ghul.Cli is
         Std.error.write_line("       ghul run [--no-cache] <script> [args...]")
         Std.error.write_line("       ghul compile [--no-cache] <script.ghul>")
         Std.error.write_line("       ghul new <name> [--target <target>[,<target>...]]")
-        Std.error.write_line("       ghul build [--target <name>]")
-        Std.error.write_line("       ghul run [--target <name>] [-- args...]")
+        Std.error.write_line("       ghul build [--target <name>] [--debug]")
+        Std.error.write_line("       ghul run [--target <name>] [--debug] [-- args...]")
         Std.error.write_line("       ghul project response-file --output <path> [--source-globs <path>] [--target <name>]")
         Std.error.write_line("       ghul project compiler")
         Std.error.write_line("       ghul install-compiler [version]")
@@ -982,7 +982,7 @@ namespace Ghul.Cli is
 
     // `ghul build` and `ghul run` in a directory with a manifest: the
     // compiler the manifest names is installed if need be, the project is
-    // built into out/<target>/, and a run then starts what was built.
+    // built into out/<target>/, or out/<target>-debug/ with --debug, and a run then starts what was built.
     cmd_project(rest: Collections.List[string], wants_run: bool) -> int is
         let say = (message: string) -> void => Std.error.write_line("ghul: {message}")
         let command_line = Ghul.Project.PROJECT_COMMAND_LINE.parse(rest, wants_run)
@@ -1011,7 +1011,7 @@ namespace Ghul.Cli is
 
         let store = Host.COMPILER_STORE.for_this_user()
 
-        if let (compiler, compiler_version, runtime_assembly) = build_compiler(store, project, overrides, say) then
+        if let (compiler, compiler_version, runtime_assembly) = build_compiler(store, project, overrides, command_line.debug, say) then
             let linker: string? mut = null
 
             // A program for the llvm target is linked by the compiler, with
@@ -1035,6 +1035,7 @@ namespace Ghul.Cli is
                     runtime_assembly,
                     Ghul.Project.LIBRARY_CACHE.for_this_user(),
                     linker,
+                    command_line.debug,
                     say)
 
             if exit_code != 0 \/ !wants_run then
@@ -1044,7 +1045,7 @@ namespace Ghul.Cli is
             return
                 Ghul.Project.PROJECT_RUN.run(
                     project,
-                    Ghul.Project.PROJECT_BUILD.output_path(project),
+                    Ghul.Project.PROJECT_BUILD.output_path(project, command_line.debug),
                     command_line.program_arguments,
                     say)
         fi
@@ -1063,6 +1064,7 @@ namespace Ghul.Cli is
         store: Host.COMPILER_STORE,
         project: Ghul.Project.LOADED_PROJECT,
         overrides: Ghul.Project.BUILD_OVERRIDES,
+        debug: bool,
         say: (string) -> void
     ) -> (compiler: Ghul.Project.COMPILER_PROCESS, version: string, runtime_assembly: string?)? is
         let request = Ghul.Project.COMPILER_REQUEST.from_environment(overrides.compiler_command, project.manifest.compiler_version)
@@ -1089,7 +1091,7 @@ namespace Ghul.Cli is
             wanted = cast Ghul.Project.CompilerRequest.VERSION(request).version
         fi
 
-        if let version: string = project_compiler(store, project, wanted, say) then
+        if let version: string = project_compiler(store, project, wanted, debug, say) then
             let command = store.command(version)
 
             let compiler =
@@ -1187,9 +1189,15 @@ namespace Ghul.Cli is
     // The release a build of `project` uses, given the one asked for, or
     // null for the newest installed: checked against the target's minimum
     // compiler, and installed if need be.
-    project_compiler(store: Host.COMPILER_STORE, project: Ghul.Project.LOADED_PROJECT, named: string?, say: (string) -> void) -> string? is
+    project_compiler(
+        store: Host.COMPILER_STORE,
+        project: Ghul.Project.LOADED_PROJECT,
+        named: string?,
+        debug: bool,
+        say: (string) -> void
+    ) -> string? is
         let choice =
-            Ghul.Project.COMPILER_CHOICE.choose(project.target, named, store.highest_version())
+            Ghul.Project.COMPILER_CHOICE.choose(project.target, debug, named, store.highest_version())
 
         if let problem: Ghul.Project.CompilerChoice.PROBLEM = choice then
             say(problem.message)
@@ -1198,8 +1206,8 @@ namespace Ghul.Cli is
 
         if let newest: Ghul.Project.CompilerChoice.NEWEST = choice then
             say(
-                "ghul.compiler {newest.installed} is too old for the {Ghul.Project.BUILD_TARGETS.name(project.target)} target, "
-                "which needs {Ghul.Project.BUILD_TARGETS.minimum_compiler(project.target)} or newer; installing the newest")
+                "ghul.compiler {newest.installed} is too old for {if debug then "a debug build for " else "" fi}the {Ghul.Project.BUILD_TARGETS.name(project.target)} target, "
+                "which needs {Ghul.Project.BUILD_TARGETS.minimum_compiler(project.target, debug)} or newer; installing the newest")
 
             return update_compiler_to_latest(store)
         fi

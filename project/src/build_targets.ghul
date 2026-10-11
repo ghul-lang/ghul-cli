@@ -37,7 +37,16 @@ namespace Ghul.Project is
             target != BuildTarget.DOTNET
 
         /// The earliest compiler that builds for `target`, or null where any
-        /// compiler does.
+        /// compiler does. A debug build for llvm needs one that emits debug
+        /// information, which earlier compilers build without.
+        ///
+        /// - target: the target being built
+        /// - debug: whether the build carries debug information
+        minimum_compiler(target: BuildTarget, debug: bool) -> string? static =>
+            if debug /\ target == BuildTarget.LLVM then "65.14.0" else minimum_compiler(target) fi
+
+        /// The earliest compiler that builds for `target` at all, or null
+        /// where any compiler does.
         ///
         /// - target: the target being built
         minimum_compiler(target: BuildTarget) -> string? static =>

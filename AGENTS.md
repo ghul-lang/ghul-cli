@@ -214,7 +214,7 @@ looks for them.
   `SOURCE_SET` expands its source globs,
   `COMPILER_ARGUMENTS` is the one place the compiler's argument list is
   built (editors reuse it), and `PROJECT_BUILD` runs the compiler through
-  a response file (`RESPONSE_FILE`) into `out/<target>/`; `PROJECT_RUN`
+  a response file (`RESPONSE_FILE`) into `out/<target>/` (`out/<target>-debug/` with `--debug`); `PROJECT_RUN`
   runs the result with `dotnet`, or with `node` through the loader beside
   a wasm module. `CORE_LIBRARY` supplies ghul-core to a wasm build, at a
   tag pinned per compiler version unless the manifest declares it, through

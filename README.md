@@ -109,8 +109,8 @@ ghul [--no-cache] [--] <script> [args...]   # run a script (see below)
 ghul run [--no-cache] <script> [args...]    # run any file as a script
 ghul compile [--no-cache] <script.ghul>     # compile, and print the path to the result
 ghul new <name> [--target <names>]           # create a project to build and run
-ghul build [--target <name>] [overrides]    # build the project in this directory
-ghul run [--target <name>] [overrides] [-- args...]  # build the project, then run it
+ghul build [--target <name>] [--debug] [overrides]    # build the project in this directory
+ghul run [--target <name>] [--debug] [overrides] [-- args...]  # build the project, then run it
 ghul project response-file|compiler         # what editors read (see below)
 ghul install-compiler [version]             # install or update ghul.compiler
 ghul update [--version <tag>] [--check]     # update ghul itself
@@ -188,6 +188,9 @@ with the compiler's status. `compiler` in the manifest names the
 `ghul.compiler` version to build with, which is installed if need be, or
 `latest` for the newest published release; without it, the newest installed is
 used.
+
+`--debug` builds with debug information into `out/<target>-debug/`, beside
+the ordinary build rather than over it, and `ghul run --debug` runs that build.
 
 The `dotnet` target writes `<name>.exe` (or `<name>.dll` for a library), with
 `ghul-runtime.dll` beside it, and runs with `dotnet`. The `wasm` target writes
@@ -268,6 +271,17 @@ the linker and runtime it links with, into the same cache; setting `GHUL_LLVM`
 to a `ghul-llvm` executable uses that one instead. The compiler's code
 generation for this target is in its early stages, and a build reports what it
 cannot yet compile.
+
+A debug build for llvm is unoptimised and carries DWARF line tables and
+variables, and needs ghul.compiler 65.14.0 or newer. Where the manifest names no compiler and
+the newest installed is older, the newest release is installed for it. `objdump` shows the source beside the machine code,
+and `gdb` steps through it:
+
+```sh
+ghul build --debug
+objdump -d -S out/llvm-debug/<name>
+gdb out/llvm-debug/<name>
+```
 
 ## tools for editors
 

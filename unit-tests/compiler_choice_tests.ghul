@@ -21,17 +21,17 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         dotnet_build_uses_the_named_compiler_however_old() is
-            assert _requested(COMPILER_CHOICE.choose(BuildTarget.DOTNET, "64.11.0", "64.11.0")) =~ "64.11.0"
+            assert _requested(COMPILER_CHOICE.choose(BuildTarget.DOTNET, false, "64.11.0", "64.11.0")) =~ "64.11.0"
         si
 
         @Test()
         dotnet_build_uses_the_newest_installed_however_old() is
-            assert !_requested(COMPILER_CHOICE.choose(BuildTarget.DOTNET, null, "64.11.0"))?
+            assert !_requested(COMPILER_CHOICE.choose(BuildTarget.DOTNET, false, null, "64.11.0"))?
         si
 
         @Test()
         llvm_build_rejects_a_named_compiler_below_its_minimum() is
-            let choice = COMPILER_CHOICE.choose(BuildTarget.LLVM, "65.4.0", "70.0.0")
+            let choice = COMPILER_CHOICE.choose(BuildTarget.LLVM, false, "65.4.0", "70.0.0")
 
             assert isa CompilerChoice.PROBLEM(choice) else "expected PROBLEM"
 
@@ -42,12 +42,12 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         llvm_build_uses_a_named_compiler_at_its_minimum() is
-            assert _requested(COMPILER_CHOICE.choose(BuildTarget.LLVM, "65.5.0", null)) =~ "65.5.0"
+            assert _requested(COMPILER_CHOICE.choose(BuildTarget.LLVM, false, "65.5.0", null)) =~ "65.5.0"
         si
 
         @Test()
         wasm_build_rejects_a_named_compiler_below_the_minimum() is
-            let choice = COMPILER_CHOICE.choose(BuildTarget.WASM, "64.11.0", "70.0.0")
+            let choice = COMPILER_CHOICE.choose(BuildTarget.WASM, false, "64.11.0", "70.0.0")
 
             assert isa CompilerChoice.PROBLEM(choice) else "expected PROBLEM"
 
@@ -60,12 +60,12 @@ namespace Ghul.Cli.Tests is
         wasm_build_uses_a_named_compiler_at_the_minimum() is
             let minimum = CORE_LIBRARY.MINIMUM_COMPILER
 
-            assert _requested(COMPILER_CHOICE.choose(BuildTarget.WASM, minimum, null)) =~ minimum
+            assert _requested(COMPILER_CHOICE.choose(BuildTarget.WASM, false, minimum, null)) =~ minimum
         si
 
         @Test()
         wasm_build_installs_the_newest_when_the_installed_is_below_the_minimum() is
-            let choice = COMPILER_CHOICE.choose(BuildTarget.WASM, null, "64.11.0")
+            let choice = COMPILER_CHOICE.choose(BuildTarget.WASM, false, null, "64.11.0")
 
             assert isa CompilerChoice.NEWEST(choice) else "expected NEWEST"
             assert cast CompilerChoice.NEWEST(choice).installed =~ "64.11.0"
@@ -73,12 +73,34 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         wasm_build_uses_the_newest_installed_at_or_above_the_minimum() is
-            assert !_requested(COMPILER_CHOICE.choose(BuildTarget.WASM, null, CORE_LIBRARY.MINIMUM_COMPILER))?
+            assert !_requested(COMPILER_CHOICE.choose(BuildTarget.WASM, false, null, CORE_LIBRARY.MINIMUM_COMPILER))?
         si
 
         @Test()
         wasm_build_with_nothing_installed_asks_for_the_newest() is
-            assert !_requested(COMPILER_CHOICE.choose(BuildTarget.WASM, null, null))?
+            assert !_requested(COMPILER_CHOICE.choose(BuildTarget.WASM, false, null, null))?
+        si
+
+        @Test()
+        llvm_debug_build_rejects_a_named_compiler_without_debug_information() is
+            let choice = COMPILER_CHOICE.choose(BuildTarget.LLVM, true, "65.13.0", null)
+
+            assert isa CompilerChoice.PROBLEM(choice) else "expected PROBLEM"
+
+            let message = cast CompilerChoice.PROBLEM(choice).message
+
+            assert message.contains("a debug build for the llvm target") /\ message.contains("65.14.0") else message
+        si
+
+        @Test()
+        llvm_debug_build_installs_the_newest_when_the_installed_has_no_debug_information() is
+            assert isa CompilerChoice.NEWEST(COMPILER_CHOICE.choose(BuildTarget.LLVM, true, null, "65.13.0")) else "expected NEWEST"
+            assert !_requested(COMPILER_CHOICE.choose(BuildTarget.LLVM, true, null, "65.14.0"))?
+        si
+
+        @Test()
+        a_debug_build_for_dotnet_takes_any_compiler() is
+            assert _requested(COMPILER_CHOICE.choose(BuildTarget.DOTNET, true, "64.11.0", null)) =~ "64.11.0"
         si
 
         @Test()
