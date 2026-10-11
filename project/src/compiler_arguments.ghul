@@ -15,27 +15,33 @@ namespace Ghul.Project is
     /// the project are given the same options.
     class COMPILER_ARGUMENTS is
         /// The arguments that build `manifest` for `target` into `output`:
-        /// the options, `--debug` for a debug build, then `-o` and the
-        /// output, then `sources`.
+        /// the options, `--debug` for a debug build and `--optimise` for an
+        /// llvm build at a chosen level, then `-o` and the output, then
+        /// `sources`.
         ///
         /// - manifest: the project being built
         /// - target: what the build produces
         /// - libraries: source libraries compiled into the build
-        /// - debug: whether the build carries debug information
+        /// - mode: how the build is made
         /// - output: the file the compiler writes
         /// - sources: the project's own source files
         for_build(
             manifest: MANIFEST,
             target: BuildTarget,
             libraries: Collections.List[SOURCE_LIBRARY],
-            debug: bool,
+            mode: BUILD_MODE,
             output: string,
             sources: Collections.List[string]
         ) -> Collections.List[string] static is
             let result = LIST[string](options(manifest, target, libraries))
 
-            if debug then
+            if mode.debug then
                 result.add("--debug")
+            fi
+
+            if let level = mode.optimise /\ target == BuildTarget.LLVM then
+                result.add("--optimise")
+                result.add("{level}")
             fi
 
             result.add("-o")

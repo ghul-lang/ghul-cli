@@ -20,11 +20,11 @@ namespace Ghul.Project is
         /// The compiler a build of `target` uses.
         ///
         /// - target: the target being built
-        /// - debug: whether the build carries debug information
+        /// - mode: how the build is made
         /// - named: the version asked for, by the environment or the manifest, or null
         /// - installed: the newest installed version, or null when none is
-        choose(target: BuildTarget, debug: bool, named: string?, installed: string?) -> CompilerChoice static is
-            let minimum = BUILD_TARGETS.minimum_compiler(target, debug)
+        choose(target: BuildTarget, mode: BUILD_MODE, named: string?, installed: string?) -> CompilerChoice static is
+            let minimum = BUILD_TARGETS.minimum_compiler(target, mode)
 
             if !minimum? then
                 return CompilerChoice.REQUESTED(named)
@@ -33,7 +33,7 @@ namespace Ghul.Project is
             if let version: string = named then
                 if is_older_than(version, minimum) then
                     return CompilerChoice.PROBLEM(
-                        "ghul.compiler {version} is asked for, but {if debug then "a debug build for " else "" fi}the {BUILD_TARGETS.name(target)} target needs {minimum} or newer")
+                        "ghul.compiler {version} is asked for, but {BUILD_TARGETS.build_kind(target, mode)}the {BUILD_TARGETS.name(target)} target needs {minimum} or newer")
                 fi
 
                 return CompilerChoice.REQUESTED(version)

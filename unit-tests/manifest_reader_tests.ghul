@@ -44,6 +44,8 @@ namespace Ghul.Cli.Tests is
     UNKNOWN_KEY: string static => "{{\"name\": \"app\", \"nmae\": \"typo\"}}"
     UNKNOWN_OPTION: string static => "{{\"name\": \"app\", \"options\": {{\"under-score-access\": \"private\"}}}}"
     UNKNOWN_DEPENDENCY_KEY: string static => "{{\"name\": \"app\", \"dependencies\": {{\"lib\": {{\"git\": \"u\", \"tag\": \"v1\", \"rev\": \"abc\"}}}}}}"
+    OPTIMISE: string static => "{{\"name\": \"app\", \"options\": {{\"optimise\": 3}}}}"
+    BAD_OPTIMISE: string static => "{{\"name\": \"app\", \"options\": {{\"optimise\": 4}}}}"
     LLVM_TARGET: string static => "{{\"name\": \"app\", \"targets\": [\"llvm\"]}}"
     UNKNOWN_TARGET: string static => "{{\"name\": \"app\", \"targets\": [\"dotnet\", \"js\"]}}"
     UNKNOWN_KIND: string static => "{{\"name\": \"app\", \"kind\": \"script\"}}"
@@ -129,6 +131,20 @@ namespace Ghul.Cli.Tests is
             assert options.define[0] =~ "DEBUG";
             assert options.suppress[0] =~ "redundant-semicolon";
             assert options.warn_as_error[0] =~ "cast-may-throw";
+        si
+
+        @Test()
+        an_optimisation_level__is_read_as_a_number() is
+            assert (_read(OPTIMISE)!).options.optimise =~ 3
+            assert !(_read(DEFAULT)!).options.optimise?
+        si
+
+        @Test()
+        an_optimisation_level_outside_0_to_3__is_a_problem() is
+            let problems = _problems(BAD_OPTIMISE)
+
+            assert problems.count == 1
+            assert problems[0].contains("optimise") else problems[0]
         si
 
         @Test()

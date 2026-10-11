@@ -28,7 +28,7 @@ namespace Ghul.Cli.Tests is
                 LIST[BuildTarget]([BuildTarget.WASM]),
                 LIST[string](["src/**/*.ghul"]),
                 null,
-                MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string]()),
+                MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](), null),
                 dependencies)
 
         @Test()

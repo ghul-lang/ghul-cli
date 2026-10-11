@@ -11,15 +11,15 @@ namespace Ghul.Project is
     /// Builds a loaded project into `out/<target>/` beside its manifest by
     /// running the compiler once.
     class PROJECT_BUILD is
-        /// Where the build of `project` is written: `out/<target>/`, or
-        /// `out/<target>-debug/` for a debug build, so the two do not
-        /// overwrite each other.
+        /// Where the build of `project` is written: `out/<target>/`, with
+        /// `-debug` for a debug build and `-O<n>` for a level other than the
+        /// default, so builds of different modes do not overwrite each other.
         ///
         /// - project: the project being built
-        /// - debug: whether the build carries debug information
-        output_path(project: LOADED_PROJECT, debug: bool) -> string static is
+        /// - mode: how the build is made
+        output_path(project: LOADED_PROJECT, mode: BUILD_MODE) -> string static is
             let target = COMPILER_ARGUMENTS.target_name(project.target)
-            let directory = Path.join([project.directory, "out", if debug then "{target}-debug" else target fi])
+            let directory = Path.join([project.directory, "out", "{target}{mode.directory_suffix(project.target)}"])
             let name = project.manifest.name
 
             let is_library = project.manifest.kind == ManifestKind.LIBRARY
@@ -103,7 +103,8 @@ namespace Ghul.Project is
         /// - cache: where fetched libraries are kept
         /// - linker: the `ghul-llvm` executable an llvm build links with,
         ///   handed to the compiler as `GHUL_LLVM`, or null
-        /// - debug: whether to build with debug information, unoptimised
+        /// - mode: how the build is made: debug information, and the
+        ///   optimisation level
         /// - say: where a problem of the build's own is reported
         build(
             project: LOADED_PROJECT,
@@ -112,7 +113,7 @@ namespace Ghul.Project is
             runtime_assembly: string?,
             cache: LIBRARY_CACHE,
             linker: string?,
-            debug: bool,
+            mode: BUILD_MODE,
             say: (string) -> void
         ) -> int static is
             let compiled_in = libraries(project, compiler_version, cache, say)
@@ -121,12 +122,12 @@ namespace Ghul.Project is
                 return 1
             fi
 
-            let output = output_path(project, debug)
+            let output = output_path(project, mode)
             let sources = SOURCE_SET.expand(project.directory, project.manifest.sources)
 
             Directory.create_directory(Path.get_directory_name(output)!)
 
-            let arguments = COMPILER_ARGUMENTS.for_build(project.manifest, project.target, compiled_in, debug, output, sources)
+            let arguments = COMPILER_ARGUMENTS.for_build(project.manifest, project.target, compiled_in, mode, output, sources)
 
             let scratch = Path.join([Path.get_temp_path(), "ghul-build-{System.Environment.process_id}-{System.Guid.new_guid().to_string("N")}"])
 

@@ -1,0 +1,29 @@
+namespace Ghul.Project is
+    /// How a project is built: with or without debug information, and at
+    /// which optimisation level, where one was asked for.
+    class BUILD_MODE(debug: bool, optimise: int?) is
+        /// An ordinary build: no debug information, the compiler's default
+        /// optimisation level.
+        release: BUILD_MODE static => BUILD_MODE(false, null)
+
+        /// The optimisation level the compiler builds an llvm program at
+        /// when none is asked for: 0 for a debug build, 2 otherwise.
+        default_optimise: int => if debug then 0 else 2 fi
+
+        /// The suffix on `out/<target>` that keeps this build apart from the
+        /// others: `-debug` for a debug build, then, for llvm, `-O<n>` where
+        /// the level asked for is not the default one. Only an llvm build is
+        /// given a level, so only an llvm build is kept apart by one.
+        ///
+        /// - target: the target being built
+        directory_suffix(target: BuildTarget) -> string is
+            let debug_part = if debug then "-debug" else "" fi
+
+            if let level = optimise /\ level != default_optimise /\ target == BuildTarget.LLVM then
+                return "{debug_part}-O{level}"
+            fi
+
+            return debug_part
+        si
+    si
+si

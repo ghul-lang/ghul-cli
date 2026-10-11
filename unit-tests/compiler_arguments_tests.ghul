@@ -2,6 +2,7 @@ namespace Ghul.Cli.Tests is
     use Collections.LIST
     use Collections.MAP
 
+    use Ghul.Project.BUILD_MODE
     use Ghul.Project.BuildTarget
     use Ghul.Project.COMPILER_ARGUMENTS
     use Ghul.Project.DEPENDENCY
@@ -33,7 +34,8 @@ namespace Ghul.Cli.Tests is
                 LIST[string](default_use),
                 LIST[string](define),
                 LIST[string](suppress),
-                LIST[string](warn_as_error))
+                LIST[string](warn_as_error),
+                null)
 
         _plain_options() -> MANIFEST_OPTIONS => _options(null, false, [], [], [], [])
 
@@ -65,7 +67,7 @@ namespace Ghul.Cli.Tests is
                         _manifest(ManifestKind.PROGRAM, _plain_options()),
                         BuildTarget.DOTNET,
                         _no_libraries(),
-                        false,
+                        BUILD_MODE.release,
                         "out/app.exe",
                         LIST[string](["a.ghul", "b.ghul"]))))
         si
@@ -134,7 +136,7 @@ namespace Ghul.Cli.Tests is
                         _manifest(ManifestKind.PROGRAM, _plain_options()),
                         BuildTarget.WASM,
                         LIST[SOURCE_LIBRARY]([library]),
-                        false,
+                        BUILD_MODE.release,
                         "out/app",
                         LIST[string](["main.ghul"]))))
         si
@@ -167,15 +169,25 @@ namespace Ghul.Cli.Tests is
         options_are_the_build_arguments_less_the_output_and_sources() is
             let manifest = _manifest(ManifestKind.LIBRARY, _options("private", true, [], ["X"], [], []))
             let options = COMPILER_ARGUMENTS.options(manifest, BuildTarget.WASM, _no_libraries())
-            let build = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.WASM, _no_libraries(), false, "out/x", LIST[string](["s.ghul"]))
+            let build = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.WASM, _no_libraries(), BUILD_MODE.release, "out/x", LIST[string](["s.ghul"]))
 
             _same("{_joined(options)} -o out/x s.ghul", _joined(build))
         si
 
         @Test()
+        an_llvm_build_at_a_level_passes_optimise() is
+            let manifest = _manifest(ManifestKind.PROGRAM, _plain_options())
+            let llvm = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.LLVM, _no_libraries(), BUILD_MODE(true, 3), "out/app", LIST[string](["main.ghul"]))
+            let wasm = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.WASM, _no_libraries(), BUILD_MODE(false, 3), "out/app", LIST[string](["main.ghul"]))
+
+            _same("--target llvm --debug --optimise 3 -o out/app main.ghul", _joined(llvm))
+            _same("--target wasm -o out/app main.ghul", _joined(wasm))
+        si
+
+        @Test()
         a_debug_build_passes_debug_after_the_options() is
             let manifest = _manifest(ManifestKind.PROGRAM, _plain_options())
-            let build = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.LLVM, _no_libraries(), true, "out/app", LIST[string](["main.ghul"]))
+            let build = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.LLVM, _no_libraries(), BUILD_MODE(true, null), "out/app", LIST[string](["main.ghul"]))
 
             _same("--target llvm --debug -o out/app main.ghul", _joined(build))
         si

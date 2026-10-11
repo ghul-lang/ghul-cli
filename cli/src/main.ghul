@@ -12,6 +12,7 @@ namespace Ghul.Cli is
     use IO.UnixFileMode
     use Ghul.Pipes.map
     use Ghul.Pipes.first
+    use Ghul.Pipes.any
 
     // HOME where it is set, which is everywhere but Windows, and the user
     // profile directory where it is not.
@@ -401,20 +402,27 @@ namespace Ghul.Cli is
     si
 
     print_usage() is
-        Std.error.write_line("usage: ghul [--no-cache] [--] <script> [args...]")
-        Std.error.write_line("       ghul run [--no-cache] <script> [args...]")
-        Std.error.write_line("       ghul compile [--no-cache] <script.ghul>")
-        Std.error.write_line("       ghul new <name> [--target <target>[,<target>...]]")
-        Std.error.write_line("       ghul build [--target <name>] [--debug]")
-        Std.error.write_line("       ghul run [--target <name>] [--debug] [-- args...]")
-        Std.error.write_line("       ghul project response-file --output <path> [--source-globs <path>] [--target <name>]")
-        Std.error.write_line("       ghul project compiler")
-        Std.error.write_line("       ghul install-compiler [version]")
-        Std.error.write_line("       ghul update [--version <tag>] [--check]")
-        Std.error.write_line("       ghul cache clear")
-        Std.error.write_line("       ghul repl")
-        Std.error.write_line("       ghul version")
-        Std.error.write_line("       a `-` in place of <script> reads the source from stdin")
+        print_usage(Std.error)
+    si
+
+    // The usage, written to `out`: standard error where it answers a
+    // mistake, standard output where it was asked for with --help.
+    print_usage(out: IO.TextWriter) is
+        out.write_line("usage: ghul [--no-cache] [--] <script> [args...]")
+        out.write_line("       ghul run [--no-cache] <script> [args...]")
+        out.write_line("       ghul compile [--no-cache] <script.ghul>")
+        out.write_line("       ghul new <name> [--target <target>[,<target>...]]")
+        out.write_line("       ghul build [--target <name>] [--debug] [--optimise <0-3>]")
+        out.write_line("       ghul run [--target <name>] [--debug] [--optimise <0-3>] [-- args...]")
+        out.write_line("       ghul project response-file --output <path> [--source-globs <path>] [--target <name>]")
+        out.write_line("       ghul project compiler")
+        out.write_line("       ghul install-compiler [version]")
+        out.write_line("       ghul update [--version <tag>] [--check]")
+        out.write_line("       ghul cache clear")
+        out.write_line("       ghul repl")
+        out.write_line("       ghul version")
+        out.write_line("       a `-` in place of <script> reads the source from stdin")
+        out.write_line("       --help or -h after ghul or a command prints this")
     si
 
     // The target a build should use where the caller named none, or null to
@@ -982,7 +990,7 @@ namespace Ghul.Cli is
 
     // `ghul build` and `ghul run` in a directory with a manifest: the
     // compiler the manifest names is installed if need be, the project is
-    // built into out/<target>/, or out/<target>-debug/ with --debug, and a run then starts what was built.
+    // built into out/<target>/, or out/<target>-debug/ and the like for other modes, and a run then starts what was built.
     cmd_project(rest: Collections.List[string], wants_run: bool) -> int is
         let say = (message: string) -> void => Std.error.write_line("ghul: {message}")
         let command_line = Ghul.Project.PROJECT_COMMAND_LINE.parse(rest, wants_run)
@@ -1009,9 +1017,12 @@ namespace Ghul.Cli is
         let project =
             Ghul.Project.LOADED_PROJECT(overrides.apply(as_loaded.manifest), as_loaded.directory, as_loaded.target)
 
+        let mode =
+            Ghul.Project.BUILD_MODE(command_line.debug, command_line.optimise ?? project.manifest.options.optimise)
+
         let store = Host.COMPILER_STORE.for_this_user()
 
-        if let (compiler, compiler_version, runtime_assembly) = build_compiler(store, project, overrides, command_line.debug, say) then
+        if let (compiler, compiler_version, runtime_assembly) = build_compiler(store, project, overrides, mode, say) then
             let linker: string? mut = null
 
             // A program for the llvm target is linked by the compiler, with
@@ -1035,7 +1046,7 @@ namespace Ghul.Cli is
                     runtime_assembly,
                     Ghul.Project.LIBRARY_CACHE.for_this_user(),
                     linker,
-                    command_line.debug,
+                    mode,
                     say)
 
             if exit_code != 0 \/ !wants_run then
@@ -1045,7 +1056,7 @@ namespace Ghul.Cli is
             return
                 Ghul.Project.PROJECT_RUN.run(
                     project,
-                    Ghul.Project.PROJECT_BUILD.output_path(project, command_line.debug),
+                    Ghul.Project.PROJECT_BUILD.output_path(project, mode),
                     command_line.program_arguments,
                     say)
         fi
@@ -1064,7 +1075,7 @@ namespace Ghul.Cli is
         store: Host.COMPILER_STORE,
         project: Ghul.Project.LOADED_PROJECT,
         overrides: Ghul.Project.BUILD_OVERRIDES,
-        debug: bool,
+        mode: Ghul.Project.BUILD_MODE,
         say: (string) -> void
     ) -> (compiler: Ghul.Project.COMPILER_PROCESS, version: string, runtime_assembly: string?)? is
         let request = Ghul.Project.COMPILER_REQUEST.from_environment(overrides.compiler_command, project.manifest.compiler_version)
@@ -1077,16 +1088,18 @@ namespace Ghul.Cli is
         if let named: Ghul.Project.CompilerRequest.COMMAND = request then
             let given = command_compiler(named.command)
 
-            // A compiler given as a command is used as it stands, so a debug
-            // build it cannot give debug information to is only reported. A
-            // command whose version could not be read is 0.0.0, and says nothing.
-            if debug /\ given.version !~ "0.0.0" then
-                let minimum = Ghul.Project.BUILD_TARGETS.minimum_compiler(project.target, true)
+            // A compiler given as a command is used as it stands, so a mode
+            // it cannot honour is only reported. A command whose version could
+            // not be read is 0.0.0, and says nothing.
+            let kind = Ghul.Project.BUILD_TARGETS.build_kind(project.target, mode)
+
+            if kind.length > 0 /\ given.version !~ "0.0.0" then
+                let minimum = Ghul.Project.BUILD_TARGETS.minimum_compiler(project.target, mode)
 
                 if minimum? /\ Ghul.Project.COMPILER_CHOICE.is_older_than(given.version, minimum) then
                     say(
-                        "ghul.compiler {given.version} builds without debug information; "
-                        "a debug build for the {Ghul.Project.BUILD_TARGETS.name(project.target)} target needs {minimum} or newer")
+                        "ghul.compiler {given.version} is too old for {kind}the "
+                        "{Ghul.Project.BUILD_TARGETS.name(project.target)} target, which needs {minimum} or newer")
                 fi
             fi
 
@@ -1106,7 +1119,7 @@ namespace Ghul.Cli is
             wanted = cast Ghul.Project.CompilerRequest.VERSION(request).version
         fi
 
-        if let version: string = project_compiler(store, project, wanted, debug, say) then
+        if let version: string = project_compiler(store, project, wanted, mode, say) then
             let command = store.command(version)
 
             let compiler =
@@ -1208,11 +1221,11 @@ namespace Ghul.Cli is
         store: Host.COMPILER_STORE,
         project: Ghul.Project.LOADED_PROJECT,
         named: string?,
-        debug: bool,
+        mode: Ghul.Project.BUILD_MODE,
         say: (string) -> void
     ) -> string? is
         let choice =
-            Ghul.Project.COMPILER_CHOICE.choose(project.target, debug, named, store.highest_version())
+            Ghul.Project.COMPILER_CHOICE.choose(project.target, mode, named, store.highest_version())
 
         if let problem: Ghul.Project.CompilerChoice.PROBLEM = choice then
             say(problem.message)
@@ -1221,8 +1234,8 @@ namespace Ghul.Cli is
 
         if let newest: Ghul.Project.CompilerChoice.NEWEST = choice then
             say(
-                "ghul.compiler {newest.installed} is too old for {if debug then "a debug build for " else "" fi}the {Ghul.Project.BUILD_TARGETS.name(project.target)} target, "
-                "which needs {Ghul.Project.BUILD_TARGETS.minimum_compiler(project.target, debug)} or newer; installing the newest")
+                "ghul.compiler {newest.installed} is too old for {Ghul.Project.BUILD_TARGETS.build_kind(project.target, mode)}the {Ghul.Project.BUILD_TARGETS.name(project.target)} target, "
+                "which needs {Ghul.Project.BUILD_TARGETS.minimum_compiler(project.target, mode)} or newer; installing the newest")
 
             return update_compiler_to_latest(store)
         fi
@@ -1310,6 +1323,14 @@ namespace Ghul.Cli is
         return 1
     si
 
+    // Whether `argument` asks for the usage.
+    is_help(argument: string) -> bool => argument =~ "--help" \/ argument =~ "-h"
+
+    // Whether `word` is one of the commands, rather than a script to run.
+    is_verb(word: string) -> bool =>
+        ["run", "compile", "new", "build", "project", "install-compiler", "update", "cache", "repl", "version"]
+            |> any(verb => verb =~ word)
+
     entry(args: string[]) -> int is
         if args.count < 1 then
             print_usage()
@@ -1323,6 +1344,11 @@ namespace Ghul.Cli is
         if items.count < 1 then
             print_usage()
             return 1
+        fi
+
+        if is_help(items[0]) \/ (items.count > 1 /\ is_help(items[1]) /\ is_verb(items[0])) then
+            print_usage(Std.out)
+            return 0
         fi
 
         // `--` ends verb parsing, the same convention every other CLI uses,
