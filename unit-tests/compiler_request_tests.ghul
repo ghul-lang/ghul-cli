@@ -1,0 +1,74 @@
+namespace Ghul.Cli.Tests is
+    use Ghul.Project.COMPILER_REQUEST
+    use Ghul.Project.CompilerRequest
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // Which compiler a build is asked for: the command line, then the
+    // environment, then the manifest.
+    @TestClass()
+    class COMPILER_REQUEST_TESTS is
+        init() is si
+
+        _command(request: CompilerRequest) -> string is
+            assert isa CompilerRequest.COMMAND(request) else "expected COMMAND"
+
+            return cast CompilerRequest.COMMAND(request).command
+        si
+
+        _version(request: CompilerRequest) -> string? is
+            assert isa CompilerRequest.VERSION(request) else "expected VERSION"
+
+            return cast CompilerRequest.VERSION(request).version
+        si
+
+        @Test()
+        with_nothing_set_the_newest_installed_is_used() is
+            assert !_version(COMPILER_REQUEST.resolve(null, null, null, null))?
+        si
+
+        @Test()
+        the_manifest_names_a_release() is
+            assert (_version(COMPILER_REQUEST.resolve(null, null, null, "65.5.0")) ?? "") =~ "65.5.0"
+        si
+
+        @Test()
+        latest_in_the_manifest_asks_for_the_newest_published() is
+            assert isa CompilerRequest.LATEST(COMPILER_REQUEST.resolve(null, null, null, "latest"))
+        si
+
+        @Test()
+        the_version_variable_overrides_the_manifest() is
+            assert (_version(COMPILER_REQUEST.resolve(null, null, "65.6.0", "65.5.0")) ?? "") =~ "65.6.0"
+            assert isa CompilerRequest.LATEST(COMPILER_REQUEST.resolve(null, null, "latest", "65.5.0"))
+        si
+
+        @Test()
+        the_command_variable_overrides_the_manifest() is
+            assert _command(COMPILER_REQUEST.resolve(null, "dotnet /tmp/ghul.dll", null, "65.5.0")) =~ "dotnet /tmp/ghul.dll"
+        si
+
+        @Test()
+        the_command_line_overrides_the_environment() is
+            assert _command(COMPILER_REQUEST.resolve("/opt/ghul", "dotnet /tmp/ghul.dll", null, "65.5.0")) =~ "/opt/ghul"
+            assert _command(COMPILER_REQUEST.resolve("/opt/ghul", null, "latest", null)) =~ "/opt/ghul"
+        si
+
+        @Test()
+        both_variables_set_is_a_problem_naming_them() is
+            let request = COMPILER_REQUEST.resolve(null, "dotnet /tmp/ghul.dll", "65.5.0", null)
+
+            assert isa CompilerRequest.PROBLEM(request) else "expected PROBLEM"
+
+            let message = cast CompilerRequest.PROBLEM(request).message
+
+            assert message.contains("GHUL_COMPILER") /\ message.contains("GHUL_COMPILER_VERSION") else message
+        si
+
+        @Test()
+        an_empty_variable_is_unset() is
+            assert (_version(COMPILER_REQUEST.resolve(null, "", " ", "65.5.0")) ?? "") =~ "65.5.0"
+        si
+    si
+si

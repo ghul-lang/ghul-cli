@@ -32,7 +32,7 @@ namespace Ghul.Project is
             if let version: string = named then
                 if is_older_than(version, minimum) then
                     return CompilerChoice.PROBLEM(
-                        "the manifest names ghul.compiler {version}, but the {BUILD_TARGETS.name(target)} target needs {minimum} or newer")
+                        "ghul.compiler {version} is asked for, but the {BUILD_TARGETS.name(target)} target needs {minimum} or newer")
                 fi
 
                 return CompilerChoice.REQUESTED(version)

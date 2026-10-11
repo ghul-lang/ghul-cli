@@ -185,8 +185,9 @@ after `--` to the program; `ghul run <script>` still runs a script, project
 or not. A manifest that lists more than one target needs `--target` to say
 which. The compiler's messages go to standard error, and a failed build exits
 with the compiler's status. `compiler` in the manifest names the
-`ghul.compiler` version to build with, which is installed if need be;
-without it, the newest installed is used.
+`ghul.compiler` version to build with, which is installed if need be, or
+`latest` for the newest published release; without it, the newest installed is
+used.
 
 The `dotnet` target writes `<name>.exe` (or `<name>.dll` for a library), with
 `ghul-runtime.dll` beside it, and runs with `dotnet`. The `wasm` target writes
@@ -208,7 +209,8 @@ manifest with source library dependencies.
 
 A wasm build needs `ghul.compiler` 64.15.0 or newer. Where the newest
 installed is older, the build installs the newest release and uses that; a
-manifest whose `compiler` names an older version is an error.
+manifest whose `compiler` names an older version is an error, as is an older
+version named by `GHUL_COMPILER_VERSION`.
 
 Two options override the manifest for one build, which is how a repository
 tests its own checkout. `--compiler <command>` builds with the command given,
@@ -218,6 +220,12 @@ no arguments. `--library <name>=<path>`, which can be given more than once,
 compiles the source library `name` (`ghul-core` or `ghul-runtime`) from the
 directory at `path`. Both work with `build`, `run` and `ghul project
 response-file`, and `--compiler` with `ghul project compiler`.
+
+Two environment variables override the manifest for every build, which is
+how a test harness that drives `ghul` chooses the compiler for all of them.
+`GHUL_COMPILER` is a compiler command, as `--compiler` takes one, and
+`GHUL_COMPILER_VERSION` a `ghul.compiler` version to install and use, or
+`latest`. `--compiler` overrides both, and setting both is an error.
 
 ### hello world on WebAssembly
 
