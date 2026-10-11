@@ -120,12 +120,15 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         a_compilers_directory_is_where_its_assembly_or_executable_is() is
-            let managed = Ghul.Project.COMPILER_PROCESS("dotnet", LIST[string](["/opt/c/ghul.dll"]))
-            let native = Ghul.Project.COMPILER_PROCESS("/opt/n/ghul-compiler", LIST[string]())
+            let assembly = Path.get_full_path(Path.combine(Path.get_temp_path(), "c", "ghul.dll"))
+            let executable = Path.get_full_path(Path.combine(Path.get_temp_path(), "n", "ghul-compiler"))
+
+            let managed = Ghul.Project.COMPILER_PROCESS("dotnet", LIST[string]([assembly]))
+            let native = Ghul.Project.COMPILER_PROCESS(executable, LIST[string]())
             let named = Ghul.Project.COMPILER_PROCESS("ghul-compiler", LIST[string]())
 
-            assert (managed.directory ?? "") =~ "/opt/c"
-            assert (native.directory ?? "") =~ "/opt/n"
+            assert (managed.directory ?? "") =~ Path.get_directory_name(assembly)
+            assert (native.directory ?? "") =~ Path.get_directory_name(executable)
             assert !named.directory?
         si
 
