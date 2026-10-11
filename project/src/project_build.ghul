@@ -6,7 +6,24 @@ namespace Ghul.Project is
 
     /// How the compiler is started: the program, and the arguments that
     /// come before the build's own.
-    class COMPILER_PROCESS(file_name: string, leading_arguments: Collections.List[string]) is si
+    class COMPILER_PROCESS(file_name: string, leading_arguments: Collections.List[string]) is
+        /// The directory the compiler is in: the one holding its assembly
+        /// where it runs on the .NET host, or the one holding the executable
+        /// where it is native, or null where neither is a path.
+        directory: string? is
+            for argument in leading_arguments do
+                if argument.ends_with(".dll") then
+                    return Path.get_directory_name(Path.get_full_path(argument))
+                fi
+            od
+
+            if Path.is_path_rooted(file_name) then
+                return Path.get_directory_name(file_name)
+            fi
+
+            return null
+        si
+    si
 
     /// Builds a loaded project into `out/<target>/` beside its manifest by
     /// running the compiler once.
@@ -118,7 +135,7 @@ namespace Ghul.Project is
             mode: BUILD_MODE,
             say: (string) -> void
         ) -> int static is
-            let compiled_in = libraries(project, compiler_version, COMPILER_REQUIREMENTS.read(if let runtime = runtime_assembly then IO.Path.get_directory_name(runtime) else null fi), cache, say)
+            let compiled_in = libraries(project, compiler_version, COMPILER_REQUIREMENTS.read(compiler.directory), cache, say)
 
             if !compiled_in? then
                 return 1

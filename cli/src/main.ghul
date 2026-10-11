@@ -1031,7 +1031,7 @@ namespace Ghul.Cli is
                 let found =
                     LLVM_TOOLCHAIN.for_this_user().executable(
                         compiler_version,
-                        Ghul.Project.COMPILER_REQUIREMENTS.read(if let runtime = runtime_assembly then Path.get_directory_name(runtime) else null fi))
+                        Ghul.Project.COMPILER_REQUIREMENTS.read(compiler.directory))
 
                 if let problem: string = found.problem then
                     say(problem)
@@ -1311,7 +1311,7 @@ namespace Ghul.Cli is
             if Ghul.Project.EDITOR_FILES.write(
                 project,
                 compiler_version,
-                Ghul.Project.COMPILER_REQUIREMENTS.read(if let runtime = runtime_assembly then Path.get_directory_name(runtime) else null fi),
+                Ghul.Project.COMPILER_REQUIREMENTS.read(compiler.directory),
                 Ghul.Project.LIBRARY_CACHE.for_this_user(),
                 options.output!,
                 options.source_globs,

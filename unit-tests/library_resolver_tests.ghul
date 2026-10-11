@@ -119,6 +119,17 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
+        a_compilers_directory_is_where_its_assembly_or_executable_is() is
+            let managed = Ghul.Project.COMPILER_PROCESS("dotnet", LIST[string](["/opt/c/ghul.dll"]))
+            let native = Ghul.Project.COMPILER_PROCESS("/opt/n/ghul-compiler", LIST[string]())
+            let named = Ghul.Project.COMPILER_PROCESS("ghul-compiler", LIST[string]())
+
+            assert (managed.directory ?? "") =~ "/opt/c"
+            assert (native.directory ?? "") =~ "/opt/n"
+            assert !named.directory?
+        si
+
+        @Test()
         a_compilers_requirements_are_read() is
             let read = COMPILER_REQUIREMENTS.parse("{{ \"ghul-core\": \"0.47.0\", \"ghul-runtime\": \"25.9.0\", \"ghul-llvm\": \"0.12.0\" }}")!
 
