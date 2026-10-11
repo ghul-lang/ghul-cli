@@ -9,18 +9,18 @@ namespace Ghul.Project is
         /// installed is too old for the build.
         NEWEST(installed: string);
 
-        /// No compiler will do: the manifest names one the build cannot use.
+        /// No compiler will do: the one asked for is one the build cannot use.
         PROBLEM(message: string);
     si
 
-    /// Chooses the compiler for a build from what the manifest names and
+    /// Chooses the compiler for a build from the version asked for and
     /// what is installed. A build for a target with a minimum compiler
     /// needs at least that one; a dotnet build takes any.
     class COMPILER_CHOICE is
         /// The compiler a build of `target` uses.
         ///
         /// - target: the target being built
-        /// - named: the version the manifest names, or null
+        /// - named: the version asked for, by the environment or the manifest, or null
         /// - installed: the newest installed version, or null when none is
         choose(target: BuildTarget, named: string?, installed: string?) -> CompilerChoice static is
             let minimum = BUILD_TARGETS.minimum_compiler(target)
