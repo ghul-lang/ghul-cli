@@ -219,7 +219,9 @@ namespace Ghul.Cli.Tests is
             _same("v25.6.0", RUNTIME_LIBRARY.pinned_tag("65.4.5") ?? "none")
             _same("v25.6.0", RUNTIME_LIBRARY.pinned_tag("65.4.9") ?? "none")
             _same("v25.7.0", RUNTIME_LIBRARY.pinned_tag("65.5.0") ?? "none")
-            _same("v25.7.0", RUNTIME_LIBRARY.pinned_tag("70.0.0") ?? "none")
+            _same("v25.7.0", RUNTIME_LIBRARY.pinned_tag("65.14.9") ?? "none")
+            _same("v25.9.1", RUNTIME_LIBRARY.pinned_tag("65.15.0") ?? "none")
+            _same("v25.9.1", RUNTIME_LIBRARY.pinned_tag("70.0.0") ?? "none")
         si
 
         @Test()
