@@ -1075,7 +1075,22 @@ namespace Ghul.Cli is
         fi
 
         if let named: Ghul.Project.CompilerRequest.COMMAND = request then
-            return command_compiler(named.command)
+            let given = command_compiler(named.command)
+
+            // A compiler given as a command is used as it stands, so a debug
+            // build it cannot give debug information to is only reported. A
+            // command whose version could not be read is 0.0.0, and says nothing.
+            if debug /\ given.version !~ "0.0.0" then
+                let minimum = Ghul.Project.BUILD_TARGETS.minimum_compiler(project.target, true)
+
+                if minimum? /\ Ghul.Project.COMPILER_CHOICE.is_older_than(given.version, minimum) then
+                    say(
+                        "ghul.compiler {given.version} builds without debug information; "
+                        "a debug build for the {Ghul.Project.BUILD_TARGETS.name(project.target)} target needs {minimum} or newer")
+                fi
+            fi
+
+            return given
         fi
 
         let wanted: string? mut = null
