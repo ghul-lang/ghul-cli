@@ -93,11 +93,14 @@ namespace Ghul.Project is
         /// - manifest_directory: the directory holding the manifest, which a
         ///   path dependency is relative to
         /// - compiler_version: the compiler the build uses
+        /// - requirements: what the compiler declares it needs, or null for a
+        ///   compiler from before the declaration, which gets this tool's pin
         /// - cache: where fetched libraries are kept
         find(
             manifest: MANIFEST,
             manifest_directory: string,
             compiler_version: string,
+            requirements: COMPILER_REQUIREMENTS?,
             cache: LIBRARY_CACHE
         ) -> LibraryOutcome static is
             let declared: DEPENDENCY mut
@@ -114,6 +117,16 @@ namespace Ghul.Project is
                 fi
 
                 return LibraryOutcome.PROBLEM("{NAME} must be declared with a tag or a path")
+            fi
+
+            if let floor = requirements?.core then
+                let resolved = LIBRARY_RESOLVER(cache).resolve(NAME, repository(), floor, compiler_version)
+
+                if let tag = resolved.tag then
+                    return _fetched(cache.fetch_tag(repository(), tag), null)
+                fi
+
+                return LibraryOutcome.PROBLEM(resolved.problem ?? "no {NAME} release is known for ghul.compiler {compiler_version}")
             fi
 
             return _fetched(cache.fetch_tag(repository(), pinned_tag(compiler_version)), null)

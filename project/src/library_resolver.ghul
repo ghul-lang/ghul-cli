@@ -1,0 +1,198 @@
+namespace Ghul.Project is
+    use Collections.LIST
+    use IO.Directory
+    use IO.File
+    use IO.Path
+
+    use System.Text.Json.JsonDocument
+    use System.Text.Json.JsonValueKind
+
+    /// The release of a source library a build uses: the newest tag at or
+    /// above the compiler's floor for it whose own floor for the compiler
+    /// the compiler meets.
+    ///
+    /// Each library release declares the oldest compiler that builds it in
+    /// a `requirements.json` at its root, as `minimum-compiler`; a release
+    /// from before the file existed builds with any compiler. The tag
+    /// chosen for a compiler is kept in the cache for a day, and used
+    /// beyond that when the repository cannot be reached.
+    class LIBRARY_RESOLVER(cache: LIBRARY_CACHE) is
+        /// The file a library release declares its compiler floor in.
+        FILE_NAME: string static => "requirements.json"
+
+        /// How long a choice is kept before the tags are listed again.
+        _kept_for: System.TimeSpan static => System.TimeSpan.from_hours(24.0)
+
+        /// The tag of `name` to build with `compiler_version`, or why there
+        /// is none.
+        ///
+        /// - name: the library, for messages
+        /// - url: its repository
+        /// - floor: the oldest release the compiler works with, as `x.y.z`
+        /// - compiler_version: the compiler the build uses
+        resolve(name: string, url: string, floor: string, compiler_version: string) -> (tag: string?, problem: string?) is
+            let record = Path.join([cache.root, LIBRARY_CACHE.repository_directory_name(url), "chosen", "{compiler_version}-{floor}"])
+            let kept = _kept(record)
+
+            if let tag = kept /\ File.get_last_write_time_utc(record) > System.DateTime.utc_now.subtract(_kept_for) then
+                return (tag = tag, problem = null)
+            fi
+
+            let listed = GIT.run(LIST[string](["ls-remote", "--tags", "--refs", url]), null)
+
+            if !listed.succeeded then
+                if let tag = kept then
+                    return (tag = tag, problem = null)
+                fi
+
+                return (tag = null, problem = "cannot list the releases of {url}: {listed.error.trim()}")
+            fi
+
+            let chosen = choose(name, url, floor, compiler_version, release_tags(listed.output))
+
+            if let tag = chosen.tag then
+                _keep(record, tag)
+            fi
+
+            return chosen
+        si
+
+        /// The tag to use from `tags`, newest first: the first at or above
+        /// `floor` whose release the compiler meets the floor of.
+        ///
+        /// - name: the library, for messages
+        /// - url: its repository
+        /// - floor: the oldest release the compiler works with
+        /// - compiler_version: the compiler the build uses
+        /// - tags: the repository's release tags, newest first
+        choose(
+            name: string,
+            url: string,
+            floor: string,
+            compiler_version: string,
+            tags: Collections.List[(tag: string, version: System.Version)]
+        ) -> (tag: string?, problem: string?) is
+            let lowest = System.Version.parse(floor)
+
+            // A compiler that is not a release, such as a local build, is
+            // taken to be newer than any release's floor.
+            let compiler = _version(compiler_version)
+            let oldest_needed: System.Version? mut = null
+
+            for candidate in tags do
+                if candidate.version < lowest then
+                    break
+                fi
+
+                let fetched = cache.fetch_tag(url, candidate.tag)
+
+                if let problem: CacheOutcome.PROBLEM = fetched then
+                    return (tag = null, problem = problem.message)
+                fi
+
+                let needs = minimum_compiler(cast CacheOutcome.FOUND(fetched).directory)
+
+                if !compiler? \/ !needs? \/ needs <= compiler then
+                    return (tag = candidate.tag, problem = null)
+                fi
+
+                if !oldest_needed? \/ needs < oldest_needed! then
+                    oldest_needed = needs
+                fi
+            od
+
+            if let needed = oldest_needed then
+                return (
+                    tag = null,
+                    problem = "{name}: ghul.compiler {compiler_version} needs v{floor} or newer, and every release from v{floor} needs ghul.compiler {needed} or newer")
+            fi
+
+            return (tag = null, problem = "{name}: ghul.compiler {compiler_version} needs v{floor} or newer, and {url} has no release that new")
+        si
+
+        /// The release tags in `ls-remote` output, as `vX.Y.Z` with their
+        /// versions, newest first. Anything else is left out.
+        ///
+        /// - output: what `git ls-remote --tags --refs` printed
+        release_tags(output: string) -> Collections.List[(tag: string, version: System.Version)] static is
+            let result = LIST[(tag: string, version: System.Version)]()
+
+            for line in output.split(['\n']) do
+                let fields = line.trim().split(['\t'])
+
+                if fields.count == 2 /\ fields[1].starts_with("refs/tags/v") then
+                    let tag = fields[1].substring("refs/tags/".length)
+                    let version: System.Version? mut
+
+                    if System.Version.try_parse(tag.substring(1), version ref) /\ version? then
+                        result.add((tag = tag, version = version))
+                    fi
+                fi
+            od
+
+            result.sort((a, b) => b.version.compare_to(a.version))
+
+            return result
+        si
+
+        /// The oldest compiler the library in `directory` declares it builds
+        /// with, or null where it declares none.
+        ///
+        /// - directory: a fetched release of the library
+        minimum_compiler(directory: string) -> System.Version? static is
+            let path = Path.join([directory, FILE_NAME])
+
+            if !File.exists(path) then
+                return null
+            fi
+
+            try
+                let root = JsonDocument.parse(File.read_all_text(path), _).root_element
+                let value: System.Text.Json.JsonElement mut
+
+                if root.value_kind == JsonValueKind.OBJECT /\ root.try_get_property("minimum-compiler", value ref) /\ value.value_kind == JsonValueKind.STRING then
+                    let version: System.Version? mut
+
+                    if System.Version.try_parse(value.get_string(), version ref) then
+                        return version
+                    fi
+                fi
+            catch e: System.Exception
+                return null
+            yrt
+
+            return null
+        si
+
+        _version(text: string) -> System.Version? static is
+            let version: System.Version? mut
+
+            if System.Version.try_parse(text, version ref) then
+                return version
+            fi
+
+            return null
+        si
+
+        _kept(record: string) -> string? static is
+            if !File.exists(record) then
+                return null
+            fi
+
+            let tag = File.read_all_text(record).trim()
+
+            return if tag.length > 0 then tag else null fi
+        si
+
+        // Written beside the record and renamed into place, so a reader sees
+        // the whole choice or none.
+        _keep(record: string, tag: string) static is
+            Directory.create_directory(Path.get_directory_name(record)!)
+
+            let scratch = "{record}.tmp-{System.Guid.new_guid().to_string("N").substring(0, 8)}"
+
+            File.write_all_text(scratch, tag)
+            File.move(scratch, record, true)
+        si
+    si
+si

@@ -74,7 +74,7 @@ namespace Ghul.Cli is
         _pins() -> (earliest_compiler: string, tag: string)[] static =>
             [
                 (earliest_compiler = "65.5.0", tag = "v0.6.0"),
-                (earliest_compiler = "65.8.0", tag = "v0.9.0")
+                (earliest_compiler = "65.8.0", tag = "v0.12.0")
             ]
 
         /// The name of the archive a release publishes for `triple`.
@@ -85,10 +85,12 @@ namespace Ghul.Cli is
 
         /// The `ghul-llvm` executable to link with for `compiler_version`,
         /// fetching its release first if it is not already kept, or the
-        /// reason there is none.
+        /// reason there is none: the release the compiler declares it needs,
+        /// or this tool's pin for a compiler that declares none.
         ///
         /// - compiler_version: the compiler the build uses
-        executable(compiler_version: string) -> (path: string?, problem: string?) is
+        /// - requirements: what the compiler declares it needs, or null
+        executable(compiler_version: string, requirements: Ghul.Project.COMPILER_REQUIREMENTS?) -> (path: string?, problem: string?) is
             let named = System.Environment.get_environment_variable("GHUL_LLVM")
 
             if named? /\ named.length > 0 then
@@ -101,7 +103,7 @@ namespace Ghul.Cli is
                 return (path = null, problem = "the llvm target builds only on Linux x86-64")
             fi
 
-            let tag = pinned_tag(compiler_version)
+            let tag = if let declared = requirements?.llvm then "v{declared}" else pinned_tag(compiler_version) fi
 
             if !tag? then
                 return (path = null, problem = "no ghul-llvm release is pinned for ghul.compiler {compiler_version}, which the llvm target needs {Ghul.Project.BUILD_TARGETS.minimum_compiler(Ghul.Project.BuildTarget.LLVM)} or newer for")
