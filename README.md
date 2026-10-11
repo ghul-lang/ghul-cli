@@ -202,11 +202,17 @@ The `dotnet` target writes `<name>.exe` (or `<name>.dll` for a library), with
 `ghul-runtime.dll` beside it, and runs with `dotnet`. The `wasm` target writes
 a WebAssembly module and the JavaScript loader the compiler puts beside it,
 and runs under Node.js 22 or newer. A wasm build compiles in two libraries,
-fetched from Git into `~/.cache/ghul-cli/libraries` at the releases this tool
-pins for the compiler in use: ghul-core, which gives the built-in types their
-members, and then ghul-runtime, which supplies the pipes and the rest of
-`Ghul`. Declaring `ghul-core` or `ghul-runtime` in the manifest's
-`dependencies`, at a `tag` or a `path`, uses that instead.
+fetched from Git into `~/.cache/ghul-cli/libraries`: ghul-core, which gives
+the built-in types their members, and then ghul-runtime, which supplies the
+pipes and the rest of `Ghul`. Declaring `ghul-core` or `ghul-runtime` in the
+manifest's `dependencies`, at a `tag` or a `path`, uses that instead.
+
+A compiler declares the oldest release of each library it works with in the
+`requirements.json` beside it, and each library release declares the oldest
+compiler that builds it in a `requirements.json` of its own. A build uses the
+newest release that satisfies both, and keeps the choice for a day; where no
+release does, the build stops with a message naming both versions. A compiler
+from before the declaration gets the release this tool pins for it.
 
 Any other entry in `dependencies` names a source library a wasm build compiles
 in after those two: a directory holding a `ghul-project.json` that lists
@@ -224,8 +230,8 @@ version named by `GHUL_COMPILER_VERSION`.
 Two options override the manifest for one build, which is how a repository
 tests its own checkout. `--compiler <command>` builds with the command given,
 such as `dotnet /path/to/publish/ghul.dll`, in place of an installed compiler;
-the libraries pinned for it are chosen by the version it prints when run with
-no arguments. `--library <name>=<path>`, which can be given more than once,
+the libraries for it are chosen from the `requirements.json` beside it, or by
+the version it prints when run with no arguments where there is none. `--library <name>=<path>`, which can be given more than once,
 compiles the source library `name` (`ghul-core` or `ghul-runtime`) from the
 directory at `path`. Both work with `build`, `run` and `ghul project
 response-file`, and `--compiler` with `ghul project compiler`.

@@ -6,7 +6,24 @@ namespace Ghul.Project is
 
     /// How the compiler is started: the program, and the arguments that
     /// come before the build's own.
-    class COMPILER_PROCESS(file_name: string, leading_arguments: Collections.List[string]) is si
+    class COMPILER_PROCESS(file_name: string, leading_arguments: Collections.List[string]) is
+        /// The directory the compiler is in: the one holding its assembly
+        /// where it runs on the .NET host, or the one holding the executable
+        /// where it is native, or null where neither is a path.
+        directory: string? is
+            for argument in leading_arguments do
+                if argument.ends_with(".dll") then
+                    return Path.get_directory_name(Path.get_full_path(argument))
+                fi
+            od
+
+            if Path.is_path_rooted(file_name) then
+                return Path.get_directory_name(file_name)
+            fi
+
+            return null
+        si
+    si
 
     /// Builds a loaded project into `out/<target>/` beside its manifest by
     /// running the compiler once.
@@ -44,11 +61,13 @@ namespace Ghul.Project is
         ///
         /// - project: the project being built
         /// - compiler_version: the compiler the build uses
+        /// - requirements: what the compiler declares it needs, or null
         /// - cache: where fetched libraries are kept
         /// - say: where a problem is reported
         libraries(
             project: LOADED_PROJECT,
             compiler_version: string,
+            requirements: COMPILER_REQUIREMENTS?,
             cache: LIBRARY_CACHE,
             say: (string) -> void
         ) -> Collections.List[SOURCE_LIBRARY]? static is
@@ -58,7 +77,7 @@ namespace Ghul.Project is
                 return result
             fi
 
-            let found = CORE_LIBRARY.find(project.manifest, project.directory, compiler_version, cache)
+            let found = CORE_LIBRARY.find(project.manifest, project.directory, compiler_version, requirements, cache)
 
             if let problem: LibraryOutcome.PROBLEM = found then
                 say(problem.message)
@@ -67,7 +86,7 @@ namespace Ghul.Project is
 
             result.add(cast LibraryOutcome.FOUND(found).library)
 
-            let runtime = RUNTIME_LIBRARY.find(project.manifest, project.directory, compiler_version, cache)
+            let runtime = RUNTIME_LIBRARY.find(project.manifest, project.directory, compiler_version, requirements, cache)
 
             if let problem: LibraryOutcome.PROBLEM = runtime then
                 say(problem.message)
@@ -116,7 +135,7 @@ namespace Ghul.Project is
             mode: BUILD_MODE,
             say: (string) -> void
         ) -> int static is
-            let compiled_in = libraries(project, compiler_version, cache, say)
+            let compiled_in = libraries(project, compiler_version, COMPILER_REQUIREMENTS.read(compiler.directory), cache, say)
 
             if !compiled_in? then
                 return 1

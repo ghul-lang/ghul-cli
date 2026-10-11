@@ -1028,7 +1028,10 @@ namespace Ghul.Cli is
             // A program for the llvm target is linked by the compiler, with
             // the ghul-llvm release pinned for it.
             if project.target == Ghul.Project.BuildTarget.LLVM /\ project.manifest.kind == Ghul.Project.ManifestKind.PROGRAM then
-                let found = LLVM_TOOLCHAIN.for_this_user().executable(compiler_version)
+                let found =
+                    LLVM_TOOLCHAIN.for_this_user().executable(
+                        compiler_version,
+                        Ghul.Project.COMPILER_REQUIREMENTS.read(compiler.directory))
 
                 if let problem: string = found.problem then
                     say(problem)
@@ -1283,7 +1286,7 @@ namespace Ghul.Cli is
 
         let store = Host.COMPILER_STORE.for_this_user()
 
-        if let (compiler, compiler_version, _) = tool_compiler(store, manifest, options.overrides) then
+        if let (compiler, compiler_version, runtime_assembly) = tool_compiler(store, manifest, options.overrides) then
             if !wants_response_file then
                 Std.out.write_line(Ghul.Project.EDITOR_FILES.command_line(compiler))
                 return 0
@@ -1308,6 +1311,7 @@ namespace Ghul.Cli is
             if Ghul.Project.EDITOR_FILES.write(
                 project,
                 compiler_version,
+                Ghul.Project.COMPILER_REQUIREMENTS.read(compiler.directory),
                 Ghul.Project.LIBRARY_CACHE.for_this_user(),
                 options.output!,
                 options.source_globs,

@@ -1,0 +1,145 @@
+namespace Ghul.Cli.Tests is
+    use Collections.LIST
+    use IO.Directory
+    use IO.File
+    use IO.Path
+
+    use Ghul.Project.COMPILER_REQUIREMENTS
+    use Ghul.Project.GIT
+    use Ghul.Project.LIBRARY_CACHE
+    use Ghul.Project.LIBRARY_RESOLVER
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // Choosing a library release from what the compiler and each release
+    // declare. The repository the test makes has v1.0.0 with no
+    // declaration, v1.1.0 needing 65.10.0 and v1.2.0 needing 65.20.0.
+    @TestClass()
+    class LIBRARY_RESOLVER_TESTS is
+        init() is si
+
+        _scratch() -> string =>
+            Path.combine(Path.get_temp_path(), "ghul-lr-{System.Guid.new_guid().to_string("N").substring(0, 8)}")
+
+        _git(directory: string, arguments: string[]) is
+            let result = GIT.run(LIST[string](arguments), directory)
+
+            assert result.succeeded else "git {string.join(" ", arguments)} failed: {result.error}"
+        si
+
+        _release(repository: string, tag: string, minimum: string?) is
+            File.write_all_text(Path.combine(repository, "lib.ghul"), tag)
+
+            if let needs = minimum then
+                File.write_all_text(Path.combine(repository, "requirements.json"), "{{ \"minimum-compiler\": \"{needs}\" }}")
+            fi
+
+            _git(repository, ["add", "."])
+            _git(repository, ["commit", "--quiet", "-m", tag])
+            _git(repository, ["tag", tag])
+        si
+
+        _repository(scratch: string) -> string is
+            let repository = Path.combine(scratch, "repository")
+
+            Directory.create_directory(repository)
+
+            _git(repository, ["init", "--quiet"])
+            _git(repository, ["config", "user.email", "test@example.com"])
+            _git(repository, ["config", "user.name", "test"])
+
+            _release(repository, "v1.0.0", null)
+            _release(repository, "v1.1.0", "65.10.0")
+            _release(repository, "v1.2.0", "65.20.0")
+
+            return repository
+        si
+
+        _delete(path: string) is
+            if Directory.exists(path) then
+                for file in Directory.get_files(path, "*", IO.SearchOption.ALL_DIRECTORIES) do
+                    File.set_attributes(file, IO.FileAttributes.NORMAL)
+                od
+
+                Directory.delete(path, true)
+            fi
+        si
+
+        _resolve(floor: string, compiler: string) -> (tag: string?, problem: string?) is
+            let scratch = _scratch()
+
+            try
+                let url = System.Uri(_repository(scratch)).absolute_uri
+                let resolver = LIBRARY_RESOLVER(LIBRARY_CACHE(Path.combine(scratch, "cache")))
+
+                return resolver.resolve("lib", url, floor, compiler)
+            finally
+                _delete(scratch)
+            yrt
+        si
+
+        @Test()
+        the_newest_release_the_compiler_meets_is_chosen() is
+            assert (_resolve("1.0.0", "65.25.0").tag ?? "none") =~ "v1.2.0"
+            assert (_resolve("1.0.0", "65.15.0").tag ?? "none") =~ "v1.1.0"
+        si
+
+        @Test()
+        a_release_that_declares_no_floor_builds_with_any_compiler() is
+            assert (_resolve("1.0.0", "65.5.0").tag ?? "none") =~ "v1.0.0"
+        si
+
+        @Test()
+        a_compiler_that_is_not_a_release_takes_the_newest() is
+            assert (_resolve("1.0.0", "0.0.0-local").tag ?? "none") =~ "v1.2.0"
+        si
+
+        @Test()
+        no_release_meeting_both_floors_names_both() is
+            let resolved = _resolve("1.1.0", "65.5.0")
+
+            assert !resolved.tag?
+            assert (resolved.problem ?? "") =~ "lib: ghul.compiler 65.5.0 needs v1.1.0 or newer, and every release from v1.1.0 needs ghul.compiler 65.10.0 or newer"
+        si
+
+        @Test()
+        a_floor_above_every_release_says_so() is
+            let resolved = _resolve("1.3.0", "65.25.0")
+
+            assert !resolved.tag?
+            assert (resolved.problem ?? "").contains("has no release that new") else resolved.problem ?? ""
+        si
+
+        @Test()
+        release_tags_are_read_newest_first_and_others_left_out() is
+            let tags = LIBRARY_RESOLVER.release_tags("a\trefs/tags/v1.2.0\nb\trefs/tags/v1.10.0\nc\trefs/tags/latest\nd\trefs/tags/v1.9.1\n")
+
+            assert string.join(" ", tags |> Ghul.Pipes.map(t => t.tag)) =~ "v1.10.0 v1.9.1 v1.2.0"
+        si
+
+        @Test()
+        a_compilers_directory_is_where_its_assembly_or_executable_is() is
+            let assembly = Path.get_full_path(Path.combine(Path.get_temp_path(), "c", "ghul.dll"))
+            let executable = Path.get_full_path(Path.combine(Path.get_temp_path(), "n", "ghul-compiler"))
+
+            let managed = Ghul.Project.COMPILER_PROCESS("dotnet", LIST[string]([assembly]))
+            let native = Ghul.Project.COMPILER_PROCESS(executable, LIST[string]())
+            let named = Ghul.Project.COMPILER_PROCESS("ghul-compiler", LIST[string]())
+
+            assert (managed.directory ?? "") =~ Path.get_directory_name(assembly)
+            assert (native.directory ?? "") =~ Path.get_directory_name(executable)
+            assert !named.directory?
+        si
+
+        @Test()
+        a_compilers_requirements_are_read() is
+            let read = COMPILER_REQUIREMENTS.parse("{{ \"ghul-core\": \"0.47.0\", \"ghul-runtime\": \"25.9.0\", \"ghul-llvm\": \"0.12.0\" }}")!
+
+            assert (read.core ?? "") =~ "0.47.0"
+            assert (read.runtime ?? "") =~ "25.9.0"
+            assert (read.llvm ?? "") =~ "0.12.0"
+            assert !COMPILER_REQUIREMENTS.read(Path.combine(Path.get_temp_path(), "no-such-directory"))?
+        si
+    si
+si

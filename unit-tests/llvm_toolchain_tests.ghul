@@ -21,8 +21,8 @@ namespace Ghul.Cli.Tests is
         the_release_follows_the_compiler_version() is
             assert (LLVM_TOOLCHAIN.pinned_tag("65.5.0") ?? "none") =~ "v0.6.0"
             assert (LLVM_TOOLCHAIN.pinned_tag("65.7.9") ?? "none") =~ "v0.6.0"
-            assert (LLVM_TOOLCHAIN.pinned_tag("65.8.0") ?? "none") =~ "v0.9.0"
-            assert (LLVM_TOOLCHAIN.pinned_tag("70.0.0") ?? "none") =~ "v0.9.0"
+            assert (LLVM_TOOLCHAIN.pinned_tag("65.8.0") ?? "none") =~ "v0.12.0"
+            assert (LLVM_TOOLCHAIN.pinned_tag("70.0.0") ?? "none") =~ "v0.12.0"
         si
 
         @Test()

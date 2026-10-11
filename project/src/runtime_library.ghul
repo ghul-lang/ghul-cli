@@ -81,13 +81,16 @@ namespace Ghul.Project is
         /// - manifest_directory: the directory holding the manifest, which a
         ///   path dependency is relative to
         /// - compiler_version: the compiler the build uses
+        /// - requirements: what the compiler declares it needs, or null for a
+        ///   compiler from before the declaration, which gets this tool's pin
         /// - cache: where fetched libraries are kept
         find(
             manifest: MANIFEST,
             manifest_directory: string,
             compiler_version: string,
+            requirements: COMPILER_REQUIREMENTS?,
             cache: LIBRARY_CACHE
-        ) -> LibraryOutcome? static is
+        ) -> LibraryOutcome static is
             let declared: DEPENDENCY mut
 
             if manifest.dependencies.try_get_value(NAME, declared ref) then
@@ -104,11 +107,24 @@ namespace Ghul.Project is
                 return LibraryOutcome.PROBLEM("{NAME} must be declared with a tag or a path")
             fi
 
+            if let floor = requirements?.runtime then
+                let resolved = LIBRARY_RESOLVER(cache).resolve(NAME, repository(), floor, compiler_version)
+
+                if let tag = resolved.tag then
+                    return _fetched(cache.fetch_tag(repository(), tag), null, tag)
+                fi
+
+                return LibraryOutcome.PROBLEM(resolved.problem ?? "no {NAME} release is known for ghul.compiler {compiler_version}")
+            fi
+
             if let tag = pinned_tag(compiler_version) then
                 return _fetched(cache.fetch_tag(repository(), tag), null, tag)
             fi
 
-            return null
+            // A build for a source-core target cannot go ahead without the
+            // runtime: building without it would compile, and then fail
+            // where the program first reaches for it.
+            return LibraryOutcome.PROBLEM("no {NAME} release is known for ghul.compiler {compiler_version}; name one in the manifest's dependencies")
         si
 
         _fetched(outcome: CacheOutcome, directory: string?, tag: string) -> LibraryOutcome static is
