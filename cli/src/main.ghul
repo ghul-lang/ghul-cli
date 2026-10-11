@@ -1065,15 +1065,31 @@ namespace Ghul.Cli is
         overrides: Ghul.Project.BUILD_OVERRIDES,
         say: (string) -> void
     ) -> (compiler: Ghul.Project.COMPILER_PROCESS, version: string, runtime_assembly: string?)? is
-        if let command: string = overrides.compiler_command then
-            let words = Ghul.Project.BUILD_OVERRIDES.command_words(command)
-            let compiler = Ghul.Project.COMPILER_PROCESS(words[0], Collections.LIST[string](words[1..<0]))
-            let version = compiler_command_version(words) ?? "0.0.0"
+        let request = Ghul.Project.COMPILER_REQUEST.from_environment(overrides.compiler_command, project.manifest.compiler_version)
 
-            return (compiler, version, Ghul.Project.BUILD_OVERRIDES.runtime_assembly_beside(command))
+        if let problem: Ghul.Project.CompilerRequest.PROBLEM = request then
+            say(problem.message)
+            return null
         fi
 
-        if let version: string = project_compiler(store, project, say) then
+        if let named: Ghul.Project.CompilerRequest.COMMAND = request then
+            return command_compiler(named.command)
+        fi
+
+        let wanted: string? mut = null
+
+        if isa Ghul.Project.CompilerRequest.LATEST(request) then
+            wanted = update_compiler_to_latest(store)
+
+            if !wanted? then
+                say("could not install the latest ghul.compiler")
+                return null
+            fi
+        else
+            wanted = cast Ghul.Project.CompilerRequest.VERSION(request).version
+        fi
+
+        if let version: string = project_compiler(store, project, wanted, say) then
             let command = store.command(version)
 
             let compiler =
@@ -1085,21 +1101,43 @@ namespace Ghul.Cli is
         return null
     si
 
+    // The compiler run as a command, as `--compiler` or `GHUL_COMPILER`
+    // gives one: its version is what it prints, and its runtime assembly
+    // the one beside it.
+    command_compiler(command: string) -> (compiler: Ghul.Project.COMPILER_PROCESS, version: string, runtime_assembly: string?) is
+        let words = Ghul.Project.BUILD_OVERRIDES.command_words(command)
+        let compiler = Ghul.Project.COMPILER_PROCESS(words[0], Collections.LIST[string](words[1..<0]))
+
+        return (compiler, compiler_command_version(words) ?? "0.0.0", Ghul.Project.BUILD_OVERRIDES.runtime_assembly_beside(command))
+    si
+
     // The compiler an editor analyses a project with: the command
-    // `--compiler` gave, or the one the manifest names, installed if need be.
+    // `--compiler` gave, or the one the environment or the manifest names,
+    // installed if need be.
     tool_compiler(
         store: Host.COMPILER_STORE,
         manifest: Ghul.Project.MANIFEST,
         overrides: Ghul.Project.BUILD_OVERRIDES
     ) -> (compiler: Ghul.Project.COMPILER_PROCESS, version: string, runtime_assembly: string?)? is
-        if let command: string = overrides.compiler_command then
-            let words = Ghul.Project.BUILD_OVERRIDES.command_words(command)
-            let compiler = Ghul.Project.COMPILER_PROCESS(words[0], Collections.LIST[string](words[1..<0]))
+        let request = Ghul.Project.COMPILER_REQUEST.from_environment(overrides.compiler_command, manifest.compiler_version)
 
-            return (compiler, compiler_command_version(words) ?? "0.0.0", Ghul.Project.BUILD_OVERRIDES.runtime_assembly_beside(command))
+        if let problem: Ghul.Project.CompilerRequest.PROBLEM = request then
+            Std.error.write_line("ghul: {problem.message}")
+            return null
         fi
 
-        if let version: string = ensure_compiler_installed(store, manifest.compiler_version, false) then
+        if let named: Ghul.Project.CompilerRequest.COMMAND = request then
+            return command_compiler(named.command)
+        fi
+
+        let installed =
+            if isa Ghul.Project.CompilerRequest.LATEST(request) then
+                update_compiler_to_latest(store)
+            else
+                ensure_compiler_installed(store, cast Ghul.Project.CompilerRequest.VERSION(request).version, false)
+            fi
+
+        if let version: string = installed then
             let command = store.command(version)
 
             let compiler =
@@ -1146,9 +1184,12 @@ namespace Ghul.Cli is
         yrt
     si
 
-    project_compiler(store: Host.COMPILER_STORE, project: Ghul.Project.LOADED_PROJECT, say: (string) -> void) -> string? is
+    // The release a build of `project` uses, given the one asked for, or
+    // null for the newest installed: checked against the target's minimum
+    // compiler, and installed if need be.
+    project_compiler(store: Host.COMPILER_STORE, project: Ghul.Project.LOADED_PROJECT, named: string?, say: (string) -> void) -> string? is
         let choice =
-            Ghul.Project.COMPILER_CHOICE.choose(project.target, project.manifest.compiler_version, store.highest_version())
+            Ghul.Project.COMPILER_CHOICE.choose(project.target, named, store.highest_version())
 
         if let problem: Ghul.Project.CompilerChoice.PROBLEM = choice then
             say(problem.message)

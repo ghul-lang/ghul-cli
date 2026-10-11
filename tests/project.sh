@@ -189,6 +189,17 @@ if (cd "$wasm" && dotnet "$cli" build --compiler /bin/false >/dev/null 2>&1); th
     fail "expected a build with --compiler /bin/false to fail"
 fi
 
+echo "project: GHUL_COMPILER and GHUL_COMPILER_VERSION choose the compiler, below --compiler..." >&2
+if (cd "$wasm" && GHUL_COMPILER=/bin/false dotnet "$cli" build >/dev/null 2>&1); then
+    fail "expected a build with GHUL_COMPILER=/bin/false to fail"
+fi
+out="$(cd "$wasm" && GHUL_COMPILER=/bin/false dotnet "$cli" run --compiler "$compiler" 2>/dev/null)" || fail "--compiler did not override GHUL_COMPILER"
+check "$out" "hello with use default" "wasm run output with --compiler over GHUL_COMPILER"
+if err="$(cd "$wasm" && GHUL_COMPILER=/bin/false GHUL_COMPILER_VERSION=latest dotnet "$cli" build 2>&1)"; then
+    fail "expected a build with both compiler variables set to fail"
+fi
+[[ "$err" == *"GHUL_COMPILER and GHUL_COMPILER_VERSION are both set"* ]] || fail "unexpected message for both compiler variables: $err"
+
 echo "project: ghul new creates a project that builds and runs on both targets..." >&2
 (cd "$scratch" && dotnet "$cli" new scaffolded --target dotnet,wasm 2>/dev/null) || fail "ghul new failed"
 [[ -f "$scratch/scaffolded/.gitignore" ]] || fail "ghul new wrote no .gitignore"
@@ -215,7 +226,7 @@ GHUL
 if err="$(cd "$old_wasm" && dotnet "$cli" build --target wasm 2>&1)"; then
     fail "expected a wasm build naming an old compiler to fail"
 fi
-[[ "$err" == *"names ghul.compiler 64.11.0, but the wasm target needs"* ]] || fail "unexpected message for an old compiler: $err"
+[[ "$err" == *"ghul.compiler 64.11.0 is asked for, but the wasm target needs"* ]] || fail "unexpected message for an old compiler: $err"
 
 echo "project: an llvm build fetches the ghul-llvm release pinned for its compiler..." >&2
 (cd "$scratch" && dotnet "$cli" new native --target llvm 2>/dev/null) || fail "ghul new --target llvm failed"

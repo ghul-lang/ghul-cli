@@ -1,0 +1,98 @@
+namespace Ghul.Project is
+    /// Which compiler a build was asked for.
+    union CompilerRequest is
+        /// A compiler command to run as it stands, as `--compiler` takes one.
+        COMMAND(command: string);
+
+        /// A release to install and use, or the newest installed where
+        /// `version` is null.
+        VERSION(version: string?);
+
+        /// The newest published release, installed if need be.
+        LATEST;
+
+        /// The request contradicts itself.
+        PROBLEM(message: string);
+    si
+
+    /// Decides which compiler a build uses from the command line, the
+    /// environment and the manifest, in that order of precedence.
+    ///
+    /// `GHUL_COMPILER` names a compiler command for every build, and
+    /// `GHUL_COMPILER_VERSION` a release to install and use, or `latest`.
+    /// A manifest's `compiler` takes a release or `latest` too.
+    class COMPILER_REQUEST is
+        /// What a manifest or `GHUL_COMPILER_VERSION` says to ask for the
+        /// newest published release.
+        LATEST_NAME: string static => "latest"
+
+        /// The variable naming a compiler command for every build.
+        COMMAND_VARIABLE: string static => "GHUL_COMPILER"
+
+        /// The variable naming a compiler release for every build.
+        VERSION_VARIABLE: string static => "GHUL_COMPILER_VERSION"
+
+        /// The compiler asked for, reading the environment's variables.
+        ///
+        /// - command_line: the command `--compiler` gave, or null
+        /// - manifest: the version the manifest names, or null
+        from_environment(command_line: string?, manifest: string?) -> CompilerRequest static =>
+            resolve(
+                command_line,
+                System.Environment.get_environment_variable(COMMAND_VARIABLE),
+                System.Environment.get_environment_variable(VERSION_VARIABLE),
+                manifest)
+
+        /// The compiler asked for: the command line first, then the
+        /// environment, then the manifest. An empty variable is unset.
+        ///
+        /// - command_line: the command `--compiler` gave, or null
+        /// - environment_command: `GHUL_COMPILER`, or null
+        /// - environment_version: `GHUL_COMPILER_VERSION`, or null
+        /// - manifest: the version the manifest names, or null
+        resolve(
+            command_line: string?,
+            environment_command: string?,
+            environment_version: string?,
+            manifest: string?
+        ) -> CompilerRequest static is
+            if let command: string = command_line then
+                return CompilerRequest.COMMAND(command)
+            fi
+
+            let command = _set(environment_command)
+            let version = _set(environment_version)
+
+            if command? /\ version? then
+                return CompilerRequest.PROBLEM("{COMMAND_VARIABLE} and {VERSION_VARIABLE} are both set; set one of them")
+            fi
+
+            if let named: string = command then
+                return CompilerRequest.COMMAND(named)
+            fi
+
+            return named_version(version ?? manifest)
+        si
+
+        /// The request a version names: the newest published release for
+        /// `latest`, and otherwise that release, or the newest installed
+        /// where it is null.
+        ///
+        /// - version: a release, `latest`, or null
+        named_version(version: string?) -> CompilerRequest static is
+            if let named: string = version /\ named =~ LATEST_NAME then
+                return CompilerRequest.LATEST
+            fi
+
+            return CompilerRequest.VERSION(version)
+        si
+
+        _set(value: string?) -> string? static is
+            if let present: string = value /\ present.trim().length > 0 then
+                return present.trim()
+            fi
+
+            return null
+        si
+    si
+si
