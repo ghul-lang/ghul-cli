@@ -230,8 +230,8 @@ ghul run --target wasm      # builds into out/wasm/ and runs it under Node.js
 ghul run --target dotnet    # builds into out/dotnet/ and runs it with dotnet
 ```
 
-`--target` takes `dotnet`, `wasm` or `dotnet,wasm`, and defaults to `dotnet`,
-or to `wasm` on a machine without .NET.
+`--target` takes `dotnet`, `wasm` or `llvm`, or several separated by commas, and
+defaults to `dotnet`, or to `wasm` on a machine without .NET.
 The new directory holds the manifest, `ghul-project.json`; `src/main.ghul`,
 whose entry writes `hello`; and a `.gitignore` for `out/`. A directory that
 already exists and is not empty is refused. The program is:
@@ -248,6 +248,16 @@ The first build installs the compiler and fetches the libraries; later builds
 reuse them. A project's sources get no implicit imports, so they `use` what
 they call, or start with `use default` for `write_line`, the pipes and the
 collections.
+
+### native executables
+
+A project that lists the `llvm` target builds a native executable for Linux
+x86-64 into `out/llvm/`, and `ghul run --target llvm` runs it directly. The
+first such build also fetches the `ghul-llvm` release pinned for the compiler,
+the linker and runtime it links with, into the same cache; setting `GHUL_LLVM`
+to a `ghul-llvm` executable uses that one instead. The compiler's code
+generation for this target is in its early stages, and a build reports what it
+cannot yet compile.
 
 ## tools for editors
 

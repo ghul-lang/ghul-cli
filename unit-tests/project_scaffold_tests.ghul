@@ -51,6 +51,14 @@ namespace Ghul.Cli.Tests is
 
         // An explicit --target outranks the default, whichever it is.
         @Test()
+        target_names_the_llvm_target() is
+            let parsed = PROJECT_SCAFFOLD.parse(LIST[string](["--target", "dotnet,wasm,llvm", "hello"]), BuildTarget.DOTNET)
+
+            assert !parsed.problem?
+            assert PROJECT_SCAFFOLD.manifest_text("hello", parsed.targets).contains("\"targets\": [\"dotnet\", \"wasm\", \"llvm\"]")
+        si
+
+        @Test()
         target_named_overrides_the_default() is
             let parsed = PROJECT_SCAFFOLD.parse(LIST[string](["--target", "dotnet", "hello"]), BuildTarget.WASM)
 
@@ -60,10 +68,10 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         an_unknown_target_a_missing_name_or_a_second_name_is_a_problem() is
-            _same("unknown target java; expected dotnet or wasm", PROJECT_SCAFFOLD.parse(LIST[string](["x", "--target", "java"]), BuildTarget.DOTNET).problem ?? "")
+            _same("unknown target java; expected one of dotnet, wasm, llvm", PROJECT_SCAFFOLD.parse(LIST[string](["x", "--target", "java"]), BuildTarget.DOTNET).problem ?? "")
             _same("a project name is needed", PROJECT_SCAFFOLD.parse(LIST[string](), BuildTarget.DOTNET).problem ?? "")
             _same("expected one project name, not y as well", PROJECT_SCAFFOLD.parse(LIST[string](["x", "y"]), BuildTarget.DOTNET).problem ?? "")
-            _same("--target needs dotnet, wasm or dotnet,wasm", PROJECT_SCAFFOLD.parse(LIST[string](["x", "--target"]), BuildTarget.DOTNET).problem ?? "")
+            _same("--target needs one or more targets, separated by commas: dotnet, wasm, llvm", PROJECT_SCAFFOLD.parse(LIST[string](["x", "--target"]), BuildTarget.DOTNET).problem ?? "")
         si
 
         @Test()

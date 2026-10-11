@@ -4,6 +4,7 @@ namespace Ghul.Cli.Tests is
     use IO.File
     use IO.Path
 
+    use Ghul.Project.BuildTarget
     use Ghul.Project.DEPENDENCY_LIBRARIES
     use Ghul.Project.GIT
     use Ghul.Project.LIBRARY_CACHE
@@ -72,7 +73,7 @@ namespace Ghul.Cli.Tests is
                 _project(Path.combine(scratch, "beta"), "beta", "\"wasm\", \"dotnet\"", "\"alpha\": {{ \"path\": \"../alpha\" }}")
                 _project(Path.combine(scratch, "alpha"), "alpha", "\"wasm\"", "")
 
-                let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")))
+                let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
 
                 assert !found.problem? else found.problem ?? ""
                 assert _names(found) =~ "alpha@0.0.0 beta@0.0.0 zeta@0.0.0" else _names(found)
@@ -90,7 +91,7 @@ namespace Ghul.Cli.Tests is
             try
                 _project(Path.combine(scratch, "app"), "app", "\"wasm\"", "\"ghul-core\": {{ \"path\": \"../none\" }}, \"ghul-runtime\": {{ \"path\": \"../none\" }}")
 
-                let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")))
+                let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
 
                 assert !found.problem?
                 assert found.libraries.count == 0
@@ -118,7 +119,7 @@ namespace Ghul.Cli.Tests is
 
                 _project(Path.combine(scratch, "app"), "app", "\"wasm\"", "\"lib\": {{ \"git\": \"{url}\", \"tag\": \"v1.2.0\" }}")
 
-                let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")))
+                let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
 
                 assert !found.problem? else found.problem ?? ""
                 assert _names(found) =~ "lib@1.2.0" else _names(found)
@@ -137,7 +138,7 @@ namespace Ghul.Cli.Tests is
                 _project(Path.combine(scratch, "one"), "one", "\"wasm\"", "\"two\": {{ \"path\": \"../two\" }}")
                 _project(Path.combine(scratch, "two"), "two", "\"wasm\"", "\"one\": {{ \"path\": \"../one\" }}")
 
-                let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")))
+                let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
 
                 assert (found.problem ?? "") =~ "one depends on itself through two" else found.problem ?? "no problem"
             finally
@@ -153,9 +154,25 @@ namespace Ghul.Cli.Tests is
                 _project(Path.combine(scratch, "app"), "app", "\"wasm\"", "\"lib\": {{ \"path\": \"../lib\" }}")
                 _project(Path.combine(scratch, "lib"), "lib", "\"dotnet\"", "")
 
-                let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")))
+                let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
 
                 assert (found.problem ?? "") =~ "lib does not build for the wasm target" else found.problem ?? "no problem"
+            finally
+                _delete(scratch)
+            yrt
+        si
+
+        @Test()
+        a_library_that_does_not_build_for_the_target_being_built_is_a_problem() is
+            let scratch = _scratch()
+
+            try
+                _project(Path.combine(scratch, "app"), "app", "\"llvm\"", "\"lib\": {{ \"path\": \"../lib\" }}")
+                _project(Path.combine(scratch, "lib"), "lib", "\"wasm\"", "")
+
+                let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.LLVM)
+
+                assert (found.problem ?? "") =~ "lib does not build for the llvm target" else found.problem ?? "no problem"
             finally
                 _delete(scratch)
             yrt
@@ -168,7 +185,7 @@ namespace Ghul.Cli.Tests is
             try
                 _project(Path.combine(scratch, "app"), "app", "\"wasm\"", "\"lib\": {{ \"git\": \"https://example.com/lib\", \"branch\": \"main\" }}")
 
-                let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")))
+                let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
 
                 assert (found.problem ?? "") =~ "lib must be declared with a tag or a path" else found.problem ?? "no problem"
             finally
@@ -189,7 +206,7 @@ namespace Ghul.Cli.Tests is
 
                 let failed = cast LoadOutcome.FAILED(refused)
 
-                assert failed.messages |> Ghul.Pipes.any(m => m.contains("lib: source library dependencies are supported only for the wasm target"))
+                assert failed.messages |> Ghul.Pipes.any(m => m.contains("lib: source library dependencies are not supported for the dotnet target"))
 
                 assert isa LoadOutcome.LOADED(PROJECT_LOADER.load(scratch, "wasm"))
             finally

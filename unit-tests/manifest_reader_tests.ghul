@@ -44,6 +44,7 @@ namespace Ghul.Cli.Tests is
     UNKNOWN_KEY: string static => "{{\"name\": \"app\", \"nmae\": \"typo\"}}"
     UNKNOWN_OPTION: string static => "{{\"name\": \"app\", \"options\": {{\"under-score-access\": \"private\"}}}}"
     UNKNOWN_DEPENDENCY_KEY: string static => "{{\"name\": \"app\", \"dependencies\": {{\"lib\": {{\"git\": \"u\", \"tag\": \"v1\", \"rev\": \"abc\"}}}}}}"
+    LLVM_TARGET: string static => "{{\"name\": \"app\", \"targets\": [\"llvm\"]}}"
     UNKNOWN_TARGET: string static => "{{\"name\": \"app\", \"targets\": [\"dotnet\", \"js\"]}}"
     UNKNOWN_KIND: string static => "{{\"name\": \"app\", \"kind\": \"script\"}}"
     OPTION_WRONG_TYPE: string static => "{{\"name\": \"app\", \"options\": {{\"global-namespace\": \"yes\"}}}}"
@@ -164,6 +165,14 @@ namespace Ghul.Cli.Tests is
             else
                 Assert.fail("scratch is not a path dependency");
             fi
+        si
+
+        @Test()
+        a_manifest_can_list_the_llvm_target() is
+            let manifest = _read(LLVM_TARGET)!
+
+            assert manifest.targets.count == 1;
+            assert manifest.targets[0] == BuildTarget.LLVM;
         si
 
         @Test()

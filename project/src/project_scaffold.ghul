@@ -20,7 +20,7 @@ namespace Ghul.Project is
     /// manifest, a source file whose entry writes `hello`, and a
     /// `.gitignore` for the build output.
     class PROJECT_SCAFFOLD is
-        /// Parses `NAME [--target dotnet|wasm|dotnet,wasm]`, taking
+        /// Parses `NAME [--target <target>[,<target>...]]`, taking
         /// `default_target` where no `--target` is given.
         ///
         /// The default is passed in rather than decided here because which
@@ -40,14 +40,14 @@ namespace Ghul.Project is
 
                 if argument =~ "--target" then
                     if i + 1 >= arguments.count then
-                        return NEW_COMMAND_LINE(null, targets, "--target needs dotnet, wasm or dotnet,wasm")
+                        return NEW_COMMAND_LINE(null, targets, "--target needs one or more targets, separated by commas: {BUILD_TARGETS.names}")
                     fi
 
                     for name in arguments[i + 1].split([',']) do
-                        let target = _target_named(name.trim())
+                        let target = BUILD_TARGETS.named(name.trim())
 
                         if !target? then
-                            return NEW_COMMAND_LINE(null, targets, "unknown target {name}; expected dotnet or wasm")
+                            return NEW_COMMAND_LINE(null, targets, "unknown target {name}; expected one of {BUILD_TARGETS.names}")
                         fi
 
                         if !targets.contains(target) then
@@ -144,14 +144,5 @@ namespace Ghul.Project is
 
             return null
         si
-
-        _target_named(name: string) -> BuildTarget? static =>
-            if name =~ "dotnet" then
-                BuildTarget.DOTNET
-            elif name =~ "wasm" then
-                BuildTarget.WASM
-            else
-                null
-            fi
     si
 si

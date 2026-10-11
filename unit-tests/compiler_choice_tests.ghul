@@ -30,6 +30,22 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
+        llvm_build_rejects_a_named_compiler_below_its_minimum() is
+            let choice = COMPILER_CHOICE.choose(BuildTarget.LLVM, "65.4.0", "70.0.0")
+
+            assert isa CompilerChoice.PROBLEM(choice) else "expected PROBLEM"
+
+            let message = cast CompilerChoice.PROBLEM(choice).message
+
+            assert message.contains("65.4.0") /\ message.contains("llvm target") /\ message.contains("65.5.0") else message
+        si
+
+        @Test()
+        llvm_build_uses_a_named_compiler_at_its_minimum() is
+            assert _requested(COMPILER_CHOICE.choose(BuildTarget.LLVM, "65.5.0", null)) =~ "65.5.0"
+        si
+
+        @Test()
         wasm_build_rejects_a_named_compiler_below_the_minimum() is
             let choice = COMPILER_CHOICE.choose(BuildTarget.WASM, "64.11.0", "70.0.0")
 
