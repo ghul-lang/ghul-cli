@@ -98,6 +98,7 @@ namespace Ghul.Cli.Tests is
             _same(IO.Path.combine(root, "llvm", "app"), PROJECT_BUILD.output_path(project, BUILD_MODE(false, 2)))
             _same(IO.Path.combine(root, "llvm-debug", "app"), PROJECT_BUILD.output_path(project, BUILD_MODE(true, 0)))
             _same(IO.Path.combine(root, "llvm-debug-O2", "app"), PROJECT_BUILD.output_path(project, BUILD_MODE(true, 2)))
+            _same(IO.Path.combine(root, "dotnet", "app.exe"), PROJECT_BUILD.output_path(_project(ManifestKind.PROGRAM, BuildTarget.DOTNET), BUILD_MODE(false, 3)))
         si
 
         @Test()

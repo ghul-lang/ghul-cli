@@ -19,7 +19,7 @@ namespace Ghul.Project is
         /// - mode: how the build is made
         output_path(project: LOADED_PROJECT, mode: BUILD_MODE) -> string static is
             let target = COMPILER_ARGUMENTS.target_name(project.target)
-            let directory = Path.join([project.directory, "out", "{target}{mode.directory_suffix}"])
+            let directory = Path.join([project.directory, "out", "{target}{mode.directory_suffix(project.target)}"])
             let name = project.manifest.name
 
             let is_library = project.manifest.kind == ManifestKind.LIBRARY

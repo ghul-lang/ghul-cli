@@ -11,12 +11,15 @@ namespace Ghul.Project is
         default_optimise: int => if debug then 0 else 2 fi
 
         /// The suffix on `out/<target>` that keeps this build apart from the
-        /// others: `-debug` for a debug build, then `-O<n>` where the level
-        /// asked for is not the default one.
-        directory_suffix: string is
+        /// others: `-debug` for a debug build, then, for llvm, `-O<n>` where
+        /// the level asked for is not the default one. Only an llvm build is
+        /// given a level, so only an llvm build is kept apart by one.
+        ///
+        /// - target: the target being built
+        directory_suffix(target: BuildTarget) -> string is
             let debug_part = if debug then "-debug" else "" fi
 
-            if let level = optimise /\ level != default_optimise then
+            if let level = optimise /\ level != default_optimise /\ target == BuildTarget.LLVM then
                 return "{debug_part}-O{level}"
             fi
 
