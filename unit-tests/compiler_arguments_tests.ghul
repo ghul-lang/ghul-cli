@@ -65,6 +65,7 @@ namespace Ghul.Cli.Tests is
                         _manifest(ManifestKind.PROGRAM, _plain_options()),
                         BuildTarget.DOTNET,
                         _no_libraries(),
+                        false,
                         "out/app.exe",
                         LIST[string](["a.ghul", "b.ghul"]))))
         si
@@ -133,6 +134,7 @@ namespace Ghul.Cli.Tests is
                         _manifest(ManifestKind.PROGRAM, _plain_options()),
                         BuildTarget.WASM,
                         LIST[SOURCE_LIBRARY]([library]),
+                        false,
                         "out/app",
                         LIST[string](["main.ghul"]))))
         si
@@ -165,9 +167,17 @@ namespace Ghul.Cli.Tests is
         options_are_the_build_arguments_less_the_output_and_sources() is
             let manifest = _manifest(ManifestKind.LIBRARY, _options("private", true, [], ["X"], [], []))
             let options = COMPILER_ARGUMENTS.options(manifest, BuildTarget.WASM, _no_libraries())
-            let build = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.WASM, _no_libraries(), "out/x", LIST[string](["s.ghul"]))
+            let build = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.WASM, _no_libraries(), false, "out/x", LIST[string](["s.ghul"]))
 
             _same("{_joined(options)} -o out/x s.ghul", _joined(build))
+        si
+
+        @Test()
+        a_debug_build_passes_debug_after_the_options() is
+            let manifest = _manifest(ManifestKind.PROGRAM, _plain_options())
+            let build = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.LLVM, _no_libraries(), true, "out/app", LIST[string](["main.ghul"]))
+
+            _same("--target llvm --debug -o out/app main.ghul", _joined(build))
         si
     si
 si

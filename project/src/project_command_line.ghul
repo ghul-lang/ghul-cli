@@ -2,15 +2,17 @@ namespace Ghul.Project is
     use Collections.LIST
 
     /// What `ghul build` or `ghul run` was asked for in a project: the
-    /// target, if one was named, what the build overrides, and the
-    /// arguments for the program a run starts.
+    /// target, if one was named, whether to build with debug information,
+    /// what the build overrides, and the arguments for the program a run
+    /// starts.
     class PROJECT_COMMAND_LINE(
         target: string?,
+        debug: bool,
         overrides: BUILD_OVERRIDES,
         program_arguments: Collections.List[string],
         problem: string?
     ) is
-        /// Reads `[--target <name>] [--compiler <command>] [--library <name>=<path>]...
+        /// Reads `[--target <name>] [--debug] [--compiler <command>] [--library <name>=<path>]...
         /// [-- <arguments>...]`.
         ///
         /// - arguments: what follows the verb on the command line
@@ -18,6 +20,7 @@ namespace Ghul.Project is
         ///   are accepted, as they are for a run and not for a build
         parse(arguments: Collections.List[string], takes_program_arguments: bool) -> PROJECT_COMMAND_LINE static is
             let target: string? mut = null
+            let debug mut = false
             let overrides mut = BUILD_OVERRIDES.none()
             let program = LIST[string]()
             let i mut = 0
@@ -27,14 +30,17 @@ namespace Ghul.Project is
 
                 if argument =~ "--target" then
                     if i + 1 >= arguments.count then
-                        return PROJECT_COMMAND_LINE(null, overrides, program, "--target needs a target name")
+                        return PROJECT_COMMAND_LINE(null, false, overrides, program, "--target needs a target name")
                     fi
 
                     target = arguments[i + 1]
                     i = i + 2
+                elif argument =~ "--debug" then
+                    debug = true
+                    i = i + 1
                 elif BUILD_OVERRIDES.is_option(argument) then
                     if i + 1 >= arguments.count then
-                        return PROJECT_COMMAND_LINE(null, overrides, program, "{argument} needs a value")
+                        return PROJECT_COMMAND_LINE(null, false, overrides, program, "{argument} needs a value")
                     fi
 
                     let problem: string? mut = null
@@ -42,7 +48,7 @@ namespace Ghul.Project is
                     if let changed = BUILD_OVERRIDES.with(overrides, argument, arguments[i + 1], problem ref) then
                         overrides = changed
                     else
-                        return PROJECT_COMMAND_LINE(null, overrides, program, problem ?? "{argument} is not valid")
+                        return PROJECT_COMMAND_LINE(null, false, overrides, program, problem ?? "{argument} is not valid")
                     fi
 
                     i = i + 2
@@ -53,11 +59,11 @@ namespace Ghul.Project is
 
                     i = arguments.count
                 else
-                    return PROJECT_COMMAND_LINE(null, overrides, program, "unexpected argument {argument}")
+                    return PROJECT_COMMAND_LINE(null, false, overrides, program, "unexpected argument {argument}")
                 fi
             od
 
-            return PROJECT_COMMAND_LINE(target, overrides, program, null)
+            return PROJECT_COMMAND_LINE(target, debug, overrides, program, null)
         si
 
         /// Whether a run's arguments ask for the project rather than for a
@@ -66,7 +72,7 @@ namespace Ghul.Project is
         ///
         /// - arguments: what follows `run` on the command line
         names_project(arguments: Collections.List[string]) -> bool static =>
-            arguments.count == 0 \/ arguments[0] =~ "--target" \/ arguments[0] =~ "--" \/
+            arguments.count == 0 \/ arguments[0] =~ "--target" \/ arguments[0] =~ "--debug" \/ arguments[0] =~ "--" \/
             BUILD_OVERRIDES.is_option(arguments[0])
     si
 si
