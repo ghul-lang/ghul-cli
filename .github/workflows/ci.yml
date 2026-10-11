@@ -234,6 +234,13 @@ jobs:
           exit 1
         fi
 
+    # `ghul update` takes its update path only in the Native AOT build, so it
+    # is tested here, against a release mirror on the file system, rather
+    # than in the smoke test, which runs the managed build.
+    - name: Test ghul update
+      shell: bash
+      run: ./tests/update.sh build/ghul
+
     # The newest compiler release, rather than a pinned one: the archive is
     # what a user installs to get going, and a compiler a version behind is
     # what they then have to update. The job fails if that release has no
