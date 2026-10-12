@@ -416,6 +416,7 @@ namespace Ghul.Cli is
         out.write_line("       ghul run [--no-cache] <script> [args...]")
         out.write_line("       ghul compile [--no-cache] <script.ghul>")
         out.write_line("       ghul new <name> [--target <target>[,<target>...]]")
+        out.write_line("       ghul rosetta <task>[/<part>] [<directory>]")
         out.write_line("       ghul build [--target <name>] [--debug] [--optimise <0-3>]")
         out.write_line("       ghul run [--target <name>] [--debug] [--optimise <0-3>] [-- args...]")
         out.write_line("       ghul project response-file --output <path> [--source-globs <path>] [--target <name>]")
@@ -516,6 +517,116 @@ namespace Ghul.Cli is
 
         return 0
     si
+
+    // Fetches a Rosetta Code solution from ghul-rosetta-code into a project
+    // to build and run: `ghul rosetta <slug>[/<part>] [<directory>]`. The
+    // index says where the solution is and what it needs; its source and
+    // the files it reads are fetched at the commit the index was made from.
+    // GHUL_ROSETTA_INDEX names another index and GHUL_ROSETTA_REPOSITORY a
+    // base to fetch the files from, either as an http or a file URL.
+    cmd_rosetta(rest: Collections.List[string]) -> int is
+        if rest.count < 1 \/ rest.count > 2 then
+            Std.error.write_line("usage: ghul rosetta <task>[/<part>] [<directory>]")
+            return 1
+        fi
+
+        let index_url = System.Environment.get_environment_variable("GHUL_ROSETTA_INDEX") ?? Ghul.Project.ROSETTA_TASK.INDEX_URL
+        let index = LLVM_TOOLCHAIN.fetch(index_url)
+        let index_bytes = index.bytes
+
+        if !index_bytes? then
+            Std.error.write_line("ghul: the Rosetta Code index cannot be read: {index.problem ?? index_url}")
+            return 1
+        fi
+
+        let found = Ghul.Project.ROSETTA_TASK.find(System.Text.Encoding.utf8.get_string(index_bytes), rest[0], Host.HOST.has_dotnet())
+
+        if let problem: string = found.problem then
+            Std.error.write_line("ghul: {problem}")
+            return 1
+        fi
+
+        let part = found.part!
+
+        if part.targets.count == 0 then
+            Std.error.write_line("ghul: {part.id} builds for no target this machine has")
+            return 1
+        fi
+
+        let directory = Path.get_full_path(if rest.count > 1 then rest[1] else Ghul.Project.ROSETTA_TASK.directory_name(part) fi)
+        let name = Path.get_file_name(Path.trim_ending_directory_separator(directory)) ?? part.id
+
+        if Directory.exists(directory) /\ Directory.get_file_system_entries(directory).count > 0 then
+            Std.error.write_line("ghul: {directory} already exists and is not empty")
+            return 1
+        fi
+
+        let repository = System.Environment.get_environment_variable("GHUL_ROSETTA_REPOSITORY")
+        let url = (path: string) => if let base = repository then "{base}/{path}" else Ghul.Project.ROSETTA_TASK.file_url(found.commit, path) fi
+
+        // Everything is fetched before anything is written, so a file that
+        // cannot be read leaves no half-made project behind.
+        let fetched = Collections.LIST[(path: string, bytes: ubyte[])]()
+        let source = LLVM_TOOLCHAIN.fetch(url(part.source))
+        let source_bytes = source.bytes
+
+        if !source_bytes? then
+            Std.error.write_line("ghul: {part.id} cannot be fetched: {source.problem ?? part.source}")
+            return 1
+        fi
+
+        fetched.add((path = Path.join(["src", Path.get_file_name(part.source) ?? "main.ghul"]), bytes = source_bytes))
+
+        for file in part.files do
+            let read = LLVM_TOOLCHAIN.fetch(url(file.path))
+            let read_bytes = read.bytes
+
+            if !read_bytes? then
+                Std.error.write_line("ghul: {file.name}, which {part.id} reads, cannot be fetched: {read.problem ?? file.path}")
+                return 1
+            fi
+
+            fetched.add((path = file.name, bytes = read_bytes))
+        od
+
+        let manifest = Ghul.Project.ROSETTA_TASK.manifest_text(name, part, part.targets, found.raster_version)
+        let check = Ghul.Project.MANIFEST_READER.read(manifest, Path.join([directory, Ghul.Project.MANIFEST_LOCATION.FILE_NAME]))
+
+        if let problems: Ghul.Project.ReadOutcome.PROBLEMS = check then
+            let first = if problems.problems.count > 0 then problems.problems[0].describe() else "it cannot be read" fi
+
+            Std.error.write_line("ghul: {name} cannot name a project: {first}")
+            return 1
+        fi
+
+        Directory.create_directory(Path.join([directory, "src"]))
+        File.write_all_text(Path.join([directory, Ghul.Project.MANIFEST_LOCATION.FILE_NAME]), manifest)
+        File.write_all_text(Path.join([directory, ".gitignore"]), "out/\n")
+
+        for file in fetched do
+            File.write_all_bytes(Path.join([directory, file.path]), file.bytes)
+        od
+
+        let target = if part.targets.count > 1 then " --target {Ghul.Project.BUILD_TARGETS.name(part.targets[0])}" else "" fi
+        let arguments = if part.args.count > 0 then " -- {string.join(" ", [_quoted(a) for a in part.args])}" else "" fi
+
+        Std.error.write_line("ghul: fetched {part.id} into {directory}; cd into it and ghul run{target}{arguments}")
+
+        if part.raster /\ !(part.targets |> any(t => t == Ghul.Project.BuildTarget.DOTNET)) /\ Host.HOST.has_dotnet() then
+            Std.error.write_line("ghul: it draws with ghul.raster, which builds for wasm and llvm but not dotnet")
+        fi
+
+        return 0
+    si
+
+    // An argument as a shell reads it back: as it is, or in single quotes
+    // where it holds anything a shell would split or expand.
+    _quoted(argument: string) -> string =>
+        if argument.length > 0 /\ argument |> Ghul.Pipes.all(c => char.is_letter_or_digit(c) \/ "-_./=:,+".contains(c)) then
+            argument
+        else
+            "'{argument.replace("'", "'\\''")}'"
+        fi
 
     cmd_install_compiler(rest: Collections.List[string]) -> int is
         // `--llvm` installs the compiler built for llvm, into its own store.
@@ -1351,7 +1462,7 @@ namespace Ghul.Cli is
 
     // Whether `word` is one of the commands, rather than a script to run.
     is_verb(word: string) -> bool =>
-        ["run", "compile", "new", "build", "project", "install-compiler", "update", "cache", "repl", "version"]
+        ["run", "compile", "new", "rosetta", "build", "project", "install-compiler", "update", "cache", "repl", "version"]
             |> any(verb => verb =~ word)
 
     entry(args: string[]) -> int is
@@ -1402,6 +1513,10 @@ namespace Ghul.Cli is
 
         if verb =~ "new" then
             return cmd_new(rest)
+        fi
+
+        if verb =~ "rosetta" then
+            return cmd_rosetta(rest)
         fi
 
         if verb =~ "build" then
