@@ -1,0 +1,247 @@
+namespace Ghul.Project is
+    use Collections.LIST
+    use Ghul.Pipes
+    use System.Text.Json.JsonDocument
+    use System.Text.Json.JsonElement
+    use System.Text.Json.JsonValueKind
+
+    /// One runnable solution to a Rosetta Code task, as ghul-rosetta-code's
+    /// index describes it.
+    ///
+    /// - id: the part's id, the task's slug or `<slug>/<NN-name>`
+    /// - source: the path of its source in the repository
+    /// - files: the files it reads, by the name it opens each under and the
+    ///   path of the file in the repository
+    /// - args: the command line it is run with
+    /// - raster: whether it draws with ghul.raster
+    /// - targets: the targets it builds for, the one to run first
+    class ROSETTA_PART(
+        id: string,
+        source: string,
+        files: Collections.List[(name: string, path: string)],
+        args: Collections.List[string],
+        raster: bool,
+        targets: Collections.List[BuildTarget]
+    ) is si
+
+    /// What the index says about the solution `ghul rosetta` was asked for,
+    /// or why it says nothing.
+    ///
+    /// - part: the solution, or null where there is a problem
+    /// - commit: the commit the index was generated from, or null
+    /// - raster_version: the ghul.raster release the tasks are tested with,
+    ///   or null
+    /// - problem: what was wrong, or null
+    class ROSETTA_LOOKUP(
+        part: ROSETTA_PART?,
+        commit: string?,
+        raster_version: string?,
+        problem: string?
+    ) is si
+
+    /// Turns a Rosetta Code solution from ghul-rosetta-code into a project:
+    /// where the index is, which part of a task is meant, the targets it
+    /// builds for, and the manifest that builds it.
+    class ROSETTA_TASK is
+        /// Where the index is published.
+        INDEX_URL: string static => "https://raw.githubusercontent.com/ghul-lang/ghul-rosetta-code/index/index.json"
+
+        /// The URL of `path` in the repository at `commit`, or on its main
+        /// branch where the commit is not known.
+        ///
+        /// - commit: the commit to read at, or null
+        /// - path: a path in the repository, with `/` separators
+        file_url(commit: string?, path: string) -> string static =>
+            "https://raw.githubusercontent.com/ghul-lang/ghul-rosetta-code/{commit ?? "main"}/{path}"
+
+        /// Finds `name` in the index text `index`: a task's slug, which
+        /// means its only part, or a part's id.
+        ///
+        /// - index: the text of index.json
+        /// - name: a slug, or `<slug>/<NN-name>`
+        /// - dotnet: whether this machine can build for the dotnet target
+        find(index: string, name: string, dotnet: bool) -> ROSETTA_LOOKUP static is
+            let document = _parse(index)
+
+            if !document? then
+                return ROSETTA_LOOKUP(null, null, null, "the Rosetta Code index cannot be read")
+            fi
+
+            let root = document.root_element
+            let commit = _string(root, "commit")
+            let raster_version = _string(root, "raster_version")
+            let slug = name.split(['/'])[0]
+
+            let tasks: JsonElement mut
+
+            if !root.try_get_property("tasks", tasks ref) \/ tasks.value_kind != JsonValueKind.ARRAY then
+                return ROSETTA_LOOKUP(null, commit, raster_version, "the Rosetta Code index lists no tasks")
+            fi
+
+            for task in tasks.enumerate_array() do
+                if (_string(task, "slug") ?? "") !~ slug then
+                    continue
+                fi
+
+                let parts = LIST[JsonElement]()
+                let found: JsonElement mut
+
+                if task.try_get_property("parts", found ref) /\ found.value_kind == JsonValueKind.ARRAY then
+                    parts.add_range(found.enumerate_array())
+                fi
+
+                for part in parts do
+                    if (name =~ slug /\ parts.count == 1) \/ (_string(part, "id") ?? "") =~ name then
+                        return ROSETTA_LOOKUP(_part(part, dotnet), commit, raster_version, null)
+                    fi
+                od
+
+                if name =~ slug then
+                    let ids = string.join(", ", [_string(p, "id") ?? "" for p in parts])
+
+                    return ROSETTA_LOOKUP(null, commit, raster_version, "{slug} is solved more than one way; name one of {ids}")
+                fi
+
+                return ROSETTA_LOOKUP(null, commit, raster_version, "{slug} has no part {name}")
+            od
+
+            return ROSETTA_LOOKUP(null, commit, raster_version, "no Rosetta Code task {slug} is solved in ghul-rosetta-code")
+        si
+
+        /// The name of the project directory for `part`: the task's slug,
+        /// with the part's own name after it for a task solved more than
+        /// one way.
+        ///
+        /// - part: the solution
+        directory_name(part: ROSETTA_PART) -> string static => part.id.replace('/', '-')
+
+        /// The manifest of a program named `name` that builds `part` for
+        /// `targets` from the sources under `src/`, compiling in ghul.raster
+        /// at `raster_version` where the part draws.
+        ///
+        /// - name: the project's name
+        /// - part: the solution
+        /// - targets: the targets the project builds for
+        /// - raster_version: the ghul.raster release to compile in, or null
+        manifest_text(name: string, part: ROSETTA_PART, targets: Collections.List[BuildTarget], raster_version: string?) -> string static is
+            let raster = raster_release(raster_version, targets)
+            let quoted = string.join(", ", targets |> map(t => "\"{BUILD_TARGETS.name(t)}\""))
+
+            let dependencies =
+                if part.raster then
+                    ",\n"
+                    "    \"dependencies\": {{\n"
+                    "        \"ghul-raster\": {{ \"git\": \"https://github.com/ghul-lang/ghul-raster\", \"tag\": \"v{raster}\" }}\n"
+                    "    }}"
+                else
+                    ""
+                fi
+
+            return
+                "{{\n"
+                "    \"name\": \"{name}\",\n"
+                "    \"kind\": \"program\",\n"
+                "    \"targets\": [{quoted}],\n"
+                "    \"sources\": [\"src/**/*.ghul\"]{dependencies}\n"
+                "}}\n"
+        si
+
+        /// The ghul.raster release a project building for `targets` compiles
+        /// in: the one the tasks are tested with, or the first that builds
+        /// for llvm where that is a target and the tested one is older.
+        ///
+        /// - tested: the release the tasks are tested with, or null
+        /// - targets: the targets the project builds for
+        raster_release(tested: string?, targets: Collections.List[BuildTarget]) -> string static is
+            let floor = if targets |> any(t => t == BuildTarget.LLVM) then RASTER_FOR_LLVM else RASTER_FOR_WASM fi
+
+            if let version: string = tested then
+                return if COMPILER_CHOICE.is_older_than(version, floor) then floor else version fi
+            fi
+
+            return floor
+        si
+
+        /// The first ghul.raster release that builds for llvm.
+        RASTER_FOR_LLVM: string static => "0.13.0"
+
+        /// The first ghul.raster release that builds for wasm.
+        RASTER_FOR_WASM: string static => "0.12.0"
+
+        // The targets a part builds for, the one to run first: .NET where
+        // the machine has it and the part draws nothing, since a dotnet
+        // build takes no source library; native where the index says the
+        // part passes there; WebAssembly last, being the slowest to run.
+        _targets(part: JsonElement, raster: bool, dotnet: bool) -> LIST[BuildTarget] static is
+            let targets = LIST[BuildTarget]()
+
+            if dotnet /\ !raster then
+                targets.add(BuildTarget.DOTNET)
+            fi
+
+            if _bool(part, "native") then
+                targets.add(BuildTarget.LLVM)
+            fi
+
+            if _bool(part, "wasm") then
+                targets.add(BuildTarget.WASM)
+            fi
+
+            if targets.count == 0 /\ !raster then
+                targets.add(BuildTarget.DOTNET)
+            fi
+
+            return targets
+        si
+
+        _part(part: JsonElement, dotnet: bool) -> ROSETTA_PART static is
+            let files = LIST[(name: string, path: string)]()
+            let args = LIST[string]()
+            let found: JsonElement mut
+
+            if part.try_get_property("files", found ref) /\ found.value_kind == JsonValueKind.ARRAY then
+                for file in found.enumerate_array() do
+                    if let name = _string(file, "name"), path = _string(file, "path") then
+                        files.add((name = name, path = path))
+                    fi
+                od
+            fi
+
+            if part.try_get_property("args", found ref) /\ found.value_kind == JsonValueKind.ARRAY then
+                for argument in found.enumerate_array() do
+                    if argument.value_kind == JsonValueKind.STRING then
+                        args.add(argument.get_string() ?? "")
+                    fi
+                od
+            fi
+
+            let raster = _bool(part, "raster")
+
+            return ROSETTA_PART(_string(part, "id") ?? "", _string(part, "source") ?? "", files, args, raster, _targets(part, raster, dotnet))
+        si
+
+        _parse(text: string) -> JsonDocument? static is
+            try
+                return JsonDocument.parse(text, _)
+            catch e: System.Text.Json.JsonException
+                return null
+            yrt
+        si
+
+        _string(element: JsonElement, name: string) -> string? static is
+            let found: JsonElement mut
+
+            if element.try_get_property(name, found ref) /\ found.value_kind == JsonValueKind.STRING then
+                return found.get_string()
+            fi
+
+            return null
+        si
+
+        _bool(element: JsonElement, name: string) -> bool static is
+            let found: JsonElement mut
+
+            return element.try_get_property(name, found ref) /\ found.value_kind == JsonValueKind.TRUE
+        si
+    si
+si

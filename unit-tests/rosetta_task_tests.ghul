@@ -1,0 +1,145 @@
+namespace Ghul.Cli.Tests is
+    use Collections.LIST
+
+    use Ghul.Project.BuildTarget
+    use Ghul.Project.BUILD_TARGETS
+    use Ghul.Project.MANIFEST_READER
+    use Ghul.Project.ROSETTA_TASK
+    use Ghul.Project.ReadOutcome
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // What `ghul rosetta` reads from ghul-rosetta-code's index, and the
+    // manifest it writes for a solution.
+    @TestClass()
+    class ROSETTA_TASK_TESTS is
+        init() is si
+
+        _same(expected: string, actual: string) is
+            assert actual =~ expected else "expected '{expected}', got '{actual}'"
+        si
+
+        _targets(targets: Collections.List[BuildTarget]) -> string =>
+            string.join(",", [BUILD_TARGETS.name(t) for t in targets])
+
+        _index: string =>
+            "{{ \"version\": 1, \"commit\": \"abc123\", \"raster_version\": \"0.13.0\", \"tasks\": [\n"
+            "  {{ \"slug\": \"abc-words\", \"parts\": [\n"
+            "    {{ \"id\": \"abc-words\", \"source\": \"tasks/abc-words/abc-words.ghul\", \"wasm\": true, \"native\": true,\n"
+            "      \"files\": [{{ \"name\": \"unixdict.txt\", \"path\": \"data/unixdict.txt\" }}], \"args\": [\"first\", \"second\"], \"raster\": false }} ] }},\n"
+            "  {{ \"slug\": \"fern\", \"parts\": [\n"
+            "    {{ \"id\": \"fern\", \"source\": \"tasks/fern/fern.ghul\", \"wasm\": true, \"native\": false, \"files\": [], \"args\": [], \"raster\": true }} ] }},\n"
+            "  {{ \"slug\": \"pair\", \"parts\": [\n"
+            "    {{ \"id\": \"pair/01-one\", \"source\": \"tasks/pair/01-one/01-one.ghul\", \"wasm\": false, \"native\": false }},\n"
+            "    {{ \"id\": \"pair/02-two\", \"source\": \"tasks/pair/02-two/02-two.ghul\", \"wasm\": false, \"native\": true }} ] }}\n"
+            "] }}\n"
+
+        @Test()
+        a_slug_finds_its_only_part_with_its_files_and_arguments() is
+            let found = ROSETTA_TASK.find(_index, "abc-words", true)
+
+            assert !found.problem? else found.problem ?? ""
+            assert found.part?
+
+            let part = found.part!
+
+            _same("abc-words", part.id)
+            _same("tasks/abc-words/abc-words.ghul", part.source)
+            _same("unixdict.txt=data/unixdict.txt", string.join(";", ["{f.name}={f.path}" for f in part.files]))
+            _same("first second", string.join(" ", part.args))
+            _same("abc123", found.commit ?? "")
+            _same("0.13.0", found.raster_version ?? "")
+        si
+
+        @Test()
+        a_part_runs_first_on_dotnet_then_native_then_wasm() is
+            let found = ROSETTA_TASK.find(_index, "abc-words", true)
+
+            _same("dotnet,llvm,wasm", _targets(found.part!.targets))
+        si
+
+        @Test()
+        a_machine_without_dotnet_leaves_the_dotnet_target_out() is
+            let found = ROSETTA_TASK.find(_index, "abc-words", false)
+
+            _same("llvm,wasm", _targets(found.part!.targets))
+        si
+
+        @Test()
+        a_part_that_draws_leaves_the_dotnet_target_out() is
+            let found = ROSETTA_TASK.find(_index, "fern", true)
+
+            assert found.part!.raster
+            _same("wasm", _targets(found.part!.targets))
+        si
+
+        @Test()
+        a_task_solved_more_than_one_way_names_its_parts() is
+            let found = ROSETTA_TASK.find(_index, "pair", true)
+
+            assert !found.part?
+            _same("pair is solved more than one way; name one of pair/01-one, pair/02-two", found.problem ?? "")
+        si
+
+        @Test()
+        a_part_id_finds_that_part() is
+            let found = ROSETTA_TASK.find(_index, "pair/02-two", true)
+
+            _same("tasks/pair/02-two/02-two.ghul", found.part!.source)
+            _same("dotnet,llvm", _targets(found.part!.targets))
+            _same("pair-02-two", ROSETTA_TASK.directory_name(found.part!))
+        si
+
+        @Test()
+        an_unknown_slug_or_part_says_so() is
+            _same("no Rosetta Code task nothing is solved in ghul-rosetta-code", ROSETTA_TASK.find(_index, "nothing", true).problem ?? "")
+            _same("pair has no part pair/03-three", ROSETTA_TASK.find(_index, "pair/03-three", true).problem ?? "")
+        si
+
+        @Test()
+        an_index_that_is_not_json_says_so() is
+            assert ROSETTA_TASK.find("not json", "abc-words", true).problem?
+        si
+
+        @Test()
+        a_file_is_fetched_at_the_index_commit_or_from_main() is
+            _same("https://raw.githubusercontent.com/ghul-lang/ghul-rosetta-code/abc123/data/unixdict.txt", ROSETTA_TASK.file_url("abc123", "data/unixdict.txt"))
+            _same("https://raw.githubusercontent.com/ghul-lang/ghul-rosetta-code/main/data/unixdict.txt", ROSETTA_TASK.file_url(null, "data/unixdict.txt"))
+        si
+
+        @Test()
+        the_manifest_of_a_part_that_draws_compiles_in_ghul_raster() is
+            let found = ROSETTA_TASK.find(_index, "fern", true)
+            let text = ROSETTA_TASK.manifest_text("fern", found.part!, found.part!.targets, found.raster_version)
+
+            let read = MANIFEST_READER.read(text, "/tmp/fern/ghul-project.json")
+
+            if let problems: ReadOutcome.PROBLEMS = read then
+                assert false else "the manifest does not read: {problems.problems[0].describe()}\n{text}"
+            fi
+
+            assert text.contains("\"tag\": \"v0.13.0\"") else text
+        si
+
+        @Test()
+        ghul_raster_is_taken_at_the_tested_release_or_the_first_that_builds_for_the_targets() is
+            let wasm = LIST[BuildTarget]([BuildTarget.WASM])
+            let both = LIST[BuildTarget]([BuildTarget.LLVM, BuildTarget.WASM])
+
+            _same("0.12.1", ROSETTA_TASK.raster_release("0.12.1", wasm))
+            _same("0.13.0", ROSETTA_TASK.raster_release("0.12.1", both))
+            _same("0.14.2", ROSETTA_TASK.raster_release("0.14.2", both))
+            _same("0.13.0", ROSETTA_TASK.raster_release(null, both))
+        si
+
+        @Test()
+        the_manifest_of_a_part_that_draws_nothing_has_no_dependencies() is
+            let found = ROSETTA_TASK.find(_index, "abc-words", true)
+            let text = ROSETTA_TASK.manifest_text("abc-words", found.part!, found.part!.targets, found.raster_version)
+
+            assert !text.contains("dependencies") else text
+            assert text.contains("\"targets\": [\"dotnet\", \"llvm\", \"wasm\"]") else text
+        si
+    si
+si

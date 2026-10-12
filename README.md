@@ -109,6 +109,7 @@ ghul [--no-cache] [--] <script> [args...]   # run a script (see below)
 ghul run [--no-cache] <script> [args...]    # run any file as a script
 ghul compile [--no-cache] <script.ghul>     # compile, and print the path to the result
 ghul new <name> [--target <names>]           # create a project to build and run
+ghul rosetta <task>[/<part>] [<directory>]  # fetch a Rosetta Code solution as a project
 ghul build [--target <name>] [--debug] [--optimise <0-3>] [overrides]  # build the project in this directory
 ghul run [--target <name>] [--debug] [--optimise <0-3>] [overrides] [-- args...]  # build, then run it
 ghul project response-file|compiler         # what editors read (see below)
@@ -300,6 +301,31 @@ beside the machine code, and `gdb` steps through it:
 ghul build --debug
 objdump -d -S out/llvm-debug/<name>
 gdb out/llvm-debug/<name>
+```
+
+### Rosetta Code solutions
+
+`ghul rosetta <task>` fetches a solution from
+[ghul-rosetta-code](https://github.com/ghul-lang/ghul-rosetta-code) into a project, named by the
+task's slug as it appears in the repository's `tasks/` and in its address on ghul.dev, such as
+`100-doors`. A task solved more than one way is named with the part as well,
+`accumulator-factory/02-widening-from-integer-to-float`, and naming the task alone lists its
+parts. The project goes into a directory of that name, or the one given after it.
+
+The repository's index says what the solution needs, and everything is fetched at the commit
+the index was made from: its source into `src/`, and any file it reads beside the manifest,
+which is where it is run from. The manifest lists the targets the solution passes on: `dotnet`
+where this machine has .NET, `llvm` where it builds and passes as a native executable, and `wasm`
+where it runs as WebAssembly. One that draws with ghul.raster compiles it in from source, which a
+`dotnet` build cannot do, so it builds for `llvm` and `wasm` only. `ghul rosetta` prints the
+`ghul run` that runs it, with its command-line arguments where it takes any.
+
+```sh
+ghul rosetta 100-doors
+cd 100-doors
+ghul run --target llvm
+```
+
 ```
 
 ## tools for editors
