@@ -4,6 +4,7 @@ namespace Ghul.Cli.Tests is
 
     use Ghul.Project.BUILD_OVERRIDES
     use Ghul.Project.BuildTarget
+    use Ghul.Project.CompilerBuild
     use Ghul.Project.DEPENDENCY
     use Ghul.Project.MANIFEST
     use Ghul.Project.MANIFEST_OPTIONS
@@ -29,7 +30,8 @@ namespace Ghul.Cli.Tests is
                 LIST[string](["src/**/*.ghul"]),
                 null,
                 MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](), null),
-                dependencies)
+                dependencies,
+                CompilerBuild.DEFAULT)
 
         @Test()
         a_build_command_line_reads_the_compiler_and_libraries() is

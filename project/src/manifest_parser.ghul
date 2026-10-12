@@ -33,6 +33,7 @@ namespace Ghul.Project is
             let targets = _targets(root)
             let sources = _sources(root)
             let compiler = _string_member(root, "compiler")
+            let compiler_build = _compiler_build(root)
             let options = _options(root)
             let dependencies = _dependencies(root)
 
@@ -43,7 +44,7 @@ namespace Ghul.Project is
                 return null
             fi
 
-            return MANIFEST(name, version, kind, targets, sources, compiler, options, dependencies)
+            return MANIFEST(name, version, kind, targets, sources, compiler, options, dependencies, compiler_build)
         si
 
         // A member read as a string, or nothing when the key is absent.
@@ -449,12 +450,40 @@ namespace Ghul.Project is
             return targets
         si
 
+        // Which build of the compiler the project names, `default` where it
+        // names none.
+        _compiler_build(root: JsonElement) -> CompilerBuild is
+            let value: JsonElement mut
+
+            if !root.try_get_property("compiler-build", value ref) then
+                return CompilerBuild.DEFAULT
+            fi
+
+            if value.value_kind != JsonValueKind.STRING then
+                _report("compiler-build", "the value is not a string")
+                return CompilerBuild.DEFAULT
+            fi
+
+            let text = value.get_string()
+
+            if text =~ "llvm" then
+                return CompilerBuild.LLVM
+            fi
+
+            if text !~ "default" then
+                _report("compiler-build", "unknown compiler build '{text}'")
+            fi
+
+            return CompilerBuild.DEFAULT
+        si
+
         // The keys a manifest's own object may carry, so a misspelling is
         // reported rather than read as a key that does nothing.
         _top_level_keys() -> Collections.LIST[string] static is
             let keys = LIST[string]()
 
             keys.add("compiler")
+            keys.add("compiler-build")
             keys.add("dependencies")
             keys.add("kind")
             keys.add("name")

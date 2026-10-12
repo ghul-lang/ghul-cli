@@ -1,0 +1,53 @@
+namespace Ghul.Cli.Tests is
+    use Ghul.Repl.Host.COMPILER_STORE
+    use Ghul.Repl.Host.HOST
+    use Ghul.Repl.Host.NATIVE_COMPILER_DOWNLOAD
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // Where a native compiler download looks for its archive, for the
+    // Native AOT build and the llvm-built one. Nothing is fetched.
+    @TestClass()
+    class NATIVE_COMPILER_DOWNLOAD_TESTS is
+        init() is si
+
+        _download(is_llvm: bool) -> NATIVE_COMPILER_DOWNLOAD =>
+            NATIVE_COMPILER_DOWNLOAD(COMPILER_STORE("unused", is_llvm), "https://example.test/releases")
+
+        @Test()
+        the_llvm_triple__is_named_for_linux_x64_only() is
+            assert NATIVE_COMPILER_DOWNLOAD.llvm_triple("linux-x64") =~ "x86_64-unknown-linux-musl"
+            assert !NATIVE_COMPILER_DOWNLOAD.llvm_triple("osx-arm64")?
+        si
+
+        @Test()
+        an_llvm_store__fetches_the_archive_named_with_the_triple() is
+            let (url, failure) = _download(true).archive_url("65.20.0")
+
+            if HOST.rid() =~ "linux-x64" then
+                assert url =~ "https://example.test/releases/v65.20.0/ghul-compiler-llvm-x86_64-unknown-linux-musl.tar.gz" else url ?? "null"
+            else
+                assert !url? /\ (failure ?? "").contains("llvm-built")
+            fi
+        si
+
+        @Test()
+        a_default_store__fetches_the_native_aot_archive() is
+            let (url, _) = _download(false).archive_url("65.20.0")
+
+            if let rid: string = HOST.rid() then
+                assert url =~ "https://example.test/releases/v65.20.0/ghul-compiler-{rid}.tar.gz" else url ?? "null"
+            fi
+        si
+
+        @Test()
+        the_llvm_store__is_separate_from_the_default_store() is
+            let llvm = COMPILER_STORE.llvm_for_this_user()
+            let ordinary = COMPILER_STORE.for_this_user()
+
+            assert llvm.is_llvm /\ !ordinary.is_llvm
+            assert llvm.root !~ ordinary.root
+        si
+    si
+si

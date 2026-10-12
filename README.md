@@ -112,7 +112,7 @@ ghul new <name> [--target <names>]           # create a project to build and run
 ghul build [--target <name>] [--debug] [--optimise <0-3>] [overrides]  # build the project in this directory
 ghul run [--target <name>] [--debug] [--optimise <0-3>] [overrides] [-- args...]  # build, then run it
 ghul project response-file|compiler         # what editors read (see below)
-ghul install-compiler [version]             # install or update ghul.compiler
+ghul install-compiler [--llvm] [version]    # install or update ghul.compiler
 ghul update [--version <tag>] [--check]     # update ghul itself
 ghul cache clear                            # empty the compiled-script cache
 ghul repl [--no-server] [--no-default-use]  # start an interactive session
@@ -142,6 +142,12 @@ version, it installs the latest release, or updates to it. With a version, it
 installs exactly that version, older or newer, and does nothing if that
 version is already installed. `GHUL_COMPILER_FEED` names a different feed to
 download from, for a mirror or an offline network.
+
+`ghul install-compiler --llvm` installs the compiler built with the llvm
+target instead, a native executable that builds for the `wasm` and `llvm`
+targets only, into a store of its own. A project chooses it with
+`"compiler-build": "llvm"` in its manifest; `"default"`, or no entry, keeps
+the ordinary compiler. It is published for Linux on x64 only.
 
 `ghul update` updates a `ghul` installed without .NET to the latest release,
 or to the release `--version` names, older or newer. It runs that release's

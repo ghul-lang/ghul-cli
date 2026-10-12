@@ -197,6 +197,10 @@ namespace Ghul.Cli is
     // reads it as well as one with the SDK, and both land on the same
     // release, and the archive that release publishes for this platform.
     install_compiler(store: Host.COMPILER_STORE, version: string, say: (string) -> void) -> string? is
+        if store.is_llvm then
+            return Host.NATIVE_COMPILER_DOWNLOAD.of(store).install(version, say)
+        fi
+
         if Host.HOST.has_dotnet() then
             return Host.COMPILER_DOWNLOAD.of(store).install(version, say)
         fi
@@ -416,7 +420,7 @@ namespace Ghul.Cli is
         out.write_line("       ghul run [--target <name>] [--debug] [--optimise <0-3>] [-- args...]")
         out.write_line("       ghul project response-file --output <path> [--source-globs <path>] [--target <name>]")
         out.write_line("       ghul project compiler")
-        out.write_line("       ghul install-compiler [version]")
+        out.write_line("       ghul install-compiler [--llvm] [version]")
         out.write_line("       ghul update [--version <tag>] [--check]")
         out.write_line("       ghul cache clear")
         out.write_line("       ghul repl")
@@ -514,8 +518,12 @@ namespace Ghul.Cli is
     si
 
     cmd_install_compiler(rest: Collections.List[string]) -> int is
-        let version: string? = if rest.count > 0 then rest[0] else null fi
-        let store = Host.COMPILER_STORE.for_this_user()
+        // `--llvm` installs the compiler built for llvm, into its own store.
+        let llvm = rest |> any(argument => argument =~ "--llvm")
+        let positional = [argument for argument in rest if argument !~ "--llvm"]
+
+        let version: string? = if positional.count > 0 then positional[0] else null fi
+        let store = if llvm then Host.COMPILER_STORE.llvm_for_this_user() else Host.COMPILER_STORE.for_this_user() fi
 
         if let wanted: string = version /\ store.is_installed(wanted) then
             Std.error.write_line("ghul: ghul.compiler {wanted} is already installed")
@@ -1081,6 +1089,17 @@ namespace Ghul.Cli is
         mode: Ghul.Project.BUILD_MODE,
         say: (string) -> void
     ) -> (compiler: Ghul.Project.COMPILER_PROCESS, version: string, runtime_assembly: string?)? is
+        // A project that names the llvm-built compiler is compiled with it,
+        // from its own store; it compiles for wasm and llvm only.
+        let wants_llvm = project.manifest.compiler_build == Ghul.Project.CompilerBuild.LLVM
+
+        if wants_llvm /\ project.target == Ghul.Project.BuildTarget.DOTNET then
+            say("the llvm-built compiler cannot build for the dotnet target")
+            return null
+        fi
+
+        let chosen = if wants_llvm then Host.COMPILER_STORE.llvm_for_this_user() else store fi
+
         let request = Ghul.Project.COMPILER_REQUEST.from_environment(overrides.compiler_command, project.manifest.compiler_version)
 
         if let problem: Ghul.Project.CompilerRequest.PROBLEM = request then
@@ -1112,7 +1131,7 @@ namespace Ghul.Cli is
         let wanted: string? mut = null
 
         if isa Ghul.Project.CompilerRequest.LATEST(request) then
-            wanted = update_compiler_to_latest(store)
+            wanted = update_compiler_to_latest(chosen)
 
             if !wanted? then
                 say("could not install the latest ghul.compiler")
@@ -1122,13 +1141,13 @@ namespace Ghul.Cli is
             wanted = cast Ghul.Project.CompilerRequest.VERSION(request).version
         fi
 
-        if let version: string = project_compiler(store, project, wanted, mode, say) then
-            let command = store.command(version)
+        if let version: string = project_compiler(chosen, project, wanted, mode, say) then
+            let command = chosen.command(version)
 
             let compiler =
                 Ghul.Project.COMPILER_PROCESS(command.file_name, Collections.LIST[string](command.leading_arguments()))
 
-            return (compiler, version, store.runtime_assembly(version))
+            return (compiler, version, chosen.runtime_assembly(version))
         fi
 
         return null

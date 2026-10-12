@@ -6,6 +6,7 @@ namespace Ghul.Cli.Tests is
     use Ghul.Project.LibraryOutcome
     use Ghul.Project.BUILD_MODE
     use Ghul.Project.BuildTarget
+    use Ghul.Project.CompilerBuild
     use Ghul.Project.CORE_LIBRARY
     use Ghul.Project.RUNTIME_LIBRARY
     use Ghul.Project.DEPENDENCY
@@ -47,7 +48,8 @@ namespace Ghul.Cli.Tests is
                     LIST[string](["src/**/*.ghul"]),
                     null,
                     MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](), null),
-                    MAP[string, DEPENDENCY]()),
+                    MAP[string, DEPENDENCY](),
+                    CompilerBuild.DEFAULT),
                 IO.Path.combine("/", "project"),
                 target)
 

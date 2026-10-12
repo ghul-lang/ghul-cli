@@ -35,7 +35,24 @@ namespace Ghul.Repl.Host is
         // This user's store, under `XDG_CACHE_HOME` where that is set and
         // under `~/.cache` where it is not, as the library and script
         // caches beside it are.
-        for_this_user() -> COMPILER_STORE static is
+        for_this_user() -> COMPILER_STORE static =>
+            COMPILER_STORE(Path.join([_cache_base(), "ghul-cli", "compilers"]))
+
+        /// This user's store of the llvm-built compiler a release ships,
+        /// beside the other so the two builds of one version are held apart.
+        llvm_for_this_user() -> COMPILER_STORE static =>
+            COMPILER_STORE(Path.join([_cache_base(), "ghul-cli", "compilers-llvm"]), true)
+
+        /// Whether the store holds the llvm-built compiler, which compiles for
+        /// wasm and llvm only, rather than the managed or Native AOT one.
+        is_llvm: bool
+
+        /// - is_llvm: whether the store holds the llvm-built compiler
+        init(.., is_llvm: bool) is
+            self.is_llvm = is_llvm
+        si
+
+        _cache_base() -> string static is
             let xdg = System.Environment.get_environment_variable("XDG_CACHE_HOME")
 
             let base =
@@ -54,7 +71,7 @@ namespace Ghul.Repl.Host is
                     Path.join([directory, ".cache"])
                 fi
 
-            return COMPILER_STORE(Path.join([base, "ghul-cli", "compilers"]))
+            return base
         si
 
         // Where a version is held.
