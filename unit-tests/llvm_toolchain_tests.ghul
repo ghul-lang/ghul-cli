@@ -22,7 +22,9 @@ namespace Ghul.Cli.Tests is
             assert (LLVM_TOOLCHAIN.pinned_tag("65.5.0") ?? "none") =~ "v0.6.0"
             assert (LLVM_TOOLCHAIN.pinned_tag("65.7.9") ?? "none") =~ "v0.6.0"
             assert (LLVM_TOOLCHAIN.pinned_tag("65.8.0") ?? "none") =~ "v0.12.0"
-            assert (LLVM_TOOLCHAIN.pinned_tag("70.0.0") ?? "none") =~ "v0.12.0"
+            assert (LLVM_TOOLCHAIN.pinned_tag("65.19.9") ?? "none") =~ "v0.12.0"
+            assert (LLVM_TOOLCHAIN.pinned_tag("65.20.0") ?? "none") =~ "v0.14.0"
+            assert (LLVM_TOOLCHAIN.pinned_tag("70.0.0") ?? "none") =~ "v0.14.0"
         si
 
         @Test()
