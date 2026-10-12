@@ -11,13 +11,23 @@ namespace Ghul.Project is
         sources: Collections.List[string],
         compiler_version: string?,
         options: MANIFEST_OPTIONS,
-        dependencies: Collections.Map[string, DEPENDENCY]
+        dependencies: Collections.Map[string, DEPENDENCY],
+        compiler_build: CompilerBuild
     ) is si
 
     // Whether the project is something to run or something to depend on.
     enum ManifestKind is
         PROGRAM,
         LIBRARY
+    si
+
+    // Which build of the compiler a project is compiled with: the one that
+    // runs on .NET or as a Native AOT executable, which builds for every
+    // target, or the one the compiler builds of itself for llvm, a native
+    // executable that builds for wasm and llvm only.
+    enum CompilerBuild is
+        DEFAULT,
+        LLVM
     si
 
     // What a build produces, as a name a build asks for by.

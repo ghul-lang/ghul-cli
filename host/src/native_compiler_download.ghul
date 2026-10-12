@@ -12,7 +12,8 @@ namespace Ghul.Repl.Host is
 
     // Installs a compiler version from the Native AOT archive a
     // ghul.compiler release carries, for a machine with no .NET to run the
-    // managed compiler with.
+    // managed compiler with, or, into an llvm store, from the archive of the
+    // compiler built for llvm, which compiles for wasm and llvm only.
     //
     // The archive holds a statically linked compiler and the three files it
     // reads beside it, and running one needs nothing installed beyond the C
@@ -48,15 +49,29 @@ namespace Ghul.Repl.Host is
         // for cannot install one however much .NET is missing.
         archive_url(version: string) -> (url: string?, failure: string?) is
             if let rid: string = HOST.rid() then
-                return (
-                    url = "{base()}/{ARCHIVE_TAG_PREFIX}{version}/{ARCHIVE_DIRECTORY}-{rid}.tar.gz",
-                    failure = null)
+                if !_store.is_llvm then
+                    return (
+                        url = "{base()}/{ARCHIVE_TAG_PREFIX}{version}/{ARCHIVE_DIRECTORY}-{rid}.tar.gz",
+                        failure = null)
+                elif let triple: string = llvm_triple(rid) then
+                    return (
+                        url = "{base()}/{ARCHIVE_TAG_PREFIX}{version}/{ARCHIVE_DIRECTORY}-llvm-{triple}.tar.gz",
+                        failure = null)
+                fi
             fi
 
             return (
                 url = null,
-                failure = "there is no Native AOT compiler for this platform")
+                failure = "there is no {kind()} compiler for this platform")
         si
+
+        // The target triple the llvm-built compiler for the .NET runtime
+        // identifier `rid` is published under, where a release builds one.
+        llvm_triple(rid: string) -> string? static =>
+            if rid =~ "linux-x64" then "x86_64-unknown-linux-musl" else null fi
+
+        // What the compiler this download installs is called in what it says.
+        kind() -> string => if _store.is_llvm then "llvm-built" else "Native AOT" fi
 
         // Installs `version` from its Native AOT archive. Null on success, or
         // the failure to report, which names the version and, where the
@@ -80,7 +95,7 @@ namespace Ghul.Repl.Host is
                 Path.join([_store.root, ".download-{System.Environment.process_id}-{System.Guid.new_guid().to_string("N")}.tar.gz"])
 
             try
-                say("downloading the Native AOT compiler ghul.compiler {version}...")
+                say("downloading the {kind()} compiler ghul.compiler {version}...")
 
                 let download_failure = _download(url!, version, archive_scratch)
 
@@ -101,7 +116,7 @@ namespace Ghul.Repl.Host is
                     let unpacked = Path.join([scratch_directory, ARCHIVE_DIRECTORY])
 
                     if !File.exists(Path.join([unpacked, COMPILER_STORE.NATIVE_COMPILER_FILE_NAME])) then
-                        return "the Native AOT archive for ghul.compiler {version} carries no compiler"
+                        return "the {kind()} archive for ghul.compiler {version} carries no compiler"
                     fi
 
                     try
@@ -130,7 +145,7 @@ namespace Ghul.Repl.Host is
                 let response = client.get_async(url).result
 
                 if !response.is_success_status_code then
-                    return "ghul.compiler {version} has no Native AOT compiler for this platform (HTTP {cast int(response.status_code)})"
+                    return "ghul.compiler {version} has no {kind()} compiler for this platform (HTTP {cast int(response.status_code)})"
                 fi
 
                 let bytes = response.content.read_as_byte_array_async().result
@@ -139,7 +154,7 @@ namespace Ghul.Repl.Host is
 
                 return null
             catch e: System.Exception
-                return "the Native AOT compiler for ghul.compiler {version} could not be downloaded ({e.get_type().name})"
+                return "the {kind()} compiler for ghul.compiler {version} could not be downloaded ({e.get_type().name})"
             finally
                 client.dispose()
             yrt
@@ -165,7 +180,7 @@ namespace Ghul.Repl.Host is
                     gzip.dispose()
                 yrt
             catch e: System.Exception
-                return "the Native AOT compiler archive could not be read ({e.get_type().name})"
+                return "the {kind()} compiler archive could not be read ({e.get_type().name})"
             finally
                 input.dispose()
             yrt
