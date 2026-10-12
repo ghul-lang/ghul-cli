@@ -67,6 +67,13 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
+        a_part_passing_only_on_dotnet_builds_for_nothing_on_a_machine_without_it() is
+            let found = ROSETTA_TASK.find(_index, "pair/01-one", false)
+
+            _same("", _targets(found.part!.targets))
+        si
+
+        @Test()
         a_part_that_draws_leaves_the_dotnet_target_out() is
             let found = ROSETTA_TASK.find(_index, "fern", true)
 

@@ -187,10 +187,6 @@ namespace Ghul.Project is
                 targets.add(BuildTarget.WASM)
             fi
 
-            if targets.count == 0 /\ !raster then
-                targets.add(BuildTarget.DOTNET)
-            fi
-
             return targets
         si
 
