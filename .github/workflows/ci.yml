@@ -320,6 +320,7 @@ jobs:
           "compilers/${compiler}/analysis-protocol.runtimeconfig.json" \
           "compilers/${compiler}/ghul-compiler" \
           "compilers/${compiler}/ghul-runtime.dll" \
+          "compilers/${compiler}/requirements.json" \
           "compilers/${compiler}/wasm.dll" \
           | sort)
 
