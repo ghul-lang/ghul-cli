@@ -326,8 +326,6 @@ cd 100-doors
 ghul run --target llvm
 ```
 
-```
-
 ## tools for editors
 
 Two commands exist for editors and other tools that analyse a project the
