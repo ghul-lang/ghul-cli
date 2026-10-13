@@ -65,25 +65,38 @@ namespace Ghul.Cli is
 
         /// Whether releases can be fetched from where this toolchain reads
         /// them: the directory exists, or the release host answers within a
-        /// few seconds.
+        /// few seconds. A host that did not answer is not asked again for
+        /// ten minutes, so builds made offline do not each wait for it.
         can_fetch() -> bool is
             if releases.starts_with("file://") then
                 return Directory.exists(System.Uri(releases).local_path)
             fi
 
+            let unreachable = Path.join([root, ".unreachable"])
+
+            if File.exists(unreachable) /\ System.DateTime.utc_now - File.get_last_write_time_utc(unreachable) < System.TimeSpan.from_minutes(10.0) then
+                return false
+            fi
+
             let client = System.Net.Http.HttpClient()
 
             try
-                client.timeout = System.TimeSpan.from_seconds(5.0)
+                client.timeout = System.TimeSpan.from_seconds(3.0)
                 client.default_request_headers.user_agent.parse_add("ghul-cli")
 
                 let request = System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.head, releases)
+
                 // Any answer at all, a 404 for the bare base included, says
                 // the host is reachable.
                 let _ = client.send_async(request).result
 
+                File.delete(unreachable)
+
                 return true
             catch e: Ghul.Exception
+                Directory.create_directory(root)
+                File.write_all_text(unreachable, "")
+
                 return false
             finally
                 client.dispose()
