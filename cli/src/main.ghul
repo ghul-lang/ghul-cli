@@ -430,63 +430,17 @@ namespace Ghul.Cli is
         out.write_line("       --help or -h after ghul or a command prints this")
     si
 
-    // The target a build should use where the caller named none, or null to
-    // leave the choice to the loader.
-    //
-    // Only where there is no .NET. A project listing both targets is then
-    // built for wasm, because that is the target this machine can build:
-    // the dotnet target needs reference assemblies a machine without the SDK
-    // does not have, so choosing it would fail at the build rather than
-    // here. Where .NET is present nothing changes - the loader still asks
-    // which of the two was meant, as it always has, rather than quietly
-    // building one of them and leaving the other untested.
-    preferred_target(named: string?) -> string? is
-        if named? \/ Host.HOST.has_dotnet() then
-            return named
-        fi
+    // The target `GHUL_TARGET` names, where it names one: how a `#!`
+    // script, or anything else that cannot pass `--target`, chooses one.
+    environment_target() -> string? is
+        let named = System.Environment.get_environment_variable("GHUL_TARGET")
 
-        let read = Ghul.Project.PROJECT_LOADER.read_manifest(Directory.get_current_directory())
-
-        if let manifest: Ghul.Project.MANIFEST = read.manifest then
-            if targets_include(manifest.targets, Ghul.Project.BuildTarget.WASM) then
-                return "wasm"
-            fi
-        fi
-
-        return null
+        return if named? /\ named.length > 0 then named else null fi
     si
-
-    // Whether a manifest's targets include one. The list is read-only, and
-    // `contains` is a member of the mutable list rather than of this one, so
-    // it is asked by walking.
-    targets_include(targets: Collections.Iterable[Ghul.Project.BuildTarget], wanted: Ghul.Project.BuildTarget) -> bool is
-        for target in targets do
-            if target == wanted then
-                return true
-            fi
-        od
-
-        return false
-    si
-
-    // The target a project is created for where none was asked for.
-    //
-    // A machine with no .NET cannot build for the dotnet target at all -
-    // that target needs the SDK's reference assemblies, which a machine
-    // without the SDK does not have - so `ghul new` on one starts a wasm
-    // project, which the Native AOT compiler builds and node runs. The
-    // failure would otherwise come from the first build rather than from
-    // here, where the target was actually chosen.
-    default_project_target() -> Ghul.Project.BuildTarget =>
-        if Host.HOST.has_dotnet() then
-            Ghul.Project.BuildTarget.DOTNET
-        else
-            Ghul.Project.BuildTarget.WASM
-        fi
 
     // Creates a project to build and run: `ghul new <name> [--target ...]`.
     cmd_new(rest: Collections.List[string]) -> int is
-        let command_line = Ghul.Project.PROJECT_SCAFFOLD.parse(rest, default_project_target())
+        let command_line = Ghul.Project.PROJECT_SCAFFOLD.parse(rest, Ghul.Project.TARGET_CHOICE.ORDER)
 
         if let problem: string = command_line.problem then
             Std.error.write_line("ghul: {problem}")
@@ -499,19 +453,12 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        let run =
-            if command_line.targets.count > 1 then
-                "ghul run --target {Ghul.Project.BUILD_TARGETS.name(command_line.targets[command_line.targets.count - 1])}"
-            else
-                "ghul run"
-            fi
+        Std.error.write_line("ghul: created {command_line.directory}; cd into it and ghul run")
 
-        Std.error.write_line("ghul: created {command_line.directory}; cd into it and {run}")
-
-        // A wasm project builds wherever the compiler does; running it is
-        // what needs node, and saying so here is the difference between a
-        // project that will not run and one whose host was never installed.
-        if targets_include(command_line.targets, Ghul.Project.BuildTarget.WASM) /\ !Host.HOST.has_node() then
+        // A project for wasm alone builds wherever the compiler does; running
+        // it is what needs node, and saying so here is the difference between
+        // a project that will not run and one whose host was never installed.
+        if command_line.targets.count == 1 /\ command_line.targets[0] == Ghul.Project.BuildTarget.WASM /\ !Host.HOST.has_node() then
             Std.error.write_line("ghul: node was not found; a wasm build is run with node, so 'ghul run' needs it installed")
         fi
 
@@ -1119,8 +1066,24 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        let loaded = Ghul.Project.PROJECT_LOADER.load(
-            Directory.get_current_directory(), preferred_target(command_line.target))
+        let named = command_line.target ?? environment_target()
+
+        let chosen = Ghul.Project.PROJECT_LOADER.choose(
+            Directory.get_current_directory(), named, MACHINE_TARGETS(wants_run))
+
+        if let problem: string = chosen.problem then
+            say(problem)
+            return 1
+        fi
+
+        if let reason: string = chosen.reason then
+            say(reason)
+        fi
+
+        let target_name =
+            if let target = chosen.target then Ghul.Project.BUILD_TARGETS.name(target) else named fi
+
+        let loaded = Ghul.Project.PROJECT_LOADER.load(Directory.get_current_directory(), target_name)
 
         if let failed: Ghul.Project.LoadOutcome.FAILED = loaded then
             for message in failed.messages do

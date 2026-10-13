@@ -21,16 +21,12 @@ namespace Ghul.Project is
     /// `.gitignore` for the build output.
     class PROJECT_SCAFFOLD is
         /// Parses `NAME [--target <target>[,<target>...]]`, taking
-        /// `default_target` where no `--target` is given.
-        ///
-        /// The default is passed in rather than decided here because which
-        /// target is the default is a fact about the machine, not about the
-        /// arguments: a machine with no .NET cannot build for the dotnet
-        /// target at all, so `ghul new` on one starts a wasm project.
+        /// `default_targets` where no `--target` is given.
         ///
         /// - arguments: the arguments after `new`
-        /// - default_target: the target to build for where none is named
-        parse(arguments: Collections.List[string], default_target: BuildTarget) -> NEW_COMMAND_LINE static is
+        /// - default_targets: the targets the project may be built for where
+        ///   none is named
+        parse(arguments: Collections.List[string], default_targets: Collections.Iterable[BuildTarget]) -> NEW_COMMAND_LINE static is
             let targets = LIST[BuildTarget]()
             let directory: string? mut = null
             let i mut = 0
@@ -69,7 +65,7 @@ namespace Ghul.Project is
             fi
 
             if targets.count == 0 then
-                targets.add(default_target)
+                targets.add_range(default_targets)
             fi
 
             return NEW_COMMAND_LINE(directory, targets, null)

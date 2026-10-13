@@ -1,6 +1,7 @@
 namespace Ghul.Repl.Host is
     use IO.File
     use IO.Path
+    use IO.Directory
 
     // What the machine this tool is running on can be asked to run: the
     // tools a build is made and run with, and the platform the compiler
@@ -71,6 +72,19 @@ namespace Ghul.Repl.Host is
         si
 
         has_dotnet() -> bool static => dotnet()?
+
+        /// Whether a .NET SDK is installed beside the `dotnet` host, which a
+        /// build for the dotnet target needs; a runtime alone does not do.
+        has_dotnet_sdk() -> bool static is
+            if let host: string = dotnet() then
+                let resolved = File.resolve_link_target(host, true)?.full_name ?? host
+                let sdk = Path.join([Path.get_directory_name(resolved) ?? "", "sdk"])
+
+                return Directory.exists(sdk) /\ Directory.get_directories(sdk).count > 0
+            fi
+
+            return false
+        si
 
         // Node.js, which is what runs a wasm build. Without it a wasm build
         // still compiles - it is the compiler, not the host, that produces

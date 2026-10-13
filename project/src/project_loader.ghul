@@ -80,6 +80,24 @@ namespace Ghul.Project is
             return LoadOutcome.LOADED(LOADED_PROJECT(manifest, full_directory, chosen.target))
         si
 
+        /// The target to build the project in `directory` for, and why, by
+        /// TARGET_CHOICE's rules. Answers no target and no problem where the
+        /// manifest cannot be read, which loading the project then reports.
+        ///
+        /// - directory: the directory holding the manifest
+        /// - named: the target the command line or the environment names,
+        ///   or null
+        /// - availability: what this machine can build
+        choose(directory: string, named: string?, availability: TargetAvailability) -> CHOSEN_TARGET static is
+            let read = read_manifest(Path.get_full_path(directory))
+
+            if let manifest: MANIFEST = read.manifest then
+                return TARGET_CHOICE.choose(manifest.targets, manifest.prefer, named, availability)
+            fi
+
+            return CHOSEN_TARGET(null, null, null)
+        si
+
         /// The target a build is for: the one named, which the manifest has
         /// to list, or the only one it lists.
         ///

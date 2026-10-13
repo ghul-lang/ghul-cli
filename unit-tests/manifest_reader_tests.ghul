@@ -47,6 +47,8 @@ namespace Ghul.Cli.Tests is
     UNKNOWN_DEPENDENCY_KEY: string static => "{{\"name\": \"app\", \"dependencies\": {{\"lib\": {{\"git\": \"u\", \"tag\": \"v1\", \"rev\": \"abc\"}}}}}}"
     OPTIMISE: string static => "{{\"name\": \"app\", \"options\": {{\"optimise\": 3}}}}"
     BAD_OPTIMISE: string static => "{{\"name\": \"app\", \"options\": {{\"optimise\": 4}}}}"
+    PREFER: string static => "{{\"name\": \"app\", \"targets\": [\"dotnet\", \"wasm\", \"llvm\"], \"prefer\": [\"wasm\"]}}"
+    PREFER_UNLISTED: string static => "{{\"name\": \"app\", \"targets\": [\"dotnet\"], \"prefer\": [\"llvm\"]}}"
     LLVM_COMPILER: string static => "{{\"name\": \"app\", \"compiler-build\": \"llvm\"}}"
     UNKNOWN_COMPILER_BUILD: string static => "{{\"name\": \"app\", \"compiler-build\": \"jit\"}}"
     LLVM_TARGET: string static => "{{\"name\": \"app\", \"targets\": [\"llvm\"]}}"
@@ -140,6 +142,22 @@ namespace Ghul.Cli.Tests is
         an_optimisation_level__is_read_as_a_number() is
             assert (_read(OPTIMISE)!).options.optimise =~ 3
             assert !(_read(DEFAULT)!).options.optimise?
+        si
+
+        @Test()
+        a_preference__is_read_and_defaults_to_none() is
+            let prefer = (_read(PREFER)!).prefer
+
+            assert prefer.count == 1 /\ prefer[0] == BuildTarget.WASM
+            assert (_read(DEFAULT)!).prefer.count == 0
+        si
+
+        @Test()
+        a_preferred_target_the_project_does_not_list__is_a_problem() is
+            let problems = _problems(PREFER_UNLISTED)
+
+            assert problems.count == 1
+            assert problems[0].contains("llvm is not one of the targets") else problems[0]
         si
 
         @Test()
