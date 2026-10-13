@@ -28,6 +28,15 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
   </PropertyGroup>
 
+  <!-- The Native AOT build runs no user code in process and has no culture
+       of its own to honour, so it needs no ICU: without this it aborts on a
+       machine with no libicu installed, before printing anything useful.
+       The managed tool keeps .NET's globalization, since the REPL runs cells
+       inside it. -->
+  <PropertyGroup Condition="'$(PublishAot)' == 'true'">
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
   <ItemGroup>
     <None Include="../README.md" Pack="true" PackagePath="\" />
     <None Include="../LICENSE*" Pack="true" PackagePath="\" />

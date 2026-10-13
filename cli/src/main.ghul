@@ -468,8 +468,10 @@ namespace Ghul.Cli is
         // A project for wasm alone builds wherever the compiler does; running
         // it is what needs node, and saying so here is the difference between
         // a project that will not run and one whose host was never installed.
-        if command_line.targets.count == 1 /\ command_line.targets[0] == Ghul.Project.BuildTarget.WASM /\ !Host.HOST.has_node() then
-            Std.error.write_line("ghul: node was not found; a wasm build is run with node, so 'ghul run' needs it installed")
+        if command_line.targets.count == 1 /\ command_line.targets[0] == Ghul.Project.BuildTarget.WASM then
+            if let problem: string = Ghul.Project.NODE_RUNTIME.run_problem() then
+                Std.error.write_line("ghul: {problem}")
+            fi
         fi
 
         return 0
@@ -1139,6 +1141,15 @@ namespace Ghul.Cli is
             return 1
         fi
 
+        // A session loads each cell's assembly into this process, which the
+        // Native AOT build cannot do whatever is installed beside it.
+        if SELF_UPDATE.is_native() then
+            Std.error.write_line(
+                "ghul: the REPL needs .NET for now: install the .NET SDK, then 'dotnet tool install -g ghul.cli' and run that ghul")
+
+            return 1
+        fi
+
         let store = Host.COMPILER_STORE.for_this_user()
 
         if let installed: string = store.highest_version() /\ is_too_old_for_repl(installed) then
@@ -1246,6 +1257,15 @@ namespace Ghul.Cli is
 
         let mode =
             Ghul.Project.BUILD_MODE(command_line.debug, command_line.optimise ?? project.manifest.options.optimise)
+
+        // Said before building rather than after, so a run that cannot
+        // happen does not wait for a build first.
+        if wants_run /\ project.target == Ghul.Project.BuildTarget.WASM /\ project.manifest.kind == Ghul.Project.ManifestKind.PROGRAM then
+            if let problem: string = Ghul.Project.NODE_RUNTIME.run_problem() then
+                say(problem)
+                return 1
+            fi
+        fi
 
         let store = Host.COMPILER_STORE.for_this_user()
 
@@ -1530,7 +1550,23 @@ namespace Ghul.Cli is
                 return 0
             fi
 
-            let loaded = Ghul.Project.PROJECT_LOADER.load(Directory.get_current_directory(), options.target)
+            // The target a build would choose, except that a wasm build
+            // counts as buildable without Node.js: an editor analyses the
+            // project, it does not run it.
+            let named = options.target ?? environment_target()
+
+            let chosen = Ghul.Project.PROJECT_LOADER.choose(
+                Directory.get_current_directory(), named, MACHINE_TARGETS(false, false))
+
+            if let problem: string = chosen.problem then
+                say(problem)
+                return 1
+            fi
+
+            let target_name =
+                if let target = chosen.target then Ghul.Project.BUILD_TARGETS.name(target) else named fi
+
+            let loaded = Ghul.Project.PROJECT_LOADER.load(Directory.get_current_directory(), target_name)
 
             if let failed: Ghul.Project.LoadOutcome.FAILED = loaded then
                 for message in failed.messages do

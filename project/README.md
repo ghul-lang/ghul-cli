@@ -79,8 +79,9 @@ Comments and a trailing comma are allowed, since a manifest is written by hand.
 Every problem in a manifest is reported, not only the first, and each one names
 the key it is about:
 
-- a missing `name`, or one that is not a library name — lowercase letters,
-  digits and `-`, starting with a letter
+- a missing `name`, or one that is not lowercase letters, digits and `-`;
+  a library's name also has to start with a letter, where a program's may
+  start with a digit
 - a key that is not one the manifest may carry, at any level: the top level,
   inside `options`, inside a dependency, or inside a git dependency, so a
   misspelling is not silently ignored

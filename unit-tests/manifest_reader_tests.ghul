@@ -38,7 +38,8 @@ namespace Ghul.Cli.Tests is
     DEFAULT: string static => "{{\"name\": \"small\"}}"
     NO_NAME: string static => "{{\"version\": \"0.1.0\"}}"
     BAD_NAME_UPPER: string static => "{{\"name\": \"Example App\"}}"
-    BAD_NAME_DIGIT: string static => "{{\"name\": \"1app\"}}"
+    BAD_NAME_DIGIT: string static => "{{\"name\": \"1app\", \"kind\": \"library\"}}"
+    DIGIT_PROGRAM_NAME: string static => "{{\"name\": \"100-doors\"}}"
     BAD_NAME_EMPTY: string static => "{{\"name\": \"\"}}"
     BAD_NAME_UNDERSCORE: string static => "{{\"name\": \"app_1\"}}"
     GOOD_NAME: string static => "{{\"name\": \"my-app-2\"}}"
@@ -277,6 +278,12 @@ namespace Ghul.Cli.Tests is
 
             // A name the compiler would take is still a library name.
             assert (_read(GOOD_NAME)!).name =~ "my-app-2";
+        si
+
+        @Test()
+        a_program_name__may_start_with_a_digit_where_a_library_name_may_not() is
+            assert (_read(DIGIT_PROGRAM_NAME)!).name =~ "100-doors";
+            assert _problems(BAD_NAME_DIGIT).count == 1;
         si
 
         @Test()

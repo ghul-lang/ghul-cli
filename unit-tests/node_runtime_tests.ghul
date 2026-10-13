@@ -1,0 +1,38 @@
+namespace Ghul.Cli.Tests is
+    use Ghul.Project.NODE_RUNTIME
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    @TestClass()
+    class NODE_RUNTIME_TESTS is
+        init() is si
+
+        @Test()
+        the_first_release_of_each_line_that_runs_wasm__is_supported() is
+            assert !NODE_RUNTIME.problem_with("v22.19.0")?;
+            assert !NODE_RUNTIME.problem_with("v24.15.0")?;
+            assert !NODE_RUNTIME.problem_with("v25.0.0")?;
+            assert !NODE_RUNTIME.problem_with("v26.1.0\n")?;
+        si
+
+        @Test()
+        the_release_before_each_of_those__is_refused_naming_the_minimum() is
+            for version in ["v22.18.0", "v24.14.1", "v23.11.1", "v20.19.0", "v18.20.4"] do
+                let problem = NODE_RUNTIME.problem_with(version)
+
+                assert problem?;
+                assert problem.contains(version);
+                assert problem.contains(NODE_RUNTIME.MINIMUM);
+            od
+        si
+
+        @Test()
+        an_answer_that_is_not_a_version__is_refused() is
+            let problem = NODE_RUNTIME.problem_with("not a version")
+
+            assert problem?;
+            assert problem.contains("not a version");
+        si
+    si
+si
