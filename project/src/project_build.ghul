@@ -317,6 +317,13 @@ namespace Ghul.Project is
                 return 1
             fi
 
+            if project.target == BuildTarget.WASM then
+                if let problem: string = NODE_RUNTIME.run_problem() then
+                    say(problem)
+                    return 1
+                fi
+            fi
+
             let start_info = System.Diagnostics.ProcessStartInfo()
 
             start_info.file_name = to_run.file_name

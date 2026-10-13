@@ -74,8 +74,9 @@ options, and `--dry-run` reports what it would do.
 
 Without .NET, `ghul` builds projects for the llvm and wasm targets. An llvm
 build links a native executable with `ghul-llvm`, which `ghul` fetches the
-first time it is needed. A wasm build runs with Node.js 22 or newer, which has
-to be installed separately. Both fetch ghul-core and ghul-runtime with `git`.
+first time it is needed. A wasm build runs with Node.js 22.19 or later on the
+22 line, 24.15 or later on the 24 line, or 25 or later, which has to be
+installed separately. Both fetch ghul-core and ghul-runtime with `git`.
 
 Which machines that covers follows from the builds that exist. `ghul` is a
 .NET tool except as its Linux x64 native archive, and the compilers that build
@@ -243,7 +244,9 @@ command line overrides. A chosen level needs ghul.compiler 65.16.0 or newer.
 The `dotnet` target writes `<name>.exe` (or `<name>.dll` for a library), with
 `ghul-runtime.dll` beside it, and runs with `dotnet`. The `wasm` target writes
 a WebAssembly module and the JavaScript loader the compiler puts beside it,
-and runs under Node.js 22 or newer. A wasm build compiles in two libraries,
+and runs under Node.js 22.19 or later on the 22 line, 24.15 or later on the 24
+line, or 25 or later, which `ghul` checks before running it; Node 23 cannot
+run it. A wasm build compiles in two libraries,
 fetched from Git into `~/.cache/ghul-cli/libraries`: ghul-core, which gives
 the built-in types their members, and then ghul-runtime, which supplies the
 pipes and the rest of `Ghul`. Declaring `ghul-core` or `ghul-runtime` in the
@@ -377,7 +380,10 @@ sources: the client passes it to the compiler as `@<path>`. A wasm build's
 core library is in it too, as its `--library-source` declaration and its
 files. `--source-globs` also writes the manifest's source globs, one a line
 and relative to the manifest, for the client to expand and watch.
-`--target` is needed when the manifest lists more than one target.
+Where the manifest lists more than one target, `--target` names the one,
+or failing that `GHUL_TARGET`, and otherwise the target is chosen as a build
+chooses it, `prefer` included, except that wasm counts as buildable without
+Node.js, since an editor analyses the project rather than running it.
 
 `ghul project compiler` prints the command that runs the compiler the
 project builds with, installing it first if need be, as the only line on

@@ -63,21 +63,47 @@ namespace Ghul.Cli is
             return false
         si
 
-        /// Whether releases can be fetched from where this toolchain reads
-        /// them: the directory exists, or the release host answers within a
-        /// few seconds. A host that did not answer is not asked again for
-        /// ten minutes, so builds made offline do not each wait for it.
-        can_fetch() -> bool is
+        /// Why releases cannot be fetched from where this toolchain reads
+        /// them, or null where they can: the directory exists, or the
+        /// release host answers within a few seconds. A host that did not
+        /// answer is not asked again for ten minutes, so builds made offline
+        /// do not each wait for it; the answer in that time repeats why it
+        /// did not.
+        fetch_problem() -> string? is
             if releases.starts_with("file://") then
-                return Directory.exists(System.Uri(releases).local_path)
+                if Directory.exists(System.Uri(releases).local_path) then
+                    return null
+                fi
+
+                return "{releases} does not exist"
             fi
 
             let unreachable = Path.join([root, ".unreachable"])
 
             if File.exists(unreachable) /\ System.DateTime.utc_now - File.get_last_write_time_utc(unreachable) < System.TimeSpan.from_minutes(10.0) then
-                return false
+                let reason = File.read_all_text(unreachable).trim()
+
+                return "{_host()} could not be reached{if reason.length > 0 then " ({reason})" else "" fi}"
             fi
 
+            if let reason: string = _probe() then
+                Directory.create_directory(root)
+                File.write_all_text(unreachable, reason)
+
+                return "{_host()} could not be reached ({reason})"
+            fi
+
+            if File.exists(unreachable) then
+                File.delete(unreachable)
+            fi
+
+            return null
+        si
+
+        // Asks the release host for anything at all, answering why it gave
+        // no answer, or null where it gave one. A 404 for the bare base is
+        // an answer: it says the host is reachable.
+        _probe() -> string? is
             let client = System.Net.Http.HttpClient()
 
             try
@@ -85,23 +111,27 @@ namespace Ghul.Cli is
                 client.default_request_headers.user_agent.parse_add("ghul-cli")
 
                 let request = System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.head, releases)
-
-                // Any answer at all, a 404 for the bare base included, says
-                // the host is reachable.
                 let _ = client.send_async(request).result
 
-                File.delete(unreachable)
-
-                return true
+                return null
             catch e: Ghul.Exception
-                Directory.create_directory(root)
-                File.write_all_text(unreachable, "")
+                let cause = e.get_base_exception()
 
-                return false
+                if isa Tasks.TaskCanceledException(cause) then
+                    return "no answer within 3 seconds"
+                fi
+
+                return cause.message
             finally
                 client.dispose()
             yrt
         si
+
+        _host() -> string =>
+            if let uri: System.Uri = _uri() then uri.host else releases fi
+
+        _uri() -> System.Uri? =>
+            if System.Uri.is_well_formed_uri_string(releases, System.UriKind.ABSOLUTE) then System.Uri(releases) else null fi
 
         /// The release of `ghul-llvm` to link with for a compiler: the newest
         /// whose earliest compiler is no newer than `compiler_version`, or

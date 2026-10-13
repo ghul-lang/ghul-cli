@@ -27,9 +27,9 @@ namespace Ghul.Project is
 
             // Each of these reports what it can and moves on, so one
             // malformed key does not hide the next one.
-            let name = _name(root)
-            let version = _string_member(root, "version")
             let kind = _kind(root)
+            let name = _name(root, kind)
+            let version = _string_member(root, "version")
             let targets = _targets(root)
             let sources = _sources(root)
             let compiler = _string_member(root, "compiler")
@@ -118,8 +118,11 @@ namespace Ghul.Project is
 
         // `name` decides what the compiler calls the project, so it is
         // checked more tightly than any other key: lowercase letters,
-        // digits and `-`, starting with a letter.
-        _name(root: JsonElement) -> string? is
+        // digits and `-`. A library's name reaches the compiler as the name
+        // of a source library and starts with a letter; a program's names
+        // only the file the build writes, so it may start with a digit too,
+        // as `100-doors` does.
+        _name(root: JsonElement, kind: ManifestKind) -> string? is
             let value: JsonElement mut
 
             if !root.try_get_property("name", value ref) then
@@ -134,8 +137,13 @@ namespace Ghul.Project is
 
             let text = value.get_string()
 
-            if !_is_library_name(text!) then
-                _report("name", "the name is not a library name: lowercase letters, digits and '-', starting with a letter")
+            if kind == ManifestKind.LIBRARY then
+                if !_is_library_name(text!) then
+                    _report("name", "the name is not a library name: lowercase letters, digits and '-', starting with a letter")
+                    return null
+                fi
+            elif !_is_program_name(text!) then
+                _report("name", "the name is not a program name: lowercase letters, digits and '-', starting with a letter or a digit")
                 return null
             fi
 
@@ -169,15 +177,15 @@ namespace Ghul.Project is
             return ManifestKind.PROGRAM
         si
 
-        _is_library_name(text: string) -> bool is
-            if text.length == 0 then
-                return false
-            fi
+        _is_program_name(text: string) -> bool =>
+            text.length > 0 /\ (_is_lower(text[0]) \/ _is_digit(text[0])) /\ _is_name_tail(text)
 
-            if !_is_lower(text[0]) then
-                return false
-            fi
+        _is_library_name(text: string) -> bool =>
+            text.length > 0 /\ _is_lower(text[0]) /\ _is_name_tail(text)
 
+        // Whether every character after the first is a lowercase letter, a
+        // digit or `-`.
+        _is_name_tail(text: string) -> bool is
             let i mut = 1
 
             while i < text.length do
