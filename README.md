@@ -221,9 +221,9 @@ machine can build:
 
 A manifest's `prefer`, such as `"prefer": ["llvm"]`, puts the targets it
 names first, and every one it names has to be among `targets`. When `ghul`
-passes over a target it cannot build, it says what it built for instead and
-why in one line, as in `ghul: building for llvm (no .NET SDK)`; choosing dotnet,
-or what `prefer` names, it says nothing. Where no listed target
+cannot build for dotnet, it says what it built for instead and why in one line,
+as in `ghul: building for llvm (no .NET SDK)`; choosing dotnet, or a target
+`prefer` puts first, it says nothing. Where no listed target
 can be built, it says why for each and builds nothing.
 
 The compiler's messages go to standard error, and a failed build exits

@@ -14,7 +14,7 @@ namespace Ghul.Project is
     ///
     /// - target: the target chosen, where one was
     /// - reason: the one line a build reports, where the target was taken
-    ///   because others listed could not be built here, or null
+    ///   because dotnet could not be built here, or null
     /// - problem: why no target could be chosen
     class CHOSEN_TARGET(target: BuildTarget?, reason: string?, problem: string?);
 
@@ -57,19 +57,22 @@ namespace Ghul.Project is
 
             let reasons = LIST[string]()
             let per_target = LIST[string]()
+            let dotnet_passed_over mut = false
 
             for target in _order(listed, prefer) do
                 if let why: string = availability.why_not(target) then
                     reasons.add(why)
                     per_target.add("{BUILD_TARGETS.name(target)}: {why}")
+                    dotnet_passed_over = dotnet_passed_over \/ target == BuildTarget.DOTNET
                     continue
                 fi
 
-                // dotnet needs no explaining, and neither does a target the
-                // project prefers; only a target taken because others could
-                // not be built is reported, with why they could not.
+                // Building for dotnet is the normal case, and a target the
+                // project prefers was asked for; neither needs explaining.
+                // What is reported is a build that is not for dotnet only
+                // because dotnet could not be built here.
                 let reason =
-                    if target != BuildTarget.DOTNET /\ reasons.count > 0 then
+                    if dotnet_passed_over then
                         "building for {BUILD_TARGETS.name(target)} ({string.join("; ", reasons)})"
                     else
                         null

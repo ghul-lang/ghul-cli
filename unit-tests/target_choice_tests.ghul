@@ -62,6 +62,18 @@ namespace Ghul.Cli.Tests is
             assert !chosen.reason?
         si
 
+        // A preferred target the machine cannot build is passed over in
+        // silence: the project asked for its order, and dotnet was not the
+        // target given up.
+        @Test()
+        falling_back_within_the_preference_is_not_reported() is
+            let prefer = LIST[BuildTarget]([BuildTarget.LLVM, BuildTarget.WASM])
+            let chosen = TARGET_CHOICE.choose(_all, prefer, null, _MACHINE([BuildTarget.WASM]))
+
+            assert _name(chosen) =~ "wasm"
+            assert !chosen.reason?
+        si
+
         @Test()
         a_named_target_is_taken_without_asking_the_machine() is
             let chosen = TARGET_CHOICE.choose(_all, _none, "wasm", _MACHINE([BuildTarget.DOTNET]))
