@@ -91,7 +91,8 @@ is installed, and otherwise llvm, then wasm, as a project does.
 `GHUL_TARGET` names the target instead. A script built for llvm or wasm is
 cached, by the script, the target, the compiler and the libraries and
 `ghul-llvm` it was built with, so it compiles once. A script that compiles
-says nothing; where `ghul` chose the target, the build says which in one line.
+says nothing; where `ghul` built it for llvm or wasm because dotnet could not
+be, the build says so in one line.
 
 What does not work without .NET, today:
 
@@ -220,8 +221,9 @@ machine can build:
 
 A manifest's `prefer`, such as `"prefer": ["llvm"]`, puts the targets it
 names first, and every one it names has to be among `targets`. When `ghul`
-chooses rather than being told, it says which target and why in one line, as
-in `ghul: building for llvm (dotnet needs a .NET SDK)`. Where no listed target
+cannot build for dotnet, it says what it built for instead and why in one line,
+as in `ghul: building for llvm (no .NET SDK)`; choosing dotnet, or a target
+`prefer` puts first, it says nothing. Where no listed target
 can be built, it says why for each and builds nothing.
 
 The compiler's messages go to standard error, and a failed build exits
