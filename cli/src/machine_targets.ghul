@@ -16,15 +16,15 @@ namespace Ghul.Cli is
             case target
             when BuildTarget.DOTNET then
                 if _is_script then
-                    if Host.HOST.has_dotnet() then null else "needs .NET" fi
+                    if Host.HOST.has_dotnet() then null else "no .NET" fi
                 elif Host.HOST.has_dotnet_sdk() then
                     null
                 else
-                    "needs a .NET SDK"
+                    "no .NET SDK"
                 fi
             when BuildTarget.LLVM then _why_not_llvm()
             when BuildTarget.WASM then
-                if !_will_run \/ Host.HOST.has_node() then null else "needs Node.js to run" fi
+                if !_will_run \/ Host.HOST.has_node() then null else "no Node.js" fi
             esac
 
         _why_not_llvm() -> string? is
@@ -37,7 +37,7 @@ namespace Ghul.Cli is
             let triple = LLVM_TOOLCHAIN.triple()
 
             if !triple? then
-                return "needs ghul-llvm, which is not released for this platform"
+                return "ghul-llvm unavailable"
             fi
 
             let toolchain = LLVM_TOOLCHAIN.for_this_user()
@@ -46,7 +46,7 @@ namespace Ghul.Cli is
                 return null
             fi
 
-            return "needs ghul-llvm, which is not cached and could not be fetched"
+            return "ghul-llvm unavailable"
         si
     si
 si

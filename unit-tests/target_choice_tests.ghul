@@ -13,7 +13,7 @@ namespace Ghul.Cli.Tests is
     // A machine that can build exactly the targets it is given.
     class _MACHINE(_can: BuildTarget[]): TargetAvailability is
         why_not(target: BuildTarget) -> string? =>
-            if _can |> Ghul.Pipes.any(t => t == target) then null else "is missing" fi
+            if _can |> Ghul.Pipes.any(t => t == target) then null else "no {BUILD_TARGETS.name(target)}" fi
     si
 
     // Which target a build takes where the command line may not say.
@@ -28,12 +28,13 @@ namespace Ghul.Cli.Tests is
         _name(chosen: CHOSEN_TARGET) -> string =>
             if let target = chosen.target then BUILD_TARGETS.name(target) else "none" fi
 
+        // dotnet is the normal case, and is chosen without a word.
         @Test()
-        dotnet_comes_first_where_it_can_be_built() is
+        dotnet_comes_first_where_it_can_be_built_and_is_not_reported() is
             let chosen = TARGET_CHOICE.choose(_all, _none, null, _MACHINE([BuildTarget.DOTNET, BuildTarget.LLVM, BuildTarget.WASM]))
 
             assert _name(chosen) =~ "dotnet"
-            assert (chosen.reason ?? "").contains("in ghul's order") else chosen.reason ?? "null"
+            assert !chosen.reason?
         si
 
         @Test()
@@ -41,12 +42,15 @@ namespace Ghul.Cli.Tests is
             let chosen = TARGET_CHOICE.choose(_all, _none, null, _MACHINE([BuildTarget.LLVM, BuildTarget.WASM]))
 
             assert _name(chosen) =~ "llvm"
-            assert chosen.reason =~ "building for llvm (dotnet is missing)" else chosen.reason ?? "null"
+            assert chosen.reason =~ "building for llvm (no dotnet)" else chosen.reason ?? "null"
         si
 
         @Test()
-        wasm_is_taken_where_nothing_else_can_be_built() is
-            assert _name(TARGET_CHOICE.choose(_all, _none, null, _MACHINE([BuildTarget.WASM]))) =~ "wasm"
+        wasm_is_taken_where_nothing_else_can_be_built_and_says_why_in_one_line() is
+            let chosen = TARGET_CHOICE.choose(_all, _none, null, _MACHINE([BuildTarget.WASM]))
+
+            assert _name(chosen) =~ "wasm"
+            assert chosen.reason =~ "building for wasm (no dotnet; no llvm)" else chosen.reason ?? "null"
         si
 
         @Test()
@@ -55,7 +59,7 @@ namespace Ghul.Cli.Tests is
             let chosen = TARGET_CHOICE.choose(_all, prefer, null, _MACHINE([BuildTarget.DOTNET, BuildTarget.WASM]))
 
             assert _name(chosen) =~ "wasm"
-            assert (chosen.reason ?? "").contains("prefers") else chosen.reason ?? "null"
+            assert !chosen.reason?
         si
 
         @Test()
@@ -87,7 +91,7 @@ namespace Ghul.Cli.Tests is
             let chosen = TARGET_CHOICE.choose(_all, _none, null, _MACHINE([]))
 
             assert !chosen.target?
-            assert chosen.problem =~ "none of the targets the manifest lists can be built here: dotnet is missing; llvm is missing; wasm is missing" else chosen.problem ?? "null"
+            assert chosen.problem =~ "none of the targets the manifest lists can be built here: dotnet: no dotnet; llvm: no llvm; wasm: no wasm" else chosen.problem ?? "null"
         si
     si
 si

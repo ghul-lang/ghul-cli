@@ -13,8 +13,8 @@ namespace Ghul.Project is
     /// have named one.
     ///
     /// - target: the target chosen, where one was
-    /// - reason: why it was chosen, where it was chosen rather than named or
-    ///   the only one listed; for the one line a build reports
+    /// - reason: the one line a build reports, where the target was taken
+    ///   because others listed could not be built here, or null
     /// - problem: why no target could be chosen
     class CHOSEN_TARGET(target: BuildTarget?, reason: string?, problem: string?);
 
@@ -55,27 +55,30 @@ namespace Ghul.Project is
                 return CHOSEN_TARGET(listed[0], null, null)
             fi
 
-            let skipped = LIST[string]()
+            let reasons = LIST[string]()
+            let per_target = LIST[string]()
 
             for target in _order(listed, prefer) do
                 if let why: string = availability.why_not(target) then
-                    skipped.add("{BUILD_TARGETS.name(target)} {why}")
+                    reasons.add(why)
+                    per_target.add("{BUILD_TARGETS.name(target)}: {why}")
                     continue
                 fi
 
+                // dotnet needs no explaining, and neither does a target the
+                // project prefers; only a target taken because others could
+                // not be built is reported, with why they could not.
                 let reason =
-                    if skipped.count > 0 then
-                        string.join("; ", skipped)
-                    elif _lists(prefer, target) then
-                        "the project prefers it"
+                    if target != BuildTarget.DOTNET /\ reasons.count > 0 then
+                        "building for {BUILD_TARGETS.name(target)} ({string.join("; ", reasons)})"
                     else
-                        "the first of {_names(listed)} in ghul's order"
+                        null
                     fi
 
-                return CHOSEN_TARGET(target, "building for {BUILD_TARGETS.name(target)} ({reason})", null)
+                return CHOSEN_TARGET(target, reason, null)
             od
 
-            return CHOSEN_TARGET(null, null, "none of the targets the manifest lists can be built here: {string.join("; ", skipped)}")
+            return CHOSEN_TARGET(null, null, "none of the targets the manifest lists can be built here: {string.join("; ", per_target)}")
         si
 
         // The targets `listed` names, in the order they are tried.
