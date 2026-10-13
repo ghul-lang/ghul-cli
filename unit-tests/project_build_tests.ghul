@@ -49,7 +49,7 @@ namespace Ghul.Cli.Tests is
                     null,
                     MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](), null),
                     MAP[string, DEPENDENCY](),
-                    CompilerBuild.DEFAULT),
+                    CompilerBuild.DEFAULT, LIST[BuildTarget]()),
                 IO.Path.combine("/", "project"),
                 target)
 

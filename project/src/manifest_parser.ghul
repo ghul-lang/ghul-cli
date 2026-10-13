@@ -34,6 +34,7 @@ namespace Ghul.Project is
             let sources = _sources(root)
             let compiler = _string_member(root, "compiler")
             let compiler_build = _compiler_build(root)
+            let prefer = _prefer(root, targets)
             let options = _options(root)
             let dependencies = _dependencies(root)
 
@@ -44,7 +45,7 @@ namespace Ghul.Project is
                 return null
             fi
 
-            return MANIFEST(name, version, kind, targets, sources, compiler, options, dependencies, compiler_build)
+            return MANIFEST(name, version, kind, targets, sources, compiler, options, dependencies, compiler_build, prefer)
         si
 
         // A member read as a string, or nothing when the key is absent.
@@ -430,8 +431,32 @@ namespace Ghul.Project is
                 return LIST[BuildTarget]([BuildTarget.DOTNET])
             fi
 
+            return _target_list("targets", value)
+        si
+
+        // The targets the project prefers, in order: empty where it names
+        // none, and only targets it lists.
+        _prefer(root: JsonElement, targets: Collections.List[BuildTarget]) -> Collections.List[BuildTarget] is
+            let value: JsonElement mut
+
+            if !root.try_get_property("prefer", value ref) then
+                return LIST[BuildTarget]()
+            fi
+
+            let prefer = _target_list("prefer", value)
+
+            for target in prefer do
+                if !(targets |> Ghul.Pipes.any(t => t == target)) then
+                    _report("prefer", "{BUILD_TARGETS.name(target)} is not one of the targets")
+                fi
+            od
+
+            return prefer
+        si
+
+        _target_list(key: string, value: JsonElement) -> Collections.List[BuildTarget] is
             if value.value_kind != JsonValueKind.ARRAY then
-                _report("targets", "the value is not a list")
+                _report(key, "the value is not a list")
                 return LIST[BuildTarget]()
             fi
 
@@ -439,11 +464,11 @@ namespace Ghul.Project is
 
             for entry in value.enumerate_array() do
                 if entry.value_kind != JsonValueKind.STRING then
-                    _report("targets", "an entry is not a string")
+                    _report(key, "an entry is not a string")
                 elif let target = BUILD_TARGETS.named(entry.get_string() ?? "") then
                     targets.add(target)
                 else
-                    _report("targets", "unknown target '{entry.get_string()}'")
+                    _report(key, "unknown target '{entry.get_string()}'")
                 fi
             od
 
@@ -488,6 +513,7 @@ namespace Ghul.Project is
             keys.add("kind")
             keys.add("name")
             keys.add("options")
+            keys.add("prefer")
             keys.add("sources")
             keys.add("targets")
             keys.add("version")

@@ -45,6 +45,51 @@ namespace Ghul.Cli is
             return null
         si
 
+        /// Whether some release of `ghul-llvm` for `triple` is already in the
+        /// cache, so a build can link without fetching anything.
+        ///
+        /// - triple: the platform
+        has_any(triple: string) -> bool is
+            if !Directory.exists(root) then
+                return false
+            fi
+
+            for tag in Directory.get_directories(root) do
+                if File.exists(Path.join([tag, triple, "bin", "ghul-llvm"])) then
+                    return true
+                fi
+            od
+
+            return false
+        si
+
+        /// Whether releases can be fetched from where this toolchain reads
+        /// them: the directory exists, or the release host answers within a
+        /// few seconds.
+        can_fetch() -> bool is
+            if releases.starts_with("file://") then
+                return Directory.exists(System.Uri(releases).local_path)
+            fi
+
+            let client = System.Net.Http.HttpClient()
+
+            try
+                client.timeout = System.TimeSpan.from_seconds(5.0)
+                client.default_request_headers.user_agent.parse_add("ghul-cli")
+
+                let request = System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.head, releases)
+                // Any answer at all, a 404 for the bare base included, says
+                // the host is reachable.
+                let _ = client.send_async(request).result
+
+                return true
+            catch e: Ghul.Exception
+                return false
+            finally
+                client.dispose()
+            yrt
+        si
+
         /// The release of `ghul-llvm` to link with for a compiler: the newest
         /// whose earliest compiler is no newer than `compiler_version`, or
         /// null where the version is earlier than all of them or is not a

@@ -82,7 +82,8 @@ namespace Ghul.Project is
                 manifest.compiler_version,
                 manifest.options,
                 dependencies,
-                manifest.compiler_build)
+                manifest.compiler_build,
+                manifest.prefer)
         si
 
         /// The words of a compiler command: the program, then the arguments

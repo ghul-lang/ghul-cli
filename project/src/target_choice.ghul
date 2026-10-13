@@ -1,0 +1,106 @@
+namespace Ghul.Project is
+    use Collections.LIST
+
+    /// What this machine can build for, asked one target at a time.
+    trait TargetAvailability open is
+        /// Why `target` cannot be built here, or null where it can.
+        ///
+        /// - target: the target asked about
+        why_not(target: BuildTarget) -> string?
+    si
+
+    /// The target a build is for, and why, where the command line may not
+    /// have named one.
+    ///
+    /// - target: the target chosen, where one was
+    /// - reason: why it was chosen, where it was chosen rather than named or
+    ///   the only one listed; for the one line a build reports
+    /// - problem: why no target could be chosen
+    class CHOSEN_TARGET(target: BuildTarget?, reason: string?, problem: string?);
+
+    /// Chooses the target for a build.
+    ///
+    /// A target named on the command line or in `GHUL_TARGET` is taken as
+    /// it is, and a project that lists one target builds that one. Otherwise
+    /// the first target in order that the machine can build is chosen: those
+    /// the project's `prefer` lists, then dotnet, llvm and wasm.
+    class TARGET_CHOICE is
+        /// The order targets are tried in where a project prefers none.
+        ORDER: BuildTarget[] static => [BuildTarget.DOTNET, BuildTarget.LLVM, BuildTarget.WASM]
+
+        /// The target for a build of a project listing `listed`.
+        ///
+        /// - listed: the targets the project may be built for
+        /// - prefer: the targets the project prefers, in order
+        /// - named: the target the command line or the environment names, or
+        ///   null
+        /// - availability: what this machine can build
+        choose(
+            listed: Collections.List[BuildTarget],
+            prefer: Collections.List[BuildTarget],
+            named: string?,
+            availability: TargetAvailability
+        ) -> CHOSEN_TARGET static is
+            if let name: string = named then
+                for target in listed do
+                    if BUILD_TARGETS.name(target) =~ name then
+                        return CHOSEN_TARGET(target, null, null)
+                    fi
+                od
+
+                return CHOSEN_TARGET(null, null, "the manifest does not list the target {name}; it lists {_names(listed)}")
+            fi
+
+            if listed.count == 1 then
+                return CHOSEN_TARGET(listed[0], null, null)
+            fi
+
+            let skipped = LIST[string]()
+
+            for target in _order(listed, prefer) do
+                if let why: string = availability.why_not(target) then
+                    skipped.add("{BUILD_TARGETS.name(target)} {why}")
+                    continue
+                fi
+
+                let reason =
+                    if skipped.count > 0 then
+                        string.join("; ", skipped)
+                    elif _lists(prefer, target) then
+                        "the project prefers it"
+                    else
+                        "the first of {_names(listed)} in ghul's order"
+                    fi
+
+                return CHOSEN_TARGET(target, "building for {BUILD_TARGETS.name(target)} ({reason})", null)
+            od
+
+            return CHOSEN_TARGET(null, null, "none of the targets the manifest lists can be built here: {string.join("; ", skipped)}")
+        si
+
+        // The targets `listed` names, in the order they are tried.
+        _order(listed: Collections.List[BuildTarget], prefer: Collections.List[BuildTarget]) -> LIST[BuildTarget] static is
+            let order = LIST[BuildTarget]()
+
+            for target in prefer do
+                if _lists(listed, target) /\ !order.contains(target) then
+                    order.add(target)
+                fi
+            od
+
+            for target in ORDER do
+                if _lists(listed, target) /\ !order.contains(target) then
+                    order.add(target)
+                fi
+            od
+
+            return order
+        si
+
+        _lists(targets: Collections.List[BuildTarget], target: BuildTarget) -> bool static =>
+            targets |> Ghul.Pipes.any(t => t == target)
+
+        _names(targets: Collections.List[BuildTarget]) -> string static =>
+            string.join(", ", targets |> Ghul.Pipes.map(t => BUILD_TARGETS.name(t)))
+    si
+si

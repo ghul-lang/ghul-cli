@@ -1,0 +1,44 @@
+namespace Ghul.Cli is
+    use Host = Ghul.Repl.Host
+
+    use Ghul.Project.BuildTarget
+
+    /// What this machine can build for, as target selection asks it: dotnet
+    /// where a .NET SDK is installed, llvm where `ghul-llvm` is cached or
+    /// can be fetched, and wasm wherever, so long as Node.js is there to
+    /// run it when the build is to be run.
+    ///
+    /// - will_run: whether what is built is to be run as well
+    class MACHINE_TARGETS(_will_run: bool): Ghul.Project.TargetAvailability is
+        why_not(target: BuildTarget) -> string? =>
+            case target
+            when BuildTarget.DOTNET then
+                if Host.HOST.has_dotnet_sdk() then null else "needs a .NET SDK" fi
+            when BuildTarget.LLVM then _why_not_llvm()
+            when BuildTarget.WASM then
+                if !_will_run \/ Host.HOST.has_node() then null else "needs Node.js to run" fi
+            esac
+
+        _why_not_llvm() -> string? is
+            let named = System.Environment.get_environment_variable("GHUL_LLVM")
+
+            if named? /\ named.length > 0 then
+                return null
+            fi
+
+            let triple = LLVM_TOOLCHAIN.triple()
+
+            if !triple? then
+                return "needs ghul-llvm, which is not released for this platform"
+            fi
+
+            let toolchain = LLVM_TOOLCHAIN.for_this_user()
+
+            if toolchain.has_any(triple) \/ toolchain.can_fetch() then
+                return null
+            fi
+
+            return "needs ghul-llvm, which is not cached and could not be fetched"
+        si
+    si
+si
