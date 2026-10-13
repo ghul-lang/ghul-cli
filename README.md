@@ -84,16 +84,24 @@ published for Linux x64 only. So a machine with no .NET at all is Linux x64,
 and there `ghul` builds for llvm. A machine with a .NET runtime but no SDK can
 run `ghul` and build for wasm and, on Linux x64, llvm, but not for dotnet.
 
+A script, `ghul script.ghul`, a `#!/usr/bin/env ghul` script or one read from
+standard input, runs wherever a target can be built for it. A script needs
+only the .NET runtime for the dotnet target, so it takes dotnet wherever .NET
+is installed, and otherwise llvm, then wasm, as a project does.
+`GHUL_TARGET` names the target instead. A script built for llvm or wasm is
+cached, by the script, the target, the compiler and the libraries and
+`ghul-llvm` it was built with, so it compiles once. A script that compiles
+says nothing; where `ghul` chose the target, the build says which in one line.
+
 What does not work without .NET, today:
 
-- **Scripts.** `ghul script.ghul`, a `#!/usr/bin/env ghul` script, a script
-  read from standard input and `ghul compile` all compile for .NET, and fail.
+- **`ghul compile`**, which writes a script's .NET assembly.
 - **The REPL and the Jupyter kernel.** Each cell is compiled to a .NET
   assembly and run inside the tool, which the native build cannot do.
 - **The dotnet target.** Building one needs the .NET reference assemblies
   that come with .NET.
 
-Scripts and the REPL on wasm are planned in
+The REPL on wasm is planned in
 [ghul-lang/ghul#3480](https://github.com/ghul-lang/ghul/issues/3480).
 
 A wasm program can use only what the wasm target supports, which is much less

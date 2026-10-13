@@ -134,6 +134,36 @@ namespace Ghul.Project is
             linker: string?,
             mode: BUILD_MODE,
             say: (string) -> void
+        ) -> int static =>
+            build(project, compiler, compiler_version, runtime_assembly, cache, linker, mode, say, LIST[string](), false)
+
+        /// Compiles `project` as `build` does, with `extra` added to the
+        /// compiler's arguments, and, where `quiet`, without the line the
+        /// compiler writes when it succeeds.
+        ///
+        /// - project: the project to build
+        /// - compiler: how the compiler is started
+        /// - compiler_version: the compiler's version
+        /// - runtime_assembly: the runtime copied beside a `dotnet` build,
+        ///   where there is one
+        /// - cache: where fetched libraries are kept
+        /// - linker: the `ghul-llvm` executable an llvm build links with, or
+        ///   null
+        /// - mode: how the build is made
+        /// - say: where a problem of the build's own is reported
+        /// - extra: arguments added to the compiler's own
+        /// - quiet: whether to leave out the compiler's success line
+        build(
+            project: LOADED_PROJECT,
+            compiler: COMPILER_PROCESS,
+            compiler_version: string,
+            runtime_assembly: string?,
+            cache: LIBRARY_CACHE,
+            linker: string?,
+            mode: BUILD_MODE,
+            say: (string) -> void,
+            extra: Collections.List[string],
+            quiet: bool
         ) -> int static is
             let compiled_in = libraries(project, compiler_version, COMPILER_REQUIREMENTS.read(compiler.directory), cache, say)
 
@@ -146,7 +176,9 @@ namespace Ghul.Project is
 
             Directory.create_directory(Path.get_directory_name(output)!)
 
-            let arguments = COMPILER_ARGUMENTS.for_build(project.manifest, project.target, compiled_in, mode, output, sources)
+            let arguments = LIST[string](COMPILER_ARGUMENTS.for_build(project.manifest, project.target, compiled_in, mode, output, sources))
+
+            arguments.add_range(extra)
 
             let scratch = Path.join([Path.get_temp_path(), "ghul-build-{System.Environment.process_id}-{System.Guid.new_guid().to_string("N")}"])
 
@@ -157,7 +189,7 @@ namespace Ghul.Project is
 
                 File.write_all_text(response_file, RESPONSE_FILE.text(arguments))
 
-                let exit_code = _compile(compiler, response_file, project.directory, linker, say)
+                let exit_code = _compile(compiler, response_file, project.directory, linker, say, quiet)
 
                 if exit_code == 0 /\ project.target == BuildTarget.DOTNET then
                     if let runtime: string = runtime_assembly /\ File.exists(runtime) then
@@ -174,12 +206,13 @@ namespace Ghul.Project is
         // Runs the compiler on the response file. Its standard output goes
         // to standard error, so this tool's own standard output is left to
         // the program a `run` starts.
-        _compile(compiler: COMPILER_PROCESS, response_file: string, directory: string, linker: string?, say: (string) -> void) -> int static is
+        _compile(compiler: COMPILER_PROCESS, response_file: string, directory: string, linker: string?, say: (string) -> void, quiet: bool) -> int static is
             let start_info = System.Diagnostics.ProcessStartInfo()
 
             start_info.file_name = compiler.file_name
             start_info.use_shell_execute = false
             start_info.redirect_standard_output = true
+            start_info.redirect_standard_error = quiet
             start_info.working_directory = directory
 
             if let path: string = linker then
@@ -195,6 +228,10 @@ namespace Ghul.Project is
             if let process: System.Diagnostics.Process = System.Diagnostics.Process.start(start_info) then
                 let copied = process.standard_output.base_stream.copy_to_async(IO.Std.open_standard_error())
 
+                if quiet then
+                    _pass_on_all_but_success(process.standard_error)
+                fi
+
                 process.wait_for_exit()
                 copied.wait()
 
@@ -203,6 +240,20 @@ namespace Ghul.Project is
 
             say("failed to start the compiler")
             return 1
+        si
+
+        /// The line the compiler writes to standard error when a build
+        /// succeeds.
+        SUCCESS_LINE: string static => "*** succeeded ***"
+
+        // Copies what the compiler writes to standard error to this
+        // process's, a line at a time, leaving out its success line.
+        _pass_on_all_but_success(reader: IO.TextReader) static is
+            while let line = reader.read_line() do
+                if line !~ SUCCESS_LINE then
+                    IO.Std.error.write_line(line)
+                fi
+            od
         si
     si
 
