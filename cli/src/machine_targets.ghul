@@ -4,16 +4,24 @@ namespace Ghul.Cli is
     use Ghul.Project.BuildTarget
 
     /// What this machine can build for, as target selection asks it: dotnet
-    /// where a .NET SDK is installed, llvm where `ghul-llvm` is cached or
-    /// can be fetched, and wasm wherever, so long as Node.js is there to
-    /// run it when the build is to be run.
+    /// where a .NET SDK is installed, or for a script, which compiles
+    /// against the runtime's own assemblies, a .NET runtime; llvm where
+    /// `ghul-llvm` is cached or can be fetched; and wasm wherever, so long as
+    /// Node.js is there to run it when the build is to be run.
     ///
     /// - will_run: whether what is built is to be run as well
-    class MACHINE_TARGETS(_will_run: bool): Ghul.Project.TargetAvailability is
+    /// - is_script: whether a script is being built rather than a project
+    class MACHINE_TARGETS(_will_run: bool, _is_script: bool): Ghul.Project.TargetAvailability is
         why_not(target: BuildTarget) -> string? =>
             case target
             when BuildTarget.DOTNET then
-                if Host.HOST.has_dotnet_sdk() then null else "needs a .NET SDK" fi
+                if _is_script then
+                    if Host.HOST.has_dotnet() then null else "needs .NET" fi
+                elif Host.HOST.has_dotnet_sdk() then
+                    null
+                else
+                    "needs a .NET SDK"
+                fi
             when BuildTarget.LLVM then _why_not_llvm()
             when BuildTarget.WASM then
                 if !_will_run \/ Host.HOST.has_node() then null else "needs Node.js to run" fi

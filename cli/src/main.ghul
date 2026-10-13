@@ -237,7 +237,17 @@ namespace Ghul.Cli is
             start_info.argument_list.add("--implicit-default-use")
         fi
 
+        // A script that compiles says nothing: the compiler's success line
+        // is left out, and everything else it writes is passed on.
+        start_info.redirect_standard_error = true
+
         if let process: System.Diagnostics.Process = System.Diagnostics.Process.start(start_info) then
+            while let line = process.standard_error.read_line() do
+                if line !~ Ghul.Project.PROJECT_BUILD.SUCCESS_LINE then
+                    Std.error.write_line(line)
+                fi
+            od
+
             process.wait_for_exit()
 
             if process.exit_code != 0 then
@@ -869,6 +879,25 @@ namespace Ghul.Cli is
         fi
 
         let source = resolve_source(script_ref)
+
+        let chosen =
+            Ghul.Project.TARGET_CHOICE.choose(
+                Collections.LIST[Ghul.Project.BuildTarget](Ghul.Project.TARGET_CHOICE.ORDER),
+                Collections.LIST[Ghul.Project.BuildTarget](),
+                environment_target(),
+                MACHINE_TARGETS(true, true))
+
+        if let problem: string = chosen.problem then
+            Std.error.write_line("ghul: {problem}")
+            return 1
+        fi
+
+        let target = chosen.target!
+
+        if target != Ghul.Project.BuildTarget.DOTNET then
+            return run_native_script(source.key_bytes, target, chosen.reason, script_args, no_cache)
+        fi
+
         let store = Host.COMPILER_STORE.for_this_user()
 
         if let compiler_version: string = ensure_compiler_installed(store, null, false) then
@@ -884,6 +913,122 @@ namespace Ghul.Cli is
 
         Std.error.write_line("ghul: could not determine the installed ghul.compiler version")
         return 1
+    si
+
+    // Builds a script for wasm or llvm as a project of one source file,
+    // cached by the script, the target, the compiler and every library and
+    // tool the build used, then runs what was built.
+    run_native_script(
+        script: ubyte[],
+        target: Ghul.Project.BuildTarget,
+        reason: string?,
+        script_args: Collections.List[string],
+        force: bool
+    ) -> int is
+        let say = (message: string) -> void => Std.error.write_line("ghul: {message}")
+        let store = Host.COMPILER_STORE.for_this_user()
+
+        let compiler_version = ensure_compiler_installed(store, null, false)
+
+        if !compiler_version? then
+            say("could not determine the installed ghul.compiler version")
+            return 1
+        fi
+
+        let command = store.command(compiler_version)
+        let compiler = Ghul.Project.COMPILER_PROCESS(command.file_name, Collections.LIST[string](command.leading_arguments()))
+        let requirements = Ghul.Project.COMPILER_REQUIREMENTS.read(compiler.directory)
+        let cache = Ghul.Project.LIBRARY_CACHE.for_this_user()
+        let mode = Ghul.Project.BUILD_MODE(false, null)
+
+        let manifest =
+            Ghul.Project.MANIFEST(
+                "script", null, Ghul.Project.ManifestKind.PROGRAM,
+                Collections.LIST[Ghul.Project.BuildTarget]([target]), Collections.LIST[string](["script.ghul"]), null,
+                Ghul.Project.MANIFEST_OPTIONS(null, false, Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), null),
+                Collections.MAP[string, Ghul.Project.DEPENDENCY](), Ghul.Project.CompilerBuild.DEFAULT,
+                Collections.LIST[Ghul.Project.BuildTarget]())
+
+        let libraries = Ghul.Project.PROJECT_BUILD.libraries(
+            Ghul.Project.LOADED_PROJECT(manifest, cache_root(), target), compiler_version, requirements, cache, say)
+
+        if !libraries? then
+            return 1
+        fi
+
+        let key = Text.STRING_BUILDER()
+
+        key.append("{Ghul.Project.BUILD_TARGETS.name(target)} {compiler_version}")
+
+        for library in libraries do
+            key.append(" {library.name}@{library.version}")
+        od
+
+        let linker: string? mut = null
+
+        if target == Ghul.Project.BuildTarget.LLVM then
+            let found = LLVM_TOOLCHAIN.for_this_user().executable(compiler_version, requirements)
+
+            if let problem: string = found.problem then
+                say(problem)
+                return 1
+            fi
+
+            linker = found.path
+            key.append(" {found.path}")
+        fi
+
+        let digest = System.Security.Cryptography.SHA256.hash_data(
+            [script, System.Text.Encoding.utf8.get_bytes(key.to_string())] |> Ghul.Pipes.flat_map(b => b) |> Ghul.Pipes.collect())
+
+        let run_dir = Path.join([cache_root(), System.Convert.to_hex_string(digest).to_lower()])
+        let project = Ghul.Project.LOADED_PROJECT(manifest, run_dir, target)
+        let output = Ghul.Project.PROJECT_BUILD.output_path(project, mode)
+
+        if force \/ !File.exists(output) then
+            Directory.create_directory(cache_root())
+
+            let lock_stream = acquire_lock("{cache_root()}/.locks/{Path.get_file_name(run_dir)}.lock", null)
+
+            try
+                if force \/ !File.exists(output) then
+                    if let shown: string = reason then
+                        say(shown)
+                    fi
+
+                    let scratch_dir = "{run_dir}.tmp-{System.Environment.process_id}-{System.Guid.new_guid().to_string("N")}"
+
+                    Directory.create_directory(scratch_dir)
+                    File.write_all_bytes(Path.join([scratch_dir, "script.ghul"]), script)
+
+                    let extra = Collections.LIST[string]()
+
+                    if wants_implicit_default_use(compiler_version) then
+                        extra.add("--implicit-default-use")
+                    fi
+
+                    let exit_code =
+                        Ghul.Project.PROJECT_BUILD.build(
+                            Ghul.Project.LOADED_PROJECT(manifest, scratch_dir, target),
+                            compiler, compiler_version, null, cache, linker, mode, say, extra, true)
+
+                    if exit_code != 0 then
+                        Directory.delete(scratch_dir, true)
+                        return exit_code
+                    fi
+
+                    if Directory.exists(run_dir) then
+                        Directory.delete(run_dir, true)
+                    fi
+
+                    Directory.move(scratch_dir, run_dir)
+                fi
+            finally
+                lock_stream.close()
+            yrt
+        fi
+
+        return Ghul.Project.PROJECT_RUN.run(project, output, script_args, say)
     si
 
     // `--no-cache` is documented (and accepted) in two positions: before
@@ -1069,7 +1214,7 @@ namespace Ghul.Cli is
         let named = command_line.target ?? environment_target()
 
         let chosen = Ghul.Project.PROJECT_LOADER.choose(
-            Directory.get_current_directory(), named, MACHINE_TARGETS(wants_run))
+            Directory.get_current_directory(), named, MACHINE_TARGETS(wants_run, false))
 
         if let problem: string = chosen.problem then
             say(problem)
