@@ -55,9 +55,8 @@ namespace Ghul.Project is
             manifest_host_wasm ?? global_host_wasm ?? BUILTIN
 
         /// Installs the wasmtime host, fetching the newest ghul-wasmtime
-        /// release if no version is held. Null on success, or the failure
-        /// to report.
-        install(say: (string) -> void) -> string? static =>
+        /// release if no version is held, or the failure to report.
+        install(say: (string) -> void) -> Result[unit, string] static =>
             WASMTIME_DOWNLOAD.of(WASMTIME_STORE.for_this_user()).install(say)
     si
 si

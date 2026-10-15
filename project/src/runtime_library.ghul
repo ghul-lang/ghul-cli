@@ -3,6 +3,8 @@ namespace Ghul.Project is
     use IO.File
     use IO.Path
 
+    use Result.*
+
     /// The runtime library a build for the wasm target compiles in after
     /// the core library: ghul-runtime, which supplies the pipes, ranges and
     /// the rest of what `Ghul` and `Ghul.Pipes` declare, from the files its
@@ -92,7 +94,7 @@ namespace Ghul.Project is
             compiler_version: string,
             requirements: COMPILER_REQUIREMENTS?,
             cache: LIBRARY_CACHE
-        ) -> LibraryOutcome static is
+        ) -> Result[SOURCE_LIBRARY, string] static is
             let declared: DEPENDENCY mut
 
             if manifest.dependencies.try_get_value(NAME, declared ref) then
@@ -106,17 +108,17 @@ namespace Ghul.Project is
                     return _fetched(cache.fetch_tag(git.url, tag), git.directory, tag)
                 fi
 
-                return LibraryOutcome.PROBLEM("{NAME} must be declared with a tag or a path")
+                return ERROR("{NAME} must be declared with a tag or a path")
             fi
 
             if let floor = requirements?.runtime then
                 let resolved = LIBRARY_RESOLVER(cache).resolve(NAME, repository(), floor, compiler_version)
 
-                if let tag = resolved.tag then
-                    return _fetched(cache.fetch_tag(repository(), tag), null, tag)
+                if let (problem): Result.ERROR = resolved then
+                    return ERROR(problem)
                 fi
 
-                return LibraryOutcome.PROBLEM(resolved.problem ?? "no {NAME} release is known for ghul.compiler {compiler_version}")
+                return _fetched(cache.fetch_tag(repository(), resolved!), null, resolved!)
             fi
 
             if let tag = pinned_tag(compiler_version) then
@@ -126,26 +128,25 @@ namespace Ghul.Project is
             // A build for a source-core target cannot go ahead without the
             // runtime: building without it would compile, and then fail
             // where the program first reaches for it.
-            return LibraryOutcome.PROBLEM("no {NAME} release is known for ghul.compiler {compiler_version}; name one in the manifest's dependencies")
+            return ERROR("no {NAME} release is known for ghul.compiler {compiler_version}; name one in the manifest's dependencies")
         si
 
-        _fetched(outcome: CacheOutcome, directory: string?, tag: string) -> LibraryOutcome static is
-            if let problem: CacheOutcome.PROBLEM = outcome then
-                return LibraryOutcome.PROBLEM(problem.message)
+        _fetched(outcome: Result[(directory: string, commit: string), string], directory: string?, tag: string) -> Result[SOURCE_LIBRARY, string] static is
+            if let (problem): Result.ERROR = outcome then
+                return ERROR(problem)
             fi
 
-            let found = cast CacheOutcome.FOUND(outcome)
             let version = if tag.starts_with("v") then tag.substring(1) else tag fi
 
-            return _read(if let sub: string = directory then Path.join([found.directory, sub]) else found.directory fi, version)
+            return _read(if let sub: string = directory then Path.join([outcome!.directory, sub]) else outcome!.directory fi, version)
         si
 
         // The library in `root`, with the sources its source list names.
-        _read(root: string, version: string) -> LibraryOutcome static is
+        _read(root: string, version: string) -> Result[SOURCE_LIBRARY, string] static is
             let list_path = Path.join([root, SOURCE_LIST])
 
             if !File.exists(list_path) then
-                return LibraryOutcome.PROBLEM("{NAME} at {root} has no {SOURCE_LIST}")
+                return ERROR("{NAME} at {root} has no {SOURCE_LIST}")
             fi
 
             let files = LIST[string]()
@@ -158,7 +159,7 @@ namespace Ghul.Project is
                 fi
             od
 
-            return LibraryOutcome.FOUND(SOURCE_LIBRARY(NAME, version, root, files))
+            return OK(SOURCE_LIBRARY(NAME, version, root, files))
         si
     si
 si

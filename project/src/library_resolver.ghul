@@ -7,6 +7,8 @@ namespace Ghul.Project is
     use System.Text.Json.JsonDocument
     use System.Text.Json.JsonValueKind
 
+    use Result.*
+
     /// The release of a source library a build uses: the newest tag at or
     /// above the compiler's floor for it whose own floor for the compiler
     /// the compiler meets.
@@ -30,28 +32,28 @@ namespace Ghul.Project is
         /// - url: its repository
         /// - floor: the oldest release the compiler works with, as `x.y.z`
         /// - compiler_version: the compiler the build uses
-        resolve(name: string, url: string, floor: string, compiler_version: string) -> (tag: string?, problem: string?) is
+        resolve(name: string, url: string, floor: string, compiler_version: string) -> Result[string, string] is
             let record = Path.join([cache.root, LIBRARY_CACHE.repository_directory_name(url), "chosen", "{compiler_version}-{floor}"])
             let kept = _kept(record)
 
             if let tag = kept /\ File.get_last_write_time_utc(record) > System.DateTime.utc_now.subtract(_kept_for) then
-                return (tag = tag, problem = null)
+                return OK(tag)
             fi
 
             let listed = GIT.run(LIST[string](["ls-remote", "--tags", "--refs", url]), null)
 
             if !listed.succeeded then
                 if let tag = kept then
-                    return (tag = tag, problem = null)
+                    return OK(tag)
                 fi
 
-                return (tag = null, problem = "cannot list the releases of {url}: {listed.error.trim()}")
+                return ERROR("cannot list the releases of {url}: {listed.error.trim()}")
             fi
 
             let chosen = choose(name, url, floor, compiler_version, release_tags(listed.output))
 
-            if let tag = chosen.tag then
-                _keep(record, tag)
+            if chosen? then
+                _keep(record, chosen!)
             fi
 
             return chosen
@@ -71,7 +73,7 @@ namespace Ghul.Project is
             floor: string,
             compiler_version: string,
             tags: Collections.List[(tag: string, version: System.Version)]
-        ) -> (tag: string?, problem: string?) is
+        ) -> Result[string, string] is
             let lowest = System.Version.parse(floor)
 
             // A compiler that is not a release, such as a local build, is
@@ -86,14 +88,14 @@ namespace Ghul.Project is
 
                 let fetched = cache.fetch_tag(url, candidate.tag)
 
-                if let problem: CacheOutcome.PROBLEM = fetched then
-                    return (tag = null, problem = problem.message)
+                if let (problem): Result.ERROR = fetched then
+                    return ERROR(problem)
                 fi
 
-                let needs = minimum_compiler(cast CacheOutcome.FOUND(fetched).directory)
+                let needs = minimum_compiler(fetched!.directory)
 
                 if !compiler? \/ !needs? \/ needs <= compiler then
-                    return (tag = candidate.tag, problem = null)
+                    return OK(candidate.tag)
                 fi
 
                 if !oldest_needed? \/ needs < oldest_needed! then
@@ -102,12 +104,10 @@ namespace Ghul.Project is
             od
 
             if let needed = oldest_needed then
-                return (
-                    tag = null,
-                    problem = "{name}: ghul.compiler {compiler_version} needs v{floor} or newer, and every release from v{floor} needs ghul.compiler {needed} or newer")
+                return ERROR("{name}: ghul.compiler {compiler_version} needs v{floor} or newer, and every release from v{floor} needs ghul.compiler {needed} or newer")
             fi
 
-            return (tag = null, problem = "{name}: ghul.compiler {compiler_version} needs v{floor} or newer, and {url} has no release that new")
+            return ERROR("{name}: ghul.compiler {compiler_version} needs v{floor} or newer, and {url} has no release that new")
         si
 
         /// The release tags in `ls-remote` output, as `vX.Y.Z` with their
