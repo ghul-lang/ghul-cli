@@ -35,17 +35,19 @@ namespace Ghul.Project is
                 return GLOBAL_DEFAULTS(null, null)
             fi
 
-            let document = JsonDocument.parse(File.read_all_text(config_path), _)
             let prefer: Collections.List[BuildTarget]? mut = null
             let host_wasm: string? mut = null
 
             try
-                let root = document.root_element
+                let document = JsonDocument.parse(File.read_all_text(config_path), _)
 
-                if root.value_kind != JsonValueKind.OBJECT then
-                    problem! = "{config_path} is not a JSON object"
-                    return GLOBAL_DEFAULTS(null, null)
-                fi
+                try
+                    let root = document.root_element
+
+                    if root.value_kind != JsonValueKind.OBJECT then
+                        problem! = "{config_path} is not a JSON object"
+                        return GLOBAL_DEFAULTS(null, null)
+                    fi
 
                 let defaults: JsonElement mut
 
@@ -76,8 +78,11 @@ namespace Ghul.Project is
                 fi
 
                 host_wasm = _host_wasm(defaults)
-            finally
-                document.dispose()
+                finally
+                    document.dispose()
+                yrt
+            catch e: System.Text.Json.JsonException
+                problem! = "{config_path} is not valid JSON: {e.message}"
             yrt
 
             return GLOBAL_DEFAULTS(prefer, host_wasm)
