@@ -26,7 +26,7 @@ namespace Ghul.Project is
     /// the project's `prefer` lists, then dotnet, llvm and wasm.
     class TARGET_CHOICE is
         /// The order targets are tried in where a project prefers none.
-        ORDER: BuildTarget[] static => [BuildTarget.DOTNET, BuildTarget.LLVM, BuildTarget.WASM]
+        ORDER: BuildTarget[] static => [BuildTarget.DOTNET, BuildTarget.WASM]
 
         /// The target for a build of a project listing `listed`.
         ///

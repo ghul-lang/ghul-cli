@@ -13,7 +13,8 @@ namespace Ghul.Project is
         options: MANIFEST_OPTIONS,
         dependencies: Collections.Map[string, DEPENDENCY],
         compiler_build: CompilerBuild,
-        prefer: Collections.List[BuildTarget]
+        prefer: Collections.List[BuildTarget],
+        host_wasm: string?
     ) is si
 
     // Whether the project is something to run or something to depend on.

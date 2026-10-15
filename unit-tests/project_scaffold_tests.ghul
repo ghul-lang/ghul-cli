@@ -31,7 +31,7 @@ namespace Ghul.Cli.Tests is
 
             assert !parsed.problem?
             _same("hello", parsed.directory ?? "")
-            _same("dotnet,llvm,wasm", _targets(parsed.targets))
+            _same("dotnet,wasm", _targets(parsed.targets))
         si
 
         @Test()

@@ -92,10 +92,34 @@ namespace Ghul.Project is
             let read = read_manifest(Path.get_full_path(directory))
 
             if let manifest: MANIFEST = read.manifest then
-                return TARGET_CHOICE.choose(manifest.targets, manifest.prefer, named, availability)
+                // The manifest's own preference stands; the machine's
+                // global defaults fill the gap a manifest leaves.
+                let prefer =
+                    if manifest.prefer.count > 0 then
+                        manifest.prefer
+                    else
+                        let problem: string? mut = null
+                        GLOBAL_DEFAULTS.read(GLOBAL_DEFAULTS.path(), problem ref).prefer ?? manifest.prefer
+                    fi
+
+                return TARGET_CHOICE.choose(manifest.targets, prefer, named, availability)
             fi
 
             return CHOSEN_TARGET(null, null, null)
+        si
+
+        /// The host the manifest in `directory` names for running a wasm
+        /// build, or null where it names none or cannot be read. Read
+        /// before the project is loaded, so target availability can honour
+        /// the manifest's own choice the way the run itself will.
+        host_wasm(directory: string) -> string? static is
+            let read = read_manifest(Path.get_full_path(directory))
+
+            if let manifest: MANIFEST = read.manifest then
+                return manifest.host_wasm
+            fi
+
+            return null
         si
 
         /// The target a build is for: the one named, which the manifest has

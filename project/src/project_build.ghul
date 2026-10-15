@@ -258,8 +258,10 @@ namespace Ghul.Project is
     si
 
     /// Runs a project's build: a `dotnet` program with the .NET host, a wasm
-    /// program with Node, through the loader the compiler writes beside the
-    /// module, and an llvm program directly.
+    /// program under the wasm host the project, the machine's global
+    /// defaults or the built-in default chooses - the wasmtime host, or
+    /// Node through the loader the compiler writes beside the module - and
+    /// an llvm program directly.
     class PROJECT_RUN is
         /// The program that runs `output` and the arguments it is given, or
         /// null with the reason the build cannot be run.
@@ -270,7 +272,9 @@ namespace Ghul.Project is
         command(
             project: LOADED_PROJECT,
             output: string,
-            arguments: Collections.List[string]
+            arguments: Collections.List[string],
+            global_host_wasm: string?,
+            wasm_host: string?
         ) -> (file_name: string, arguments: Collections.List[string], problem: string?) static is
             let all = LIST[string]()
 
@@ -281,8 +285,13 @@ namespace Ghul.Project is
             let file_name =
                 case project.target
                 when BuildTarget.WASM then
-                    all.add(Path.change_extension(output, ".mjs") ?? output)
-                    "node"
+                    if WASM_HOST_SELECTION.chosen(project, global_host_wasm) =~ "node" then
+                        all.add(Path.change_extension(output, ".mjs") ?? output)
+                        "node"
+                    else
+                        all.add(output)
+                        wasm_host ?? WASM_HOST_SELECTION.BUILTIN
+                    fi
                 when BuildTarget.LLVM then
                     output
                 when BuildTarget.DOTNET then
@@ -303,21 +312,43 @@ namespace Ghul.Project is
         /// - project: the project that was built
         /// - output: what the build wrote
         /// - arguments: the arguments for the program being run
+        /// - global_host_wasm: the machine's global default wasm host, read
+        ///   once where the run was asked for
         /// - say: where a problem is reported
         run(
             project: LOADED_PROJECT,
             output: string,
             arguments: Collections.List[string],
+            global_host_wasm: string?,
             say: (string) -> void
         ) -> int static is
-            let to_run = command(project, output, arguments)
+            let wasm_host_executable mut =
+                if project.target == BuildTarget.WASM /\ !(WASM_HOST_SELECTION.chosen(project, global_host_wasm) =~ "node") then
+                    // The host the ladder chose: resolved where it is
+                    // installed, fetched where it is not, as the compiler
+                    // download already is on first use.
+                    if WASM_HOST_SELECTION.resolve("wasmtime") == null then
+                        if let trouble: string = WASM_HOST_SELECTION.install(say) then
+                            say(trouble)
+                            say("the wasmtime host could not be installed; run ghul install wasmtime")
+
+                            return 1
+                        fi
+                    fi
+
+                    WASM_HOST_SELECTION.resolve("wasmtime")
+                else
+                    null
+                fi
+
+            let to_run = command(project, output, arguments, global_host_wasm, wasm_host_executable)
 
             if let problem: string = to_run.problem then
                 say(problem)
                 return 1
             fi
 
-            if project.target == BuildTarget.WASM then
+            if project.target == BuildTarget.WASM /\ WASM_HOST_SELECTION.chosen(project, global_host_wasm) =~ "node" then
                 if let problem: string = NODE_RUNTIME.run_problem() then
                     say(problem)
                     return 1

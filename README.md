@@ -130,8 +130,8 @@ ghul rosetta <task>[/<part>] [<directory>]  # fetch a Rosetta Code solution as a
 ghul build [--target <name>] [--debug] [--optimise <0-3>] [overrides]  # build the project in this directory
 ghul run [--target <name>] [--debug] [--optimise <0-3>] [overrides] [-- args...]  # build, then run it
 ghul project response-file|compiler         # what editors read (see below)
-ghul install-compiler [--llvm] [version]    # install or update ghul.compiler
-ghul update [--version <tag>] [--check]     # update ghul itself
+ghul install <compiler|wasmtime|llvm>       # install or update a component
+ghul update [--version <tag>] [--check]     # update ghul and every installed component
 ghul cache clear                            # empty the compiled-script cache
 ghul repl [--no-server] [--no-default-use]  # start an interactive session
 ghul version                                # print the versions of ghul and ghul.compiler
@@ -161,11 +161,20 @@ installs exactly that version, older or newer, and does nothing if that
 version is already installed. `GHUL_COMPILER_FEED` names a different feed to
 download from, for a mirror or an offline network.
 
+`ghul install llvm` does the same as `--llvm` did. `ghul install wasmtime`
+installs the wasmtime host that runs wasm programs on a machine without
+Node.js, into a store of its own; a run that needs it and finds it missing
+downloads the latest release first.
+
 `ghul install-compiler --llvm` installs the compiler built with the llvm
 target instead, a native executable that builds for the `wasm` and `llvm`
 targets only, into a store of its own. A project chooses it with
 `"compiler-build": "llvm"` in its manifest; `"default"`, or no entry, keeps
 the ordinary compiler. It is published for Linux on x64 only.
+
+`ghul install-compiler` and `ghul install-compiler --llvm` still work, with a
+note pointing at the new spellings; they are aliases of `ghul install
+compiler` and `ghul install llvm`.
 
 `ghul update` updates a `ghul` installed without .NET to the latest release,
 or to the release `--version` names, older or newer. It runs that release's
@@ -217,15 +226,43 @@ A project that lists one target builds that one. Where it lists several,
 environment. Otherwise `ghul` takes the first target in order that the
 machine can build:
 - dotnet, where a .NET SDK is installed
-- llvm, where `ghul-llvm` is cached or can be fetched
-- wasm, where Node.js is installed to run it
+- wasm, which needs nothing at build time; the run finds something to run
+  the module under, as the hosts section below describes
 
-A manifest's `prefer`, such as `"prefer": ["llvm"]`, puts the targets it
+A manifest's `prefer`, such as `"prefer": ["wasm"]`, puts the targets it
 names first, and every one it names has to be among `targets`. When `ghul`
 cannot build for dotnet, it says what it built for instead and why in one line,
 as in `ghul: building for llvm (no .NET SDK)`; choosing dotnet, or a target
 `prefer` puts first, it says nothing. Where no listed target
 can be built, it says why for each and builds nothing.
+
+## hosts and global defaults
+
+A wasm program needs something to run the module: the wasmtime host, or
+Node.js through the loader the compiler writes. Which one is chosen in three
+steps, each filling only what the one before leaves unset.
+
+1. The project manifest names it: `"host": { "wasm": "wasmtime" }` or
+   `"host": { "wasm": "node" }`.
+2. The machine's global configuration file,
+   `~/.config/ghul/config.json`, names a default for every project that
+   does not choose:
+
+   ```json
+   { "defaults": { "host": { "wasm": "wasmtime" } } }
+   ```
+
+3. Nothing said anywhere, the built-in default is the wasmtime host.
+
+A project that names a host itself is never overridden by the global file.
+The built-in order a build follows is dotnet first, then wasm; llvm is never
+chosen automatically, and neither is node - name them in the manifest to use
+them.
+
+When a run chooses the wasmtime host and finds it missing, it downloads the
+newest release first, as the compiler is downloaded on first use.
+`ghul install wasmtime` does the same ahead of time, and `ghul update`
+refreshes ghul itself and every component already installed.
 
 The compiler's messages go to standard error, and a failed build exits
 with the compiler's status. `compiler` in the manifest names the

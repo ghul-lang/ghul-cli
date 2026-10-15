@@ -35,6 +35,7 @@ namespace Ghul.Project is
             let compiler = _string_member(root, "compiler")
             let compiler_build = _compiler_build(root)
             let prefer = _prefer(root, targets)
+            let host_wasm = _host_wasm(root)
             let options = _options(root)
             let dependencies = _dependencies(root)
 
@@ -45,7 +46,7 @@ namespace Ghul.Project is
                 return null
             fi
 
-            return MANIFEST(name, version, kind, targets, sources, compiler, options, dependencies, compiler_build, prefer)
+            return MANIFEST(name, version, kind, targets, sources, compiler, options, dependencies, compiler_build, prefer, host_wasm)
         si
 
         // A member read as a string, or nothing when the key is absent.
@@ -462,6 +463,39 @@ namespace Ghul.Project is
             return prefer
         si
 
+        // The program that runs the project's wasm build, where the
+        // manifest says: `wasmtime` or `node`. Null where it says nothing,
+        // which leaves the choice to the user's global defaults and the
+        // built-in one after those.
+        _host_wasm(root: JsonElement) -> string? is
+            let host: JsonElement mut
+
+            if !root.try_get_property("host", host ref) then
+                return null
+            fi
+
+            let value: JsonElement mut
+
+            if !host.try_get_property("wasm", value ref) then
+                return null
+            fi
+
+            if value.value_kind != JsonValueKind.STRING then
+                _report("host", "wasm is not a string")
+                return null
+            fi
+
+            let name = value.get_string() ?? ""
+
+            if name =~ "node" \/ name =~ "wasmtime" then
+                return name
+            fi
+
+            _report("host", "wasm is neither wasmtime nor node")
+
+            return null
+        si
+
         _target_list(key: string, value: JsonElement) -> Collections.List[BuildTarget] is
             if value.value_kind != JsonValueKind.ARRAY then
                 _report(key, "the value is not a list")
@@ -518,6 +552,7 @@ namespace Ghul.Project is
             keys.add("compiler")
             keys.add("compiler-build")
             keys.add("dependencies")
+            keys.add("host")
             keys.add("kind")
             keys.add("name")
             keys.add("options")

@@ -1,0 +1,133 @@
+namespace Ghul.Project is
+    use Collections.LIST
+
+    use IO.File
+
+    use System.Text.Json.JsonDocument
+    use System.Text.Json.JsonElement
+    use System.Text.Json.JsonValueKind
+
+    /// The defaults a user's machine adds under every project: read once
+    /// from the global configuration file,
+    /// `$XDG_CONFIG_HOME/ghul/config.json` (`~/.config/ghul/config.json`
+    /// where that is unset). A key set here fills only what a project's own
+    /// manifest leaves unset - nothing here reaches into a project that
+    /// states the key itself.
+    ///
+    /// ```json
+    /// { "defaults": { "prefer": ["wasm"], "host": { "wasm": "wasmtime" } } }
+    /// ```
+    class GLOBAL_DEFAULTS(
+        /// The targets a build prefers, in order, where the manifest names
+        /// no `prefer` of its own.
+        prefer: Collections.List[BuildTarget]?,
+
+        /// The program that runs a test... runs a wasm program, where the
+        /// manifest names no `host.wasm` of its own: `wasmtime` or `node`.
+        host_wasm: string?
+    ) is
+        /// Reads the file, or returns the empty defaults where there is
+        /// none to read. A malformed file is reported through `problem`
+        /// rather than ignored, since silently dropping a user's stated
+        /// preference would run the wrong thing without saying why.
+        read(config_path: string, problem: string? ref) -> GLOBAL_DEFAULTS static is
+            if !File.exists(config_path) then
+                return GLOBAL_DEFAULTS(null, null)
+            fi
+
+            let prefer: Collections.List[BuildTarget]? mut = null
+            let host_wasm: string? mut = null
+
+            try
+                let document = JsonDocument.parse(File.read_all_text(config_path), _)
+
+                try
+                    let root = document.root_element
+
+                    if root.value_kind != JsonValueKind.OBJECT then
+                        problem! = "{config_path} is not a JSON object"
+                        return GLOBAL_DEFAULTS(null, null)
+                    fi
+
+                let defaults: JsonElement mut
+
+                if !root.try_get_property("defaults", defaults ref) then
+                    return GLOBAL_DEFAULTS(null, null)
+                fi
+
+                let prefer_element: JsonElement mut
+
+                if defaults.try_get_property("prefer", prefer_element ref) then
+                    if prefer_element.value_kind == JsonValueKind.ARRAY then
+                        let list = LIST[BuildTarget]()
+
+                        for entry in prefer_element.enumerate_array() do
+                            if entry.value_kind != JsonValueKind.STRING then
+                                continue
+                            fi
+
+                            if let wanted: BuildTarget = BUILD_TARGETS.named(entry.get_string() ?? "") then
+                                list.add(wanted)
+                            fi
+                        od
+
+                        if list.count > 0 then
+                            prefer = list
+                        fi
+                    fi
+                fi
+
+                host_wasm = _host_wasm(defaults)
+                finally
+                    document.dispose()
+                yrt
+            catch e: System.Text.Json.JsonException
+                problem! = "{config_path} is not valid JSON: {e.message}"
+            yrt
+
+            return GLOBAL_DEFAULTS(prefer, host_wasm)
+        si
+
+        /// The default configuration file's path, whether or not it exists.
+        path() -> string static is
+            let xdg = System.Environment.get_environment_variable("XDG_CONFIG_HOME")
+
+            let base =
+                if xdg? /\ xdg.length > 0 then
+                    xdg
+                else
+                    let home = System.Environment.get_environment_variable("HOME")
+
+                    if home? /\ home.length > 0 then
+                        "{home}/.config"
+                    else
+                        System.Environment.get_folder_path(System.Environment_SpecialFolder.USER_PROFILE)
+                    fi
+                fi
+
+            return "{base}/ghul/config.json"
+        si
+
+        _host_wasm(defaults: JsonElement) -> string? static is
+            let host: JsonElement mut
+
+            if !defaults.try_get_property("host", host ref) then
+                return null
+            fi
+
+            let value: JsonElement mut
+
+            if !host.try_get_property("wasm", value ref) then
+                return null
+            fi
+
+            if value.value_kind != JsonValueKind.STRING then
+                return null
+            fi
+
+            let name = value.get_string()
+
+            return if name =~ "node" \/ name =~ "wasmtime" then name else null fi
+        si
+    si
+si

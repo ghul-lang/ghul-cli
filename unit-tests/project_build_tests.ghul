@@ -38,7 +38,9 @@ namespace Ghul.Cli.Tests is
             assert actual =~ expected else "expected '{expected}', got '{actual}'"
         si
 
-        _project(kind: ManifestKind, target: BuildTarget) -> LOADED_PROJECT =>
+        _project(kind: ManifestKind, target: BuildTarget) -> LOADED_PROJECT => _project_host(kind, target, null)
+
+        _project_host(kind: ManifestKind, target: BuildTarget, host_wasm: string?) -> LOADED_PROJECT =>
             LOADED_PROJECT(
                 MANIFEST(
                     "app",
@@ -49,7 +51,7 @@ namespace Ghul.Cli.Tests is
                     null,
                     MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](), null),
                     MAP[string, DEPENDENCY](),
-                    CompilerBuild.DEFAULT, LIST[BuildTarget]()),
+                    CompilerBuild.DEFAULT, LIST[BuildTarget](), host_wasm),
                 IO.Path.combine("/", "project"),
                 target)
 
@@ -128,7 +130,7 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         a_dotnet_program_runs_with_the_dotnet_host() is
-            let command = PROJECT_RUN.command(_project(ManifestKind.PROGRAM, BuildTarget.DOTNET), "/p/out/dotnet/app.exe", LIST[string](["a", "b"]))
+            let command = PROJECT_RUN.command(_project(ManifestKind.PROGRAM, BuildTarget.DOTNET), "/p/out/dotnet/app.exe", LIST[string](["a", "b"]), null, null)
 
             assert !command.problem?
             _same("dotnet", command.file_name)
@@ -136,8 +138,8 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        a_wasm_program_runs_under_node_through_its_loader() is
-            let command = PROJECT_RUN.command(_project(ManifestKind.PROGRAM, BuildTarget.WASM), "/p/out/wasm/app.wasm", LIST[string](["a"]))
+        a_wasm_program_runs_under_the_host_its_manifest_names() is
+            let command = PROJECT_RUN.command(_project_host(ManifestKind.PROGRAM, BuildTarget.WASM, "node"), "/p/out/wasm/app.wasm", LIST[string](["a"]), null, null)
 
             assert !command.problem?
             _same("node", command.file_name)
@@ -145,8 +147,17 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
+        a_wasm_program_runs_under_the_wasmtime_host_by_default() is
+            let command = PROJECT_RUN.command(_project(ManifestKind.PROGRAM, BuildTarget.WASM), "/p/out/wasm/app.wasm", LIST[string](["a"]), null, "/opt/ghul/ghul-wasmtime")
+
+            assert !command.problem?
+            _same("/opt/ghul/ghul-wasmtime", command.file_name)
+            _same("/p/out/wasm/app.wasm a", string.join(" ", command.arguments))
+        si
+
+        @Test()
         an_llvm_program_runs_directly() is
-            let command = PROJECT_RUN.command(_project(ManifestKind.PROGRAM, BuildTarget.LLVM), "/p/out/llvm/app", LIST[string](["a", "b"]))
+            let command = PROJECT_RUN.command(_project(ManifestKind.PROGRAM, BuildTarget.LLVM), "/p/out/llvm/app", LIST[string](["a", "b"]), null, null)
 
             assert !command.problem?
             _same("/p/out/llvm/app", command.file_name)
@@ -155,7 +166,7 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         a_library_is_not_run() is
-            let command = PROJECT_RUN.command(_project(ManifestKind.LIBRARY, BuildTarget.DOTNET), "/p/out/dotnet/app.dll", LIST[string]())
+            let command = PROJECT_RUN.command(_project(ManifestKind.LIBRARY, BuildTarget.DOTNET), "/p/out/dotnet/app.dll", LIST[string](), null, null)
 
             _same("app is a library, which cannot be run", command.problem ?? "")
         si
@@ -223,7 +234,8 @@ namespace Ghul.Cli.Tests is
             _same("v0.45.0", CORE_LIBRARY.pinned_tag("65.15.0"))
             _same("v0.45.0", CORE_LIBRARY.pinned_tag("65.21.9"))
             _same("v0.55.0", CORE_LIBRARY.pinned_tag("65.22.0"))
-            _same("v0.55.0", CORE_LIBRARY.pinned_tag("70.0.0"))
+            _same("v0.67.2", CORE_LIBRARY.pinned_tag("65.30.0"))
+            _same("v0.67.2", CORE_LIBRARY.pinned_tag("70.0.0"))
         si
 
         @Test()
@@ -255,7 +267,8 @@ namespace Ghul.Cli.Tests is
             _same("v25.9.1", RUNTIME_LIBRARY.pinned_tag("65.15.0") ?? "none")
             _same("v25.9.1", RUNTIME_LIBRARY.pinned_tag("65.21.9") ?? "none")
             _same("v25.10.3", RUNTIME_LIBRARY.pinned_tag("65.22.0") ?? "none")
-            _same("v25.10.3", RUNTIME_LIBRARY.pinned_tag("70.0.0") ?? "none")
+            _same("v27.0.0", RUNTIME_LIBRARY.pinned_tag("65.30.0") ?? "none")
+            _same("v27.0.0", RUNTIME_LIBRARY.pinned_tag("70.0.0") ?? "none")
         si
 
         @Test()

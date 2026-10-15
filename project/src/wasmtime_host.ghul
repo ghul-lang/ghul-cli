@@ -1,0 +1,299 @@
+namespace Ghul.Project is
+    use Collections.LIST
+    use IO.Directory
+    use IO.File
+    use IO.Path
+
+    // Where the wasmtime hosts ghul-cli has downloaded live: one directory
+    // per release under `$XDG_CACHE_HOME/ghul-cli/wasmtime`
+    // (`~/.cache/ghul-cli/wasmtime` where that is unset), holding the
+    // release's `ghul-wasmtime` executable. Several releases are held at
+    // once and the highest release is the one run, exactly as the compiler
+    // store holds its versions; `ghul cache clear` takes them with the
+    // rest.
+    class WASMTIME_STORE(root: string) is
+        // This user's store, under `XDG_CACHE_HOME` where that is set and
+        // under `~/.cache` where it is not.
+        for_this_user() -> WASMTIME_STORE static =>
+            WASMTIME_STORE(Path.join([_cache_base(), "ghul-cli", "wasmtime"]))
+
+        _cache_base() -> string static is
+            let xdg = System.Environment.get_environment_variable("XDG_CACHE_HOME")
+
+            let base =
+                if xdg? /\ xdg.length > 0 then
+                    xdg
+                else
+                    let home = System.Environment.get_environment_variable("HOME")
+
+                    if home? /\ home.length > 0 then
+                        home
+                    else
+                        System.Environment.get_folder_path(System.Environment_SpecialFolder.USER_PROFILE)
+                    fi
+                fi
+
+            Directory.create_directory(base)
+
+            return base
+        si
+
+        // The executable of the release `tag` names, whether or not it is
+        // there.
+        binary(tag: string) -> string => Path.join([root, tag, "ghul-wasmtime"])
+
+        // Held while a release is being downloaded into the store, so two
+        // `ghul` processes racing to install the same release take turns
+        // rather than both writing it.
+        install_lock_path() -> string => Path.join([root, ".install.lock"])
+
+        // The executable of the highest release held, or null where the
+        // store holds none. Releases sort by their version, read out of the
+        // tag's numbers rather than as text.
+        installed() -> string? is
+            let best: (tag: string?, numbers: LIST[int]) mut = (null, LIST[int]())
+
+            if Directory.exists(root) then
+                for directory in Directory.get_directories(root) do
+                    let tag = Path.get_file_name(directory) ?? ""
+
+                    if !File.exists(Path.join([directory, "ghul-wasmtime"])) then
+                        continue
+                    fi
+
+                    let numbers = _numbers(tag)
+                    let newer mut = !best.tag?
+
+                    for i in 0..numbers.count do
+                        let mine = if i < best.numbers.count then best.numbers[i] else 0 fi
+                        let theirs = if i < numbers.count then numbers[i] else 0 fi
+
+                        if theirs != mine then
+                            newer = theirs > mine
+                            break
+                        fi
+                    od
+
+                    if newer then
+                        best = (tag, numbers)
+                    fi
+                od
+            fi
+
+            if let tag: string = best.tag then
+                return binary(tag)
+            fi
+
+            return null
+        si
+
+        // The version a tag names, as the numbers between its `v` and any
+        // prerelease marker: `v0.2.0-beta.3` is 0, 2, 0.
+        _numbers(tag: string) -> LIST[int] static is
+            let numbers = LIST[int]()
+            let current mut = 0
+            let seen mut = false
+
+            for c in tag do
+                if c >= '0' /\ c <= '9' then
+                    current = current * 10 + cast int(c - '0')
+                    seen = true
+                elif seen then
+                    numbers.add(current)
+                    current = 0
+                    seen = false
+                fi
+            od
+
+            if seen then
+                numbers.add(current)
+            fi
+
+            return numbers
+        si
+    si
+
+    // Fetches a wasmtime host a ghul-wasmtime release carries, into a
+    // `WASMTIME_STORE`. Shaped as `NATIVE_COMPILER_DOWNLOAD` is: the binary
+    // is downloaded to a scratch file and renamed onto the release's store
+    // directory only once complete, so a reader never sees a half-written
+    // release and a failed download leaves nothing behind.
+    class WASMTIME_DOWNLOAD(_store: WASMTIME_STORE, _base: string?) is
+        DEFAULT_BASE: string static => "https://github.com/ghul-lang/ghul-wasmtime/releases/download"
+
+        // A download into `store`, with the release base named by
+        // GHUL_WASMTIME_BASE where that is set, so a mirror or a test can
+        // serve the binaries from elsewhere.
+        of(store: WASMTIME_STORE) -> WASMTIME_DOWNLOAD static =>
+            WASMTIME_DOWNLOAD(
+                store, System.Environment.get_environment_variable("GHUL_WASMTIME_BASE"))
+
+        base() -> string => _base ?? DEFAULT_BASE
+
+        // The asset a release `tag` names for this machine, or the reason
+        // there is none.
+        asset_url(tag: string) -> (url: string?, failure: string?) is
+            if let rid: string = _rid() then
+                return (
+                    url = "{base()}/v{tag}/ghul-wasmtime-{rid}",
+                    failure = null)
+            fi
+
+            return (
+                url = null,
+                failure = "there is no wasmtime host for this platform")
+        si
+
+        // The tag of the newest release, or the failure to report.
+        latest_tag() -> (tag: string?, failure: string?) is
+            let client = System.Net.Http.HttpClient()
+
+            try
+                let request = System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.get, "https://api.github.com/repos/ghul-lang/ghul-wasmtime/releases/latest")
+
+                request.headers.add("User-Agent", "ghul-cli")
+
+                let response = client.send(request)
+
+                if !response.is_success_status_code then
+                    return (null, "the releases request answered {cast int(response.status_code)}")
+                fi
+
+                let text = response.content.read_as_string_async().result
+
+                return (latest_tag_in(text), null)
+            catch e: System.Exception
+                return (null, e.message)
+            finally
+                client.dispose()
+            yrt
+        si
+
+        latest_tag_in(text: string) -> string? static =>
+            System.Text.RegularExpressions.Regex
+                .match(text, "\"tag_name\":\\s*\"v([^\"]+)\"")
+                .groups[1]
+                .value
+
+        // Downloads the newest release into the store. Null on success, or
+        // the failure to report.
+        install(say: (string) -> void) -> string? is
+            let (tag, tag_failure) = latest_tag()
+
+            if let failure: string = tag_failure then
+                return "could not read the newest ghul-wasmtime release: {failure}"
+            elif let wanted: string = tag then
+                return install(wanted, say)
+            fi
+
+            return "the releases request answered nothing"
+        si
+
+        // Downloads the release `tag` names into the store. Null on
+        // success, or the failure to report, which names the tag and, where
+        // the release answered, the HTTP status. Guarded by the store's
+        // install lock and re-checked once it is held, so two processes
+        // racing to install the same release download it once between
+        // them.
+        install(tag: string, say: (string) -> void) -> string? is
+            Directory.create_directory(_store.root)
+
+            let lock_stream = FILE_LOCK.acquire(_store.install_lock_path(), null)
+
+            try
+                let (url, url_failure) = asset_url(tag)
+
+                if let failure: string = url_failure then
+                    return failure
+                elif let asset: string = url then
+                    let directory = Path.join([_store.root, tag])
+
+                    if File.exists(Path.join([directory, "ghul-wasmtime"])) then
+                        say("ghul-wasmtime {tag} is already installed")
+
+                        return null
+                    fi
+
+                    say("downloading ghul-wasmtime {tag}")
+
+                    let scratch = Path.join([
+                        Path.get_temp_path(),
+                        "ghul-wasmtime.{System.Environment.process_id}.{System.Guid.new_guid().to_string("N")}"
+                    ])
+
+                    try
+                        let client = System.Net.Http.HttpClient()
+                        let response = client.get_async(asset).result
+
+                        if !response.is_success_status_code then
+                            return "ghul-wasmtime {tag} is not on the releases page (HTTP {cast int(response.status_code)})"
+                        fi
+
+                        let bytes = response.content.read_as_byte_array_async().result
+
+                        File.write_all_bytes(scratch, bytes)
+                        _mark_executable(scratch)
+                        Directory.create_directory(directory)
+                        File.move(scratch, Path.join([directory, "ghul-wasmtime"]))
+
+                        return null
+                    catch e: System.Exception
+                        if File.exists(scratch) then
+                            File.delete(scratch)
+                        fi
+
+                        return "downloading {asset} failed ({e.get_type().name})"
+                    yrt
+                fi
+
+                return "there is no wasmtime host for this platform"
+            finally
+                lock_stream.close()
+            yrt
+        si
+
+        // The download lands without the executable bit a release asset
+        // carries, so it is given here rather than trusted from whatever
+        // wrote the file. Fails where the mode could not be set, so the
+        // caller never renames a binary that could not run.
+        _mark_executable(path: string) is
+            let start_info = System.Diagnostics.ProcessStartInfo()
+
+            start_info.file_name = "chmod"
+            start_info.argument_list.add("+x")
+            start_info.argument_list.add(path)
+
+            let process = System.Diagnostics.Process.start(start_info)!
+
+            process.wait_for_exit()
+
+            if process.exit_code != 0 then
+                throw System.InvalidOperationException("chmod +x {path} failed (exit {process.exit_code})")
+            fi
+        si
+
+        // The platform a release names its assets for, or null where this
+        // machine is one no release builds for.
+        _rid() -> string? static is
+            let system =
+                if System.OperatingSystem.is_windows() then
+                    "win"
+                elif System.OperatingSystem.is_linux() then
+                    "linux"
+                elif System.OperatingSystem.is_mac_o_s() then
+                    "osx"
+                else
+                    return null
+                fi
+
+            let architecture =
+                if System.Runtime.InteropServices.RuntimeInformation.process_architecture == System.Runtime.InteropServices.Architecture.ARM64 then
+                    "arm64"
+                else
+                    "x64"
+                fi
+
+            return "{system}-{architecture}"
+        si
+    si
+si
