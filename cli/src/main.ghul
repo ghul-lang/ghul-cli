@@ -1444,10 +1444,6 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        if let reason: string = chosen.reason then
-            say(reason)
-        fi
-
         let target_name =
             if let target = chosen.target then Ghul.Project.BUILD_TARGETS.name(target) else named fi
 
@@ -1471,12 +1467,33 @@ namespace Ghul.Cli is
             Ghul.Project.BUILD_MODE(command_line.debug, command_line.optimise ?? project.manifest.options.optimise)
 
         // Said before building rather than after, so a run that cannot
-        // happen does not wait for a build first.
+        // happen does not wait for a build first. Only a run whose host is
+        // Node needs Node; the wasmtime host is fetched where it is
+        // missing.
         if wants_run /\ project.target == Ghul.Project.BuildTarget.WASM /\ project.manifest.kind == Ghul.Project.ManifestKind.PROGRAM then
-            if let problem: string = Ghul.Project.NODE_RUNTIME.run_problem() then
-                say(problem)
-                return 1
+            if Ghul.Project.WASM_HOST_SELECTION.chosen(project, global_defaults.host_wasm) =~ "node" then
+                if let problem: string = Ghul.Project.NODE_RUNTIME.run_problem() then
+                    say(problem)
+                    return 1
+                fi
             fi
+        fi
+
+        // A run of a build that is already there and nothing has touched
+        // since runs it as it stands, with nothing said: the build is not
+        // what was asked for, the program is.
+        if wants_run /\ Ghul.Project.PROJECT_BUILD.is_fresh(project, mode) then
+            return
+                Ghul.Project.PROJECT_RUN.run(
+                    project,
+                    Ghul.Project.PROJECT_BUILD.output_path(project, mode),
+                    command_line.program_arguments,
+                    global_defaults.host_wasm,
+                    say)
+        fi
+
+        if let reason: string = chosen.reason then
+            say(reason)
         fi
 
         let store = Host.COMPILER_STORE.for_this_user()
@@ -1509,7 +1526,9 @@ namespace Ghul.Cli is
                     Ghul.Project.LIBRARY_CACHE.for_this_user(),
                     linker,
                     mode,
-                    say)
+                    say,
+                    Collections.LIST[string](),
+                    true)
 
             if exit_code != 0 \/ !wants_run then
                 return exit_code

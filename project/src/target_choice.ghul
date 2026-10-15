@@ -69,11 +69,10 @@ namespace Ghul.Project is
 
                 // Building for dotnet is the normal case, and a target the
                 // project prefers was asked for; neither needs explaining.
-                // What is reported is a build that is not for dotnet only
-                // because dotnet could not be built here.
+                // What is reported is a build that is not for dotnet.
                 let reason =
                     if dotnet_passed_over then
-                        "building for {BUILD_TARGETS.name(target)} ({string.join("; ", reasons)})"
+                        "building for {BUILD_TARGETS.name(target)}"
                     else
                         null
                     fi

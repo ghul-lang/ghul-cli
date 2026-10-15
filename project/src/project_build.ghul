@@ -109,6 +109,34 @@ namespace Ghul.Project is
             return result
         si
 
+        /// Whether the build of `project` at `mode` is already written and
+        /// newer than everything of the project's own that goes into it:
+        /// the manifest and every source it names. What the timestamps
+        /// cannot see - a fetched library, a newer compiler - is not
+        /// judged here; a run skips the build on this alone.
+        is_fresh(project: LOADED_PROJECT, mode: BUILD_MODE) -> bool static is
+            let output = output_path(project, mode)
+
+            if !File.exists(output) then
+                return false
+            fi
+
+            let built = File.get_last_write_time(output)
+            let manifest = Path.join([project.directory, "ghul-project.json"])
+
+            if File.exists(manifest) /\ File.get_last_write_time(manifest) > built then
+                return false
+            fi
+
+            for source in SOURCE_SET.expand(project.directory, project.manifest.sources) do
+                if File.get_last_write_time(source) > built then
+                    return false
+                fi
+            od
+
+            return true
+        si
+
         /// Compiles `project`, returning the compiler's exit status, or 1
         /// where the build could not get as far as running it. The
         /// compiler's messages go to standard error unchanged.
