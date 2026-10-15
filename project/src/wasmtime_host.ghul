@@ -219,9 +219,9 @@ namespace Ghul.Project is
                     let bytes = response.content.read_as_byte_array_async().result
 
                     File.write_all_bytes(scratch, bytes)
+                    _mark_executable(scratch)
                     Directory.create_directory(directory)
                     File.move(scratch, Path.join([directory, "ghul-wasmtime"]))
-                    _mark_executable(Path.join([directory, "ghul-wasmtime"]))
 
                     return null
                 catch e: System.Exception
@@ -238,7 +238,8 @@ namespace Ghul.Project is
 
         // The download lands without the executable bit a release asset
         // carries, so it is given here rather than trusted from whatever
-        // wrote the file.
+        // wrote the file. Fails where the mode could not be set, so the
+        // caller never renames a binary that could not run.
         _mark_executable(path: string) is
             let start_info = System.Diagnostics.ProcessStartInfo()
 
@@ -246,7 +247,13 @@ namespace Ghul.Project is
             start_info.argument_list.add("+x")
             start_info.argument_list.add(path)
 
-            System.Diagnostics.Process.start(start_info)!.wait_for_exit()
+            let process = System.Diagnostics.Process.start(start_info)!
+
+            process.wait_for_exit()
+
+            if process.exit_code != 0 then
+                throw System.InvalidOperationException("chmod +x {path} failed (exit {process.exit_code})")
+            fi
         si
 
         // The platform a release names its assets for, or null where this
