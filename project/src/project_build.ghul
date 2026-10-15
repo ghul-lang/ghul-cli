@@ -342,6 +342,12 @@ namespace Ghul.Project is
                 fi
 
             let to_run = command(project, output, arguments, global_host_wasm, wasm_host_executable)
+
+            if let problem: string = to_run.problem then
+                say(problem)
+                return 1
+            fi
+
             let start_info = System.Diagnostics.ProcessStartInfo()
 
             start_info.file_name = to_run.file_name
