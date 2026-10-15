@@ -1,6 +1,5 @@
 {
     "folders": [
-        { "name": "ghul-cli", "path": "." },
         { "name": "cli", "path": "cli" },
         { "name": "repl", "path": "repl" },
         { "name": "host", "path": "host" },

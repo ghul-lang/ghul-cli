@@ -25,6 +25,8 @@ namespace Ghul.Repl.Host is
     // renamed onto the version's store directory only once complete, under
     // the same install lock. A reader never sees a half-written version, and
     // a failed download leaves nothing behind.
+    use Result.*
+
     class NATIVE_COMPILER_DOWNLOAD(_store: COMPILER_STORE, _base: string?) is
         DEFAULT_BASE: string static => "https://github.com/ghul-lang/ghul/releases/download"
 
@@ -47,22 +49,16 @@ namespace Ghul.Repl.Host is
         // Where the archive for `version` on this machine is, or the reason
         // there is none. A platform no release builds a Native AOT compiler
         // for cannot install one however much .NET is missing.
-        archive_url(version: string) -> (url: string?, failure: string?) is
+        archive_url(version: string) -> Result[string, string] is
             if let rid: string = HOST.rid() then
                 if !_store.is_llvm then
-                    return (
-                        url = "{base()}/{ARCHIVE_TAG_PREFIX}{version}/{ARCHIVE_DIRECTORY}-{rid}.tar.gz",
-                        failure = null)
+                    return OK("{base()}/{ARCHIVE_TAG_PREFIX}{version}/{ARCHIVE_DIRECTORY}-{rid}.tar.gz")
                 elif let triple: string = llvm_triple(rid) then
-                    return (
-                        url = "{base()}/{ARCHIVE_TAG_PREFIX}{version}/{ARCHIVE_DIRECTORY}-llvm-{triple}.tar.gz",
-                        failure = null)
+                    return OK("{base()}/{ARCHIVE_TAG_PREFIX}{version}/{ARCHIVE_DIRECTORY}-llvm-{triple}.tar.gz")
                 fi
             fi
 
-            return (
-                url = null,
-                failure = "there is no {kind()} compiler for this platform")
+            return ERROR("there is no {kind()} compiler for this platform")
         si
 
         // The target triple the llvm-built compiler for the .NET runtime
@@ -76,17 +72,17 @@ namespace Ghul.Repl.Host is
         // Installs `version` from its Native AOT archive. Null on success, or
         // the failure to report, which names the version and, where the
         // release answered, the HTTP status.
-        install(version: string, say: (string) -> void) -> string? is
+        install(version: string, say: (string) -> void) -> Result[unit, string] is
             // The version names a directory and a URL, so anything that
             // could reach outside a single name is refused outright.
             if version.length == 0 \/ version.contains("/") \/ version.contains("\\") \/ version.contains("..") then
-                return "ghul.compiler {version} is not a version"
+                return ERROR("ghul.compiler {version} is not a version")
             fi
 
-            let (url, url_failure) = archive_url(version)
+            let url = archive_url(version)
 
-            if let problem: string = url_failure then
-                return problem
+            if let (error): ERROR = url then
+                return ERROR(error)
             fi
 
             Directory.create_directory(_store.root)
@@ -97,26 +93,26 @@ namespace Ghul.Repl.Host is
             try
                 say("downloading the {kind()} compiler ghul.compiler {version}...")
 
-                let download_failure = _download(url!, version, archive_scratch)
+                let downloaded = _download(url!, version, archive_scratch)
 
-                if let problem: string = download_failure then
-                    return problem
+                if let (error): ERROR = downloaded then
+                    return ERROR(error)
                 fi
 
                 let scratch_directory =
                     Path.join([_store.root, "{version}.tmp-{System.Environment.process_id}-{System.Guid.new_guid().to_string("N")}"])
 
                 try
-                    let unpack_failure = _unpack(archive_scratch, scratch_directory)
+                    let unpacked_archive = _unpack(archive_scratch, scratch_directory)
 
-                    if let problem: string = unpack_failure then
-                        return problem
+                    if let (error): ERROR = unpacked_archive then
+                        return ERROR(error)
                     fi
 
                     let unpacked = Path.join([scratch_directory, ARCHIVE_DIRECTORY])
 
                     if !File.exists(Path.join([unpacked, COMPILER_STORE.NATIVE_COMPILER_FILE_NAME])) then
-                        return "the {kind()} archive for ghul.compiler {version} carries no compiler"
+                        return ERROR("the {kind()} archive for ghul.compiler {version} carries no compiler")
                     fi
 
                     try
@@ -127,7 +123,7 @@ namespace Ghul.Repl.Host is
                         _delete_directory(unpacked)
                     yrt
 
-                    return null
+                    return OK(_)
                 finally
                     _delete_directory(scratch_directory)
                 yrt
@@ -138,23 +134,23 @@ namespace Ghul.Repl.Host is
             yrt
         si
 
-        _download(url: string, version: string, destination: string) -> string? is
+        _download(url: string, version: string, destination: string) -> Result[unit, string] is
             let client = System.Net.Http.HttpClient()
 
             try
                 let response = client.get_async(url).result
 
                 if !response.is_success_status_code then
-                    return "ghul.compiler {version} has no {kind()} compiler for this platform (HTTP {cast int(response.status_code)})"
+                    return ERROR("ghul.compiler {version} has no {kind()} compiler for this platform (HTTP {cast int(response.status_code)})")
                 fi
 
                 let bytes = response.content.read_as_byte_array_async().result
 
                 File.write_all_bytes(destination, bytes)
 
-                return null
+                return OK(_)
             catch e: System.Exception
-                return "the {kind()} compiler for ghul.compiler {version} could not be downloaded ({e.get_type().name})"
+                return ERROR("the {kind()} compiler for ghul.compiler {version} could not be downloaded ({e.get_type().name})")
             finally
                 client.dispose()
             yrt
@@ -164,7 +160,7 @@ namespace Ghul.Repl.Host is
         // itself, so it is decompressed on the way in. The permissions come
         // through with it, which is what leaves the compiler executable once
         // it lands in the store.
-        _unpack(archive: string, destination: string) -> string? is
+        _unpack(archive: string, destination: string) -> Result[unit, string] is
             Directory.create_directory(destination)
 
             let input = FileStream(archive, FileMode.OPEN, FileAccess.READ, FileShare.READ)
@@ -175,12 +171,12 @@ namespace Ghul.Repl.Host is
                 try
                     TarFile.extract_to_directory(gzip, destination, true)
 
-                    return null
+                    return OK(_)
                 finally
                     gzip.dispose()
                 yrt
             catch e: System.Exception
-                return "the {kind()} compiler archive could not be read ({e.get_type().name})"
+                return ERROR("the {kind()} compiler archive could not be read ({e.get_type().name})")
             finally
                 input.dispose()
             yrt

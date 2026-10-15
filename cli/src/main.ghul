@@ -14,6 +14,8 @@ namespace Ghul.Cli is
     use Ghul.Pipes.first
     use Ghul.Pipes.any
 
+    use Result.*
+
     // HOME where it is set, which is everywhere but Windows, and the user
     // profile directory where it is not.
     home_directory() -> string is
@@ -141,9 +143,9 @@ namespace Ghul.Cli is
     // Progress goes to `say`, which the explicit `install-compiler` wires
     // to standard error and a script run leaves quiet; a failure is
     // returned to the caller whatever `say` does with the chatter.
-    ensure_compiler_installed(store: Host.COMPILER_STORE, version: string?, show_output: bool) -> string? is
+    ensure_compiler_installed(store: Host.COMPILER_STORE, version: string?, show_output: bool) -> Result[string, string] is
         if let current: string = usable_installed_version(store, version) then
-            return current
+            return OK(current)
         fi
 
         Directory.create_directory(store.root)
@@ -154,7 +156,7 @@ namespace Ghul.Cli is
 
         try
             if let current: string = usable_installed_version(store, version) then
-                return current
+                return OK(current)
             fi
 
             let download = Host.COMPILER_DOWNLOAD.of(store)
@@ -162,24 +164,22 @@ namespace Ghul.Cli is
             let wanted mut = version
 
             if !wanted? then
-                let (newest, failure) = download.latest_release()
+                let newest = download.latest_release()
 
-                if let problem: string = failure then
-                    Std.error.write_line("ghul: {problem}")
-                    return null
+                if let (error): ERROR = newest then
+                    return ERROR(error)
                 fi
 
-                wanted = newest
+                wanted = newest!
             fi
 
             let say = (line: string) -> void => if show_output then Std.error.write_line(line) fi
 
-            if let problem: string = install_compiler(store, wanted!, say) then
-                Std.error.write_line("ghul: {problem}")
-                return null
+            if let (error): ERROR = install_compiler(store, wanted!, say) then
+                return ERROR(error)
             fi
 
-            return wanted
+            return OK(wanted)
         finally
             lock_stream.close()
         yrt
@@ -200,7 +200,7 @@ namespace Ghul.Cli is
     // an HTTP document rather than a .NET one, so a machine with no .NET
     // reads it as well as one with the SDK, and both land on the same
     // release, and the archive that release publishes for this platform.
-    install_compiler(store: Host.COMPILER_STORE, version: string, say: (string) -> void) -> string? is
+    install_compiler(store: Host.COMPILER_STORE, version: string, say: (string) -> void) -> Result[unit, string] is
         if store.is_llvm then
             return Host.NATIVE_COMPILER_DOWNLOAD.of(store).install(version, say)
         fi
@@ -495,14 +495,13 @@ namespace Ghul.Cli is
 
         let index_url = System.Environment.get_environment_variable("GHUL_ROSETTA_INDEX") ?? Ghul.Project.ROSETTA_TASK.INDEX_URL
         let index = LLVM_TOOLCHAIN.fetch(index_url)
-        let index_bytes = index.bytes
 
-        if !index_bytes? then
-            Std.error.write_line("ghul: the Rosetta Code index cannot be read: {index.problem ?? index_url}")
+        if let (error): ERROR = index then
+            Std.error.write_line("ghul: the Rosetta Code index cannot be read: {error}")
             return 1
         fi
 
-        let found = Ghul.Project.ROSETTA_TASK.find(System.Text.Encoding.utf8.get_string(index_bytes), rest[0], Host.HOST.has_dotnet())
+        let found = Ghul.Project.ROSETTA_TASK.find(System.Text.Encoding.utf8.get_string(index!), rest[0], Host.HOST.has_dotnet())
 
         if let problem: string = found.problem then
             Std.error.write_line("ghul: {problem}")
@@ -531,25 +530,23 @@ namespace Ghul.Cli is
         // cannot be read leaves no half-made project behind.
         let fetched = Collections.LIST[(path: string, bytes: ubyte[])]()
         let source = LLVM_TOOLCHAIN.fetch(url(part.source))
-        let source_bytes = source.bytes
 
-        if !source_bytes? then
-            Std.error.write_line("ghul: {part.id} cannot be fetched: {source.problem ?? part.source}")
+        if let (error): ERROR = source then
+            Std.error.write_line("ghul: {part.id} cannot be fetched: {error}")
             return 1
         fi
 
-        fetched.add((path = Path.join(["src", Path.get_file_name(part.source) ?? "main.ghul"]), bytes = source_bytes))
+        fetched.add((path = Path.join(["src", Path.get_file_name(part.source) ?? "main.ghul"]), bytes = source!))
 
         for file in part.files do
             let read = LLVM_TOOLCHAIN.fetch(url(file.path))
-            let read_bytes = read.bytes
 
-            if !read_bytes? then
-                Std.error.write_line("ghul: {file.name}, which {part.id} reads, cannot be fetched: {read.problem ?? file.path}")
+            if let (error): ERROR = read then
+                Std.error.write_line("ghul: {file.name}, which {part.id} reads, cannot be fetched: {error}")
                 return 1
             fi
 
-            fetched.add((path = file.name, bytes = read_bytes))
+            fetched.add((path = file.name, bytes = read!))
         od
 
         let manifest = Ghul.Project.ROSETTA_TASK.manifest_text(name, part, part.targets, found.raster_version)
@@ -688,34 +685,40 @@ namespace Ghul.Cli is
         if before? /\ !version? then
             Std.error.write_line("ghul: checking for a newer ghul.compiler than {before}...")
 
-            if let installed: string = update_compiler_to_latest(store) then
-                if installed =~ before then
-                    Std.error.write_line("ghul: ghul.compiler {installed} is already installed and is the latest")
-                else
-                    Std.error.write_line("ghul: ghul.compiler updated from {before} to {installed}")
-                fi
+            let updated = update_compiler_to_latest(store)
 
-                return 0
+            if let (error): ERROR = updated then
+                Std.error.write_line("ghul: {error}")
+                Std.error.write_line("ghul: failed to update ghul.compiler")
+                return 1
             fi
 
-            Std.error.write_line("ghul: failed to update ghul.compiler")
-            return 1
+            if updated! =~ before then
+                Std.error.write_line("ghul: ghul.compiler {updated!} is already installed and is the latest")
+            else
+                Std.error.write_line("ghul: ghul.compiler updated from {before} to {updated!}")
+            fi
+
+            return 0
         fi
 
         Std.error.write_line("ghul: installing ghul.compiler{if version? then " {version}" else "" fi}...")
 
-        if let installed: string = ensure_compiler_installed(store, version, true) then
-            Std.error.write_line("ghul: ghul.compiler {installed} is installed")
-            return 0
+        let installed = ensure_compiler_installed(store, version, true)
+
+        if let (error): ERROR = installed then
+            Std.error.write_line("ghul: {error}")
+            Std.error.write_line("ghul: failed to install ghul.compiler")
+            return 1
         fi
 
-        Std.error.write_line("ghul: failed to install ghul.compiler")
-        return 1
+        Std.error.write_line("ghul: ghul.compiler {installed!} is installed")
+        return 0
     si
 
     // Under the install lock, since a script run elsewhere may be
     // installing or reading the compiler at the same time.
-    update_compiler_to_latest(store: Host.COMPILER_STORE) -> string? is
+    update_compiler_to_latest(store: Host.COMPILER_STORE) -> Result[string, string] is
         let lock_stream = acquire_lock(
             store.install_lock_path(),
             "ghul: waiting for another ghul process to finish installing the compiler...")
@@ -723,25 +726,23 @@ namespace Ghul.Cli is
         try
             let download = Host.COMPILER_DOWNLOAD.of(store)
 
-            let (newest, failure) = download.latest_release()
+            let newest = download.latest_release()
 
-            if let problem: string = failure then
-                Std.error.write_line("ghul: {problem}")
-                return null
+            if let (error): ERROR = newest then
+                return ERROR(error)
             fi
 
             let latest = newest!
 
             if store.is_installed(latest) then
-                return latest
+                return OK(latest)
             fi
 
-            if let problem: string = install_compiler(store, latest, line => Std.error.write_line(line)) then
-                Std.error.write_line("ghul: {problem}")
-                return null
+            if let (error): ERROR = install_compiler(store, latest, line => Std.error.write_line(line)) then
+                return ERROR(error)
             fi
 
-            return latest
+            return OK(latest)
         finally
             lock_stream.close()
         yrt
@@ -782,10 +783,10 @@ namespace Ghul.Cli is
             return 0
         fi
 
-        let (root, root_problem) = SELF_UPDATE.install_root(System.Environment.process_path)
+        let root = SELF_UPDATE.install_root(System.Environment.process_path)
 
-        if let problem: string = root_problem then
-            Std.error.write_line("ghul: cannot update: {problem}")
+        if let problem: ERROR = root then
+            Std.error.write_line("ghul: cannot update: {problem.error}")
             return 1
         fi
 
@@ -798,10 +799,10 @@ namespace Ghul.Cli is
         if let named: string = wanted then
             tag = named
         else
-            let (latest, latest_problem) = update.latest_tag()
+            let latest = update.latest_tag()
 
-            if let problem: string = latest_problem then
-                Std.error.write_line("ghul: the latest release could not be found: {problem}")
+            if let problem: ERROR = latest then
+                Std.error.write_line("ghul: the latest release could not be found: {problem.error}")
                 return 1
             fi
 
@@ -826,10 +827,10 @@ namespace Ghul.Cli is
             return 0
         fi
 
-        let (script, script_problem) = update.install_script(tag)
+        let script = update.install_script(tag)
 
-        if let problem: string = script_problem then
-            Std.error.write_line("ghul: cannot update to {tag}: {problem}")
+        if let problem: ERROR = script then
+            Std.error.write_line("ghul: cannot update to {tag}: {problem.error}")
             return 1
         fi
 
@@ -910,10 +911,10 @@ namespace Ghul.Cli is
             fi
 
             let download = Host.COMPILER_DOWNLOAD.of(store)
-            let (newest, failure) = download.latest_release()
+            let newest = download.latest_release()
 
-            if let problem: string = failure then
-                Std.error.write_line("ghul: {kind}: {problem}")
+            if let (error): ERROR = newest then
+                Std.error.write_line("ghul: {kind}: {error}")
                 status = 1
                 continue
             fi
@@ -932,11 +933,14 @@ namespace Ghul.Cli is
 
             Std.error.write_line("ghul: updating {kind} to {latest}...")
 
-            if let installed: string = update_compiler_to_latest(store) then
-                Std.error.write_line("ghul: {kind} updated to {installed}")
-            else
+            let updated = update_compiler_to_latest(store)
+
+            if let (error): ERROR = updated then
+                Std.error.write_line("ghul: {error}")
                 Std.error.write_line("ghul: {kind} could not be updated")
                 status = 1
+            else
+                Std.error.write_line("ghul: {kind} updated to {updated!}")
             fi
         od
 
@@ -1014,20 +1018,23 @@ namespace Ghul.Cli is
         let source = resolve_source(script_ref)
         let store = Host.COMPILER_STORE.for_this_user()
 
-        if let compiler_version: string = ensure_compiler_installed(store, null, false) then
-            let compiler = store.command(compiler_version)
-            let run_dir = cache_entry_dir_for_bytes(source.key_bytes, compiler_version)
+        let ensured = ensure_compiler_installed(store, null, false)
 
-            if !ensure_compiled(compiler, source.materialize, run_dir, store, compiler_version, no_cache) then
-                return 1
-            fi
-
-            Std.out.write_line("{run_dir}/run.exe")
-            return 0
+        if let (error): ERROR = ensured then
+            Std.error.write_line("ghul: {error}")
+            Std.error.write_line("ghul: could not install ghul.compiler")
+            return 1
         fi
 
-        Std.error.write_line("ghul: could not install ghul.compiler")
-        return 1
+        let compiler = store.command(ensured!)
+        let run_dir = cache_entry_dir_for_bytes(source.key_bytes, ensured!)
+
+        if !ensure_compiled(compiler, source.materialize, run_dir, store, ensured!, no_cache) then
+            return 1
+        fi
+
+        Std.out.write_line("{run_dir}/run.exe")
+        return 0
     si
 
     cmd_run(rest: Collections.List[string], force: bool, no_cache: bool) -> int is
@@ -1080,19 +1087,22 @@ namespace Ghul.Cli is
 
         let store = Host.COMPILER_STORE.for_this_user()
 
-        if let compiler_version: string = ensure_compiler_installed(store, null, false) then
-            let compiler = store.command(compiler_version)
-            let run_dir = cache_entry_dir_for_bytes(source.key_bytes, compiler_version)
+        let ensured = ensure_compiler_installed(store, null, false)
 
-            if !ensure_compiled(compiler, source.materialize, run_dir, store, compiler_version, no_cache) then
-                return 1
-            fi
-
-            return run_script("{run_dir}/run.exe", script_args)
+        if let (error): ERROR = ensured then
+            Std.error.write_line("ghul: {error}")
+            Std.error.write_line("ghul: could not determine the installed ghul.compiler version")
+            return 1
         fi
 
-        Std.error.write_line("ghul: could not determine the installed ghul.compiler version")
-        return 1
+        let compiler = store.command(ensured!)
+        let run_dir = cache_entry_dir_for_bytes(source.key_bytes, ensured!)
+
+        if !ensure_compiled(compiler, source.materialize, run_dir, store, ensured!, no_cache) then
+            return 1
+        fi
+
+        return run_script("{run_dir}/run.exe", script_args)
     si
 
     // Builds a script for wasm or llvm as a project of one source file,
@@ -1108,13 +1118,15 @@ namespace Ghul.Cli is
         let say = (message: string) -> void => Std.error.write_line("ghul: {message}")
         let store = Host.COMPILER_STORE.for_this_user()
 
-        let compiler_version = ensure_compiler_installed(store, null, false)
+        let ensured = ensure_compiler_installed(store, null, false)
 
-        if !compiler_version? then
+        if let (error): ERROR = ensured then
+            say(error)
             say("could not determine the installed ghul.compiler version")
             return 1
         fi
 
+        let compiler_version = ensured!
         let command = store.command(compiler_version)
         let compiler = Ghul.Project.COMPILER_PROCESS(command.file_name, Collections.LIST[string](command.leading_arguments()))
         let requirements = Ghul.Project.COMPILER_REQUIREMENTS.read(compiler.directory)
@@ -1152,13 +1164,13 @@ namespace Ghul.Cli is
         if target == Ghul.Project.BuildTarget.LLVM then
             let found = LLVM_TOOLCHAIN.for_this_user().executable(compiler_version, requirements)
 
-            if let problem: string = found.problem then
-                say(problem)
+            if let failure: ERROR = found then
+                say(failure.error)
                 return 1
             fi
 
-            linker = found.path
-            key.append(" {found.path}")
+            linker = found!
+            key.append(" {found!}")
         fi
 
         let digest = System.Security.Cryptography.SHA256.hash_data(
@@ -1345,10 +1357,16 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        if let compiler_version: string = ensure_compiler_installed(store, null, false) then
-            let compiler = store.command(compiler_version)
+        let ensured = ensure_compiler_installed(store, null, false)
 
-            let runtime_assembly = store.runtime_assembly(compiler_version)
+        if let (error): ERROR = ensured then
+            Std.error.write_line("ghul: {error}")
+            return 1
+        fi
+
+        let compiler = store.command(ensured!)
+
+        let runtime_assembly = store.runtime_assembly(ensured!)
 
             let say = (line: string) -> void => Std.error.write_line(line)
 
@@ -1361,10 +1379,9 @@ namespace Ghul.Cli is
                     say)
 
             let terminal =
-                Repl.TERMINAL(make_session, options.want_default_use, options.theme, completes_at_cursor(compiler_version))
+                Repl.TERMINAL(make_session, options.want_default_use, options.theme, completes_at_cursor(ensured!))
 
             return run_closing_on_signal(terminal)
-        fi
 
         return 1
     si
@@ -1489,12 +1506,12 @@ namespace Ghul.Cli is
                         compiler_version,
                         Ghul.Project.COMPILER_REQUIREMENTS.read(compiler.directory))
 
-                if let problem: string = found.problem then
-                    say(problem)
+                if let failure: ERROR = found then
+                    say(failure.error)
                     return 1
                 fi
 
-                linker = found.path
+                linker = found!
             fi
 
             let exit_code =
@@ -1582,12 +1599,15 @@ namespace Ghul.Cli is
         let wanted: string? mut = null
 
         if isa Ghul.Project.CompilerRequest.LATEST(request) then
-            wanted = update_compiler_to_latest(chosen)
+            let latest = update_compiler_to_latest(chosen)
 
-            if !wanted? then
+            if let (error): ERROR = latest then
+                say(error)
                 say("could not install the latest ghul.compiler")
                 return null
             fi
+
+            wanted = latest!
         else
             wanted = cast Ghul.Project.CompilerRequest.VERSION(request).version
         fi
@@ -1640,16 +1660,16 @@ namespace Ghul.Cli is
                 ensure_compiler_installed(store, cast Ghul.Project.CompilerRequest.VERSION(request).version, false)
             fi
 
-        if let version: string = installed then
-            let command = store.command(version)
-
-            let compiler =
-                Ghul.Project.COMPILER_PROCESS(command.file_name, Collections.LIST[string](command.leading_arguments()))
-
-            return (compiler, version, store.runtime_assembly(version))
+        if let (error): ERROR = installed then
+            return null
         fi
 
-        return null
+        let command = store.command(installed!)
+
+        let compiler =
+            Ghul.Project.COMPILER_PROCESS(command.file_name, Collections.LIST[string](command.leading_arguments()))
+
+        return (compiler, installed!, store.runtime_assembly(installed!))
     si
 
     // What a compiler command prints as its version when run with no
@@ -1710,17 +1730,27 @@ namespace Ghul.Cli is
                 "ghul.compiler {newest.installed} is too old for {Ghul.Project.BUILD_TARGETS.build_kind(project.target, mode)}the {Ghul.Project.BUILD_TARGETS.name(project.target)} target, "
                 "which needs {Ghul.Project.BUILD_TARGETS.minimum_compiler(project.target, mode)} or newer; installing the newest")
 
-            return update_compiler_to_latest(store)
+            let updated = update_compiler_to_latest(store)
+
+            if let (error): ERROR = updated then
+                say(error)
+                return null
+            fi
+
+            return updated!
         fi
 
         let requested = cast Ghul.Project.CompilerChoice.REQUESTED(choice)
 
-        if let version = ensure_compiler_installed(store, requested.version, false) then
-            return version
+        let version = ensure_compiler_installed(store, requested.version, false)
+
+        if let (error): ERROR = version then
+            say(error)
+            say("could not install ghul.compiler")
+            return null
         fi
 
-        say("could not install ghul.compiler")
-        return null
+        return version!
     si
 
     // `ghul project response-file` and `ghul project compiler`: what an
