@@ -92,7 +92,17 @@ namespace Ghul.Project is
             let read = read_manifest(Path.get_full_path(directory))
 
             if let manifest: MANIFEST = read.manifest then
-                return TARGET_CHOICE.choose(manifest.targets, manifest.prefer, named, availability)
+                // The manifest's own preference stands; the machine's
+                // global defaults fill the gap a manifest leaves.
+                let prefer =
+                    if manifest.prefer.count > 0 then
+                        manifest.prefer
+                    else
+                        let problem: string? mut = null
+                        GLOBAL_DEFAULTS.read(GLOBAL_DEFAULTS.path(), problem ref).prefer ?? manifest.prefer
+                    fi
+
+                return TARGET_CHOICE.choose(manifest.targets, prefer, named, availability)
             fi
 
             return CHOSEN_TARGET(null, null, null)

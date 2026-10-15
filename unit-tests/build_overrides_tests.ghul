@@ -31,7 +31,7 @@ namespace Ghul.Cli.Tests is
                 null,
                 MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](), null),
                 dependencies,
-                CompilerBuild.DEFAULT, LIST[BuildTarget]())
+                CompilerBuild.DEFAULT, LIST[BuildTarget](), null)
 
         @Test()
         a_build_command_line_reads_the_compiler_and_libraries() is

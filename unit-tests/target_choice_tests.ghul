@@ -38,11 +38,11 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        llvm_comes_before_wasm_and_the_reason_names_what_was_passed_over() is
+        wasm_is_chosen_where_dotnet_cannot_be_built() is
             let chosen = TARGET_CHOICE.choose(_all, _none, null, _MACHINE([BuildTarget.LLVM, BuildTarget.WASM]))
 
-            assert _name(chosen) =~ "llvm"
-            assert chosen.reason =~ "building for llvm (no dotnet)" else chosen.reason ?? "null"
+            assert _name(chosen) =~ "wasm"
+            assert chosen.reason =~ "building for wasm (no dotnet)" else chosen.reason ?? "null"
         si
 
         @Test()
@@ -50,7 +50,7 @@ namespace Ghul.Cli.Tests is
             let chosen = TARGET_CHOICE.choose(_all, _none, null, _MACHINE([BuildTarget.WASM]))
 
             assert _name(chosen) =~ "wasm"
-            assert chosen.reason =~ "building for wasm (no dotnet; no llvm)" else chosen.reason ?? "null"
+            assert chosen.reason =~ "building for wasm (no dotnet)" else chosen.reason ?? "null"
         si
 
         @Test()
@@ -103,7 +103,7 @@ namespace Ghul.Cli.Tests is
             let chosen = TARGET_CHOICE.choose(_all, _none, null, _MACHINE([]))
 
             assert !chosen.target?
-            assert chosen.problem =~ "none of the targets the manifest lists can be built here: dotnet: no dotnet; llvm: no llvm; wasm: no wasm" else chosen.problem ?? "null"
+            assert chosen.problem =~ "none of the targets the manifest lists can be built here: dotnet: no dotnet; wasm: no wasm" else chosen.problem ?? "null"
         si
     si
 si

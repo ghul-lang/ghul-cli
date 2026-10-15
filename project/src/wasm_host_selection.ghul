@@ -1,0 +1,59 @@
+namespace Ghul.Project is
+
+    /// Which program runs a project's wasm build: `wasmtime` or `node`.
+    /// Said by the manifest's `host.wasm`, falling back to the machine's
+    /// global defaults, falling back to the built-in default, which is the
+    /// wasmtime host. The global default is read once by the command that
+    /// starts a build or run and carried in, so a run's choices all come
+    /// from one read.
+    class WASM_HOST_SELECTION is
+        /// The built-in default, where nothing anywhere says otherwise.
+        BUILTIN: string static => "wasmtime"
+
+        /// The host a run of `project` uses, given the machine's global
+        /// default for wasm, where it states one. The manifest's own choice
+        /// stands; the global default fills a manifest that says nothing;
+        /// nothing anywhere saying anything is the built-in default.
+        chosen(project: LOADED_PROJECT, global_host_wasm: string?) -> string static is
+            if let host: string = project.manifest.host_wasm then
+                return host
+            fi
+
+            if let host: string = global_host_wasm then
+                return host
+            fi
+
+            return BUILTIN
+        si
+
+        /// The host `name` asks for, resolved to an executable: an
+        /// installed wasmtime host, or `node` from the PATH. Null where
+        /// `name` is node and there is none.
+        resolve(name: string) -> string? static is
+            if name =~ "node" then
+                return "node"
+            fi
+
+            return WASMTIME_STORE.for_this_user().installed()
+        si
+
+        /// Whether the wasm run the ladder chooses can go ahead here: the
+        /// built-in default is the wasmtime host, which a run fetches when
+        /// it is missing, so the answer is yes wherever a fetch can reach
+        /// the releases. A host named as node needs Node itself.
+        chosen_for_wasm(global_host_wasm: string?) -> bool static =>
+            !(chosen_for_runtime(global_host_wasm) =~ "node") \/ NODE_RUNTIME.problem() == null
+
+        /// The host the ladder chooses for a wasm run, as `resolve` and the
+        /// dispatch ask it: the manifest's, the global defaults', or the
+        /// built-in one, for a project that names nothing itself.
+        chosen_for_runtime(global_host_wasm: string?) -> string static =>
+            global_host_wasm ?? BUILTIN
+
+        /// Installs the wasmtime host, fetching the newest ghul-wasmtime
+        /// release if no version is held. Null on success, or the failure
+        /// to report.
+        install(say: (string) -> void) -> string? static =>
+            WASMTIME_DOWNLOAD.of(WASMTIME_STORE.for_this_user()).install(say)
+    si
+si
