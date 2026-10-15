@@ -42,6 +42,11 @@ namespace Ghul.Project is
         // there.
         binary(tag: string) -> string => Path.join([root, tag, "ghul-wasmtime"])
 
+        // Held while a release is being downloaded into the store, so two
+        // `ghul` processes racing to install the same release take turns
+        // rather than both writing it.
+        install_lock_path() -> string => Path.join([root, ".install.lock"])
+
         // The executable of the highest release held, or null where the
         // store holds none. Releases sort by their version, read out of the
         // tag's numbers rather than as text.
@@ -186,54 +191,65 @@ namespace Ghul.Project is
 
         // Downloads the release `tag` names into the store. Null on
         // success, or the failure to report, which names the tag and, where
-        // the release answered, the HTTP status.
+        // the release answered, the HTTP status. Guarded by the store's
+        // install lock and re-checked once it is held, so two processes
+        // racing to install the same release download it once between
+        // them.
         install(tag: string, say: (string) -> void) -> string? is
-            let (url, url_failure) = asset_url(tag)
+            Directory.create_directory(_store.root)
 
-            if let failure: string = url_failure then
-                return failure
-            elif let asset: string = url then
-                let directory = Path.join([_store.root, tag])
+            let lock_stream = FILE_LOCK.acquire(_store.install_lock_path(), null)
 
-                if File.exists(Path.join([directory, "ghul-wasmtime"])) then
-                    say("ghul-wasmtime {tag} is already installed")
+            try
+                let (url, url_failure) = asset_url(tag)
 
-                    return null
+                if let failure: string = url_failure then
+                    return failure
+                elif let asset: string = url then
+                    let directory = Path.join([_store.root, tag])
+
+                    if File.exists(Path.join([directory, "ghul-wasmtime"])) then
+                        say("ghul-wasmtime {tag} is already installed")
+
+                        return null
+                    fi
+
+                    say("downloading ghul-wasmtime {tag}")
+
+                    let scratch = Path.join([
+                        Path.get_temp_path(),
+                        "ghul-wasmtime.{System.Environment.process_id}.{System.Guid.new_guid().to_string("N")}"
+                    ])
+
+                    try
+                        let client = System.Net.Http.HttpClient()
+                        let response = client.get_async(asset).result
+
+                        if !response.is_success_status_code then
+                            return "ghul-wasmtime {tag} is not on the releases page (HTTP {cast int(response.status_code)})"
+                        fi
+
+                        let bytes = response.content.read_as_byte_array_async().result
+
+                        File.write_all_bytes(scratch, bytes)
+                        _mark_executable(scratch)
+                        Directory.create_directory(directory)
+                        File.move(scratch, Path.join([directory, "ghul-wasmtime"]))
+
+                        return null
+                    catch e: System.Exception
+                        if File.exists(scratch) then
+                            File.delete(scratch)
+                        fi
+
+                        return "downloading {asset} failed ({e.get_type().name})"
+                    yrt
                 fi
 
-                say("downloading ghul-wasmtime {tag}")
-
-                let scratch = Path.join([
-                    Path.get_temp_path(),
-                    "ghul-wasmtime.{System.Environment.process_id}.{System.Guid.new_guid().to_string("N")}"
-                ])
-
-                try
-                    let client = System.Net.Http.HttpClient()
-                    let response = client.get_async(asset).result
-
-                    if !response.is_success_status_code then
-                        return "ghul-wasmtime {tag} is not on the releases page (HTTP {cast int(response.status_code)})"
-                    fi
-
-                    let bytes = response.content.read_as_byte_array_async().result
-
-                    File.write_all_bytes(scratch, bytes)
-                    _mark_executable(scratch)
-                    Directory.create_directory(directory)
-                    File.move(scratch, Path.join([directory, "ghul-wasmtime"]))
-
-                    return null
-                catch e: System.Exception
-                    if File.exists(scratch) then
-                        File.delete(scratch)
-                    fi
-
-                    return "downloading {asset} failed ({e.get_type().name})"
-                yrt
-            fi
-
-            return "there is no wasmtime host for this platform"
+                return "there is no wasmtime host for this platform"
+            finally
+                lock_stream.close()
+            yrt
         si
 
         // The download lands without the executable bit a release asset
