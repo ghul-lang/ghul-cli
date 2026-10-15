@@ -46,19 +46,31 @@ namespace Ghul.Repl.Host is
             try
                 let text mut = ""
 
-                try
-                    let response = client.get_async(url).result
+                if url.starts_with("file://") then
+                    // A file mirror serves the index as a file, as the
+                    // self-update mirror already does.
+                    let path = System.Uri(url).local_path
 
-                    if !response.is_success_status_code then
-                        return (
-                            version = null,
-                            failure = "the feed at {url} answered HTTP {cast int(response.status_code)}")
+                    if !File.exists(path) then
+                        return (version = null, failure = "the feed at {url} does not exist")
                     fi
 
-                    text = response.content.read_as_string_async().result
-                catch e: System.Exception
-                    return (version = null, failure = "the feed at {url} could not be read ({e.get_type().name})")
-                yrt
+                    text = File.read_all_text(path)
+                else
+                    try
+                        let response = client.get_async(url).result
+
+                        if !response.is_success_status_code then
+                            return (
+                                version = null,
+                                failure = "the feed at {url} answered HTTP {cast int(response.status_code)}")
+                        fi
+
+                        text = response.content.read_as_string_async().result
+                    catch e: System.Exception
+                        return (version = null, failure = "the feed at {url} could not be read ({e.get_type().name})")
+                    yrt
+                fi
 
                 let releases = LIST[string]()
 
@@ -166,10 +178,24 @@ namespace Ghul.Repl.Host is
             "{feed()}/ghul.compiler/{version}/ghul.compiler.{version}.nupkg"
 
         _download_package(version: string, destination: string) -> string? is
+            let url = _package_url(version)
+
+            if url.starts_with("file://") then
+                let path = System.Uri(url).local_path
+
+                if !File.exists(path) then
+                    return "ghul.compiler {version} is not on the feed (no {url})"
+                fi
+
+                File.copy(path, destination, true)
+
+                return null
+            fi
+
             let client = System.Net.Http.HttpClient()
 
             try
-                let response = client.get_async(_package_url(version)).result
+                let response = client.get_async(url).result
 
                 if !response.is_success_status_code then
                     return "ghul.compiler {version} is not on the feed (HTTP {cast int(response.status_code)})"
