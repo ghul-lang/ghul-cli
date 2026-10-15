@@ -44,14 +44,18 @@ namespace Ghul.Cli is
 
     cache_root() -> string => Path.join([cache_home(), "scripts"])
 
-    // Keyed on the source's own bytes plus the compiler version that will
-    // build it, so a compiler update invalidates every cached script rather
-    // than serving a binary built by a version that no longer matches.
+    // Keyed on the source's own bytes, the compiler version that will
+    // build it and this tool's own version, so a compiler update
+    // invalidates every cached script rather than serving a binary built
+    // by a version that no longer matches, and so does a ghul update:
+    // the build is this tool's work as much as the compiler's, and a
+    // release that changes how scripts are compiled must not go on
+    // serving binaries the previous release built.
     cache_entry_dir_for_bytes(bytes: ubyte[], compiler_version: string) -> string is
         let digest = System.Security.Cryptography.SHA256.hash_data(bytes)
         let hex = System.Convert.to_hex_string(digest).to_lower()
 
-        return "{cache_root()}/{hex}-{compiler_version}"
+        return "{cache_root()}/{hex}-{compiler_version}-{cli_version()}"
     si
 
     cache_entry_dir(script_path: string, compiler_version: string) -> string =>
@@ -958,9 +962,12 @@ namespace Ghul.Cli is
             return 1
         fi
 
+        // Keyed on the tool the build used as well as the target and the
+        // compiler: this tool's own version, since the build is shaped
+        // here, and every library and linker the build compiles against.
         let key = Text.STRING_BUILDER()
 
-        key.append("{Ghul.Project.BUILD_TARGETS.name(target)} {compiler_version}")
+        key.append("{Ghul.Project.BUILD_TARGETS.name(target)} {compiler_version} ghul-cli-{cli_version()}")
 
         for library in libraries do
             key.append(" {library.name}@{library.version}")
