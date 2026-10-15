@@ -940,9 +940,10 @@ namespace Ghul.Cli is
             fi
         od
 
-        // The wasmtime host.
+        // The wasmtime host: the refresh and its tag handling are the
+        // download's own, shared with the run path that fetches on first
+        // use, so the two cannot disagree on what a release is called.
         let store = Ghul.Project.WASMTIME_STORE.for_this_user()
-        let download = Ghul.Project.WASMTIME_DOWNLOAD.of(store)
 
         if store.installed() == null then
             Std.error.write_line("ghul: the wasmtime host is not installed (ghul install wasmtime brings it in)")
@@ -950,37 +951,16 @@ namespace Ghul.Cli is
             return status
         fi
 
-        let (tag, failure) = download.latest_tag()
+        let failure =
+            Ghul.Project.WASMTIME_DOWNLOAD.of(store).update(
+                check_only,
+                line => Std.error.write_line("ghul: {line}"))
 
         if let problem: string = failure then
-            Std.error.write_line("ghul: the wasmtime host: {problem}")
-
-            return 1
-        fi
-
-        let latest = "v{tag!}"
-
-        if store.installed()!.contains(latest) then
-            Std.error.write_line("ghul: the wasmtime host {latest} is the latest")
-
-            return status
-        fi
-
-        if check_only then
-            Std.error.write_line("ghul: the wasmtime host has {latest} available")
-
-            return status
-        fi
-
-        Std.error.write_line("ghul: updating the wasmtime host to {latest}...")
-
-        if let problem: string = download.install(latest, line => Std.error.write_line(line)) then
             Std.error.write_line("ghul: the wasmtime host could not be updated: {problem}")
 
             return 1
         fi
-
-        Std.error.write_line("ghul: the wasmtime host updated to {latest}")
 
         return status
     si

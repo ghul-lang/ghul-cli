@@ -189,32 +189,77 @@ namespace Ghul.Project is
             return "the releases request answered nothing"
         si
 
+        // Refreshes the store to the newest release, reporting what it does
+        // through `say`: that the newest is already held, that a newer one
+        // is available (looked at, not taken, where `check_only`), or the
+        // download of it. Null on success, or the failure to report. The
+        // one place that turns a release tag into what the store holds and
+        // the releases page names it, so every caller - an update, a run
+        // fetching on first use - makes this decision identically.
+        update(check_only: bool, say: (string) -> void) -> string? is
+            let (tag, tag_failure) = latest_tag()
+
+            if let failure: string = tag_failure then
+                return "could not read the newest ghul-wasmtime release: {failure}"
+            fi
+
+            if !tag? then
+                return "the releases request answered nothing"
+            fi
+
+            let newest = tag
+
+            if let held: string = _store.installed() then
+                if (Path.get_file_name(Path.get_directory_name(held) ?? "") ?? "") =~ newest then
+                    say("the wasmtime host {newest} is the latest")
+
+                    return null
+                fi
+            fi
+
+            if check_only then
+                say("the wasmtime host has {newest} available")
+
+                return null
+            fi
+
+            say("updating the wasmtime host to {newest}")
+
+            return install(newest, say)
+        si
+
         // Downloads the release `tag` names into the store. Null on
         // success, or the failure to report, which names the tag and, where
-        // the release answered, the HTTP status. Guarded by the store's
+        // the release answered, the HTTP status. A leading `v` is accepted
+        // and dropped, since that is how a release is named everywhere a
+        // user meets it. Guarded by the store's
         // install lock and re-checked once it is held, so two processes
         // racing to install the same release download it once between
         // them.
         install(tag: string, say: (string) -> void) -> string? is
+            // A leading `v` names the release the way a user meets it; the
+            // store and the releases page agree on the bare numbers.
+            let name = if tag.starts_with("v") then tag[1..0] else tag fi
+
             Directory.create_directory(_store.root)
 
             let lock_stream = FILE_LOCK.acquire(_store.install_lock_path(), null)
 
             try
-                let (url, url_failure) = asset_url(tag)
+                let (url, url_failure) = asset_url(name)
 
                 if let failure: string = url_failure then
                     return failure
                 elif let asset: string = url then
-                    let directory = Path.join([_store.root, tag])
+                    let directory = Path.join([_store.root, name])
 
                     if File.exists(Path.join([directory, "ghul-wasmtime"])) then
-                        say("ghul-wasmtime {tag} is already installed")
+                        say("ghul-wasmtime {name} is already installed")
 
                         return null
                     fi
 
-                    say("downloading ghul-wasmtime {tag}")
+                    say("downloading ghul-wasmtime {name}")
 
                     let scratch = Path.join([
                         Path.get_temp_path(),
@@ -226,7 +271,7 @@ namespace Ghul.Project is
                         let response = client.get_async(asset).result
 
                         if !response.is_success_status_code then
-                            return "ghul-wasmtime {tag} is not on the releases page (HTTP {cast int(response.status_code)})"
+                            return "ghul-wasmtime {name} is not on the releases page (HTTP {cast int(response.status_code)})"
                         fi
 
                         let bytes = response.content.read_as_byte_array_async().result
