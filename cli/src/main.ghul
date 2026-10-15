@@ -454,15 +454,18 @@ namespace Ghul.Cli is
 
     // Creates a project to build and run: `ghul new <name> [--target ...]`.
     cmd_new(rest: Collections.List[string]) -> int is
-        let command_line = Ghul.Project.PROJECT_SCAFFOLD.parse(rest, Ghul.Project.TARGET_CHOICE.ORDER)
+        let parsed = Ghul.Project.PROJECT_SCAFFOLD.parse(rest, Ghul.Project.TARGET_CHOICE.ORDER)
 
-        if let problem: string = command_line.problem then
+        if let (problem): ERROR = parsed then
             Std.error.write_line("ghul: {problem}")
             Std.error.write_line("usage: ghul new <name> [--target <target>[,<target>...]]")
             return 1
         fi
 
-        if let problem: string = Ghul.Project.PROJECT_SCAFFOLD.create(command_line) then
+        let command_line = parsed!
+        let created = Ghul.Project.PROJECT_SCAFFOLD.create(command_line)
+
+        if let (problem): ERROR = created then
             Std.error.write_line("ghul: {problem}")
             return 1
         fi
@@ -503,12 +506,12 @@ namespace Ghul.Cli is
 
         let found = Ghul.Project.ROSETTA_TASK.find(System.Text.Encoding.utf8.get_string(index!), rest[0], Host.HOST.has_dotnet())
 
-        if let problem: string = found.problem then
+        if let (problem): ERROR = found then
             Std.error.write_line("ghul: {problem}")
             return 1
         fi
 
-        let part = found.part!
+        let part = found!.part
 
         if part.targets.count == 0 then
             Std.error.write_line("ghul: {part.id} builds for no target this machine has")
@@ -524,7 +527,7 @@ namespace Ghul.Cli is
         fi
 
         let repository = System.Environment.get_environment_variable("GHUL_ROSETTA_REPOSITORY")
-        let url = (path: string) => if let base = repository then "{base}/{path}" else Ghul.Project.ROSETTA_TASK.file_url(found.commit, path) fi
+        let url = (path: string) => if let base = repository then "{base}/{path}" else Ghul.Project.ROSETTA_TASK.file_url(found!.commit, path) fi
 
         // Everything is fetched before anything is written, so a file that
         // cannot be read leaves no half-made project behind.
@@ -549,7 +552,7 @@ namespace Ghul.Cli is
             fetched.add((path = file.name, bytes = read!))
         od
 
-        let manifest = Ghul.Project.ROSETTA_TASK.manifest_text(name, part, part.targets, found.raster_version)
+        let manifest = Ghul.Project.ROSETTA_TASK.manifest_text(name, part, part.targets, found!.raster_version)
         let check = Ghul.Project.MANIFEST_READER.read(manifest, Path.join([directory, Ghul.Project.MANIFEST_LOCATION.FILE_NAME]))
 
         if let problems: Ghul.Project.ReadOutcome.PROBLEMS = check then
