@@ -239,7 +239,7 @@ namespace Ghul.Project is
         install(tag: string, say: (string) -> void) -> string? is
             // A leading `v` names the release the way a user meets it; the
             // store and the releases page agree on the bare numbers.
-            let name = if tag.starts_with("v") then tag[1..0] else tag fi
+            let name = if tag.starts_with("v") then tag[1..<0] else tag fi
 
             Directory.create_directory(_store.root)
 
