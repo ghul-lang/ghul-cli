@@ -130,7 +130,7 @@ namespace Ghul.Project is
         asset_url(tag: string) -> (url: string?, failure: string?) is
             if let rid: string = _rid() then
                 return (
-                    url = "{base()}/{tag}/ghul-wasmtime-{rid}",
+                    url = "{base()}/v{tag}/ghul-wasmtime-{rid}",
                     failure = null)
             fi
 
