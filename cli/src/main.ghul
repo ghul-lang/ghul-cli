@@ -1064,6 +1064,11 @@ namespace Ghul.Cli is
         let host_problem: string? mut = null
         let global_host = Ghul.Project.GLOBAL_DEFAULTS.read(Ghul.Project.GLOBAL_DEFAULTS.path(), host_problem ref).host_wasm
 
+        if let problem: string = host_problem then
+            Std.error.write_line("ghul: {problem}")
+            return 1
+        fi
+
         let chosen =
             Ghul.Project.TARGET_CHOICE.choose(
                 Collections.LIST[Ghul.Project.BuildTarget](Ghul.Project.TARGET_CHOICE.ORDER),

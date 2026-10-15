@@ -65,7 +65,7 @@ namespace Ghul.Project is
 
                         if theirs != mine then
                             newer = theirs > mine
-                            continue
+                            break
                         fi
                     od
 
