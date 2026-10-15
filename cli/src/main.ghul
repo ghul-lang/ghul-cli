@@ -614,7 +614,13 @@ namespace Ghul.Cli is
         fi
 
         let thing = things[0]
-        let others = [argument for argument in rest if argument != thing /\ !argument.starts_with("--version") /\ !argument.starts_with("-")]
+        let others mut = Collections.LIST[string]([argument for argument in rest if argument != thing /\ !argument.starts_with("--version") /\ !argument.starts_with("-")])
+
+        // A version spelled either way is forwarded to whatever is being
+        // installed, so `--version=X` and `--version X` mean the same.
+        if let wanted: string = version then
+            others.add(wanted)
+        fi
 
         if thing =~ "compiler" then
             return cmd_install_compiler(others)
