@@ -170,9 +170,12 @@ GHUL
 echo "project: --library builds a wasm program against library checkouts..." >&2
 git clone -q --depth 1 https://github.com/ghul-lang/ghul-core "$scratch/core-checkout"
 git clone -q --depth 1 https://github.com/ghul-lang/ghul-runtime "$scratch/runtime-checkout"
+# The run's stderr is kept and printed only where the run fails: a wasm run
+# fetches the host and compiles before it writes anything, so a failure with
+# the stderr discarded says nothing about which of those it was.
 out="$(cd "$wasm" && dotnet "$cli" run --library "ghul-core=$scratch/core-checkout" \
-    --library "ghul-runtime=$scratch/runtime-checkout" 2>/dev/null)" \
-    || fail "ghul run with --library failed"
+    --library "ghul-runtime=$scratch/runtime-checkout" 2>"$scratch/library-run.err")" \
+    || { cat "$scratch/library-run.err" >&2; fail "ghul run with --library failed"; }
 check "$out" "hello with use default" "wasm run output with --library"
 
 if err="$(cd "$wasm" && dotnet "$cli" build --library "ghul-core=$scratch/no-such-core" 2>&1)"; then
