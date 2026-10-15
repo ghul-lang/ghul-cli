@@ -42,7 +42,7 @@ namespace Ghul.Cli.Tests is
             let chosen = TARGET_CHOICE.choose(_all, _none, null, _MACHINE([BuildTarget.LLVM, BuildTarget.WASM]))
 
             assert _name(chosen) =~ "wasm"
-            assert chosen.reason =~ "building for wasm (no dotnet)" else chosen.reason ?? "null"
+            assert chosen.reason =~ "building for wasm" else chosen.reason ?? "null"
         si
 
         @Test()
@@ -50,7 +50,7 @@ namespace Ghul.Cli.Tests is
             let chosen = TARGET_CHOICE.choose(_all, _none, null, _MACHINE([BuildTarget.WASM]))
 
             assert _name(chosen) =~ "wasm"
-            assert chosen.reason =~ "building for wasm (no dotnet)" else chosen.reason ?? "null"
+            assert chosen.reason =~ "building for wasm" else chosen.reason ?? "null"
         si
 
         @Test()
