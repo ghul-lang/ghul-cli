@@ -1,4 +1,6 @@
 namespace Ghul.Repl.Host is
+    use Result.*
+
     use Ghul.Repl.CELL_EXPORTS
     use Ghul.Repl.CELL_REPLY
     use Ghul.Repl.CELL_ENTRY
@@ -172,7 +174,7 @@ namespace Ghul.Repl.Host is
                 return ADDED_REFERENCES(names, "no such file: {path}")
             fi
 
-            if let problem = _add_assembly(IO.Path.get_full_path(path), names, true) then
+            if let (problem): Result.ERROR = _add_assembly(IO.Path.get_full_path(path), names, true) then
                 return ADDED_REFERENCES(names, problem)
             fi
 
@@ -196,12 +198,12 @@ namespace Ghul.Repl.Host is
             try
                 let restored = PACKAGE_RESTORE.assemblies(package, version, restore_directory)
 
-                if let problem = restored.problem then
+                if let (problem): Result.ERROR = restored then
                     return ADDED_REFERENCES(names, problem)
                 fi
 
-                for path in restored.paths do
-                    if let problem = _add_assembly(path, names, true) then
+                for path in restored! do
+                    if let (problem): Result.ERROR = _add_assembly(path, names, true) then
                         return ADDED_REFERENCES(names, problem)
                     fi
                 od
@@ -225,11 +227,11 @@ namespace Ghul.Repl.Host is
         // is the name both the compile and the load context look for. One
         // that is there already, such as the session's own copy of the ghūl
         // runtime, is left as it is.
-        _add_assembly(path: string, names: Collections.LIST[string], listed: bool) -> string? is
+        _add_assembly(path: string, names: Collections.LIST[string], listed: bool) -> Result[unit, string] is
             let directory = _probe_directory ?? ""
 
             if directory.length == 0 then
-                return "this session keeps no directory to add a reference to"
+                return ERROR("this session keeps no directory to add a reference to")
             fi
 
             let name: string mut
@@ -237,7 +239,7 @@ namespace Ghul.Repl.Host is
             try
                 name = System.Reflection.AssemblyName.get_assembly_name(path).name ?? IO.Path.get_file_name_without_extension(path)!
             catch e: System.BadImageFormatException
-                return "not a .NET assembly: {path}"
+                return ERROR("not a .NET assembly: {path}")
             yrt
 
             IO.Directory.create_directory(directory)
@@ -245,7 +247,7 @@ namespace Ghul.Repl.Host is
             let destination = IO.Path.join([directory, "{name}.dll"])
 
             if IO.File.exists(destination) then
-                return null
+                return OK(_)
             fi
 
             IO.File.copy(path, destination)
@@ -259,7 +261,7 @@ namespace Ghul.Repl.Host is
 
             _analysis?.add(destination)
 
-            return null
+            return OK(_)
         si
 
         // The request with the added assemblies referenced as well.
