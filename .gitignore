@@ -16,3 +16,4 @@ nupkg/
 .assemblies.json
 output.txt
 .vs/*
+build/

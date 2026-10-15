@@ -29,12 +29,17 @@ running="${running%%+*}"
 newer="99.0.0"
 
 mirror="$scratch/mirror"
-mkdir -p "$mirror/api/releases" "$mirror/download"
+mkdir -p "$mirror/api/releases" "$mirror/download" "$mirror/feed/ghul.compiler"
 
 export HOME="$scratch/home"
 export XDG_CACHE_HOME="$scratch/cache"
 export GHUL_CLI_API="file://$mirror/api"
 export GHUL_CLI_RELEASES="file://$mirror/download"
+# The component sweep `ghul update` runs reads the compiler feed; pointed at
+# the mirror it stays off the network, and the one version it lists is the
+# one the releases below ship, so nothing is ever stale.
+export GHUL_COMPILER_FEED="file://$mirror/feed"
+printf '{"versions": ["0.0.0"]}\n' > "$mirror/feed/ghul.compiler/index.json"
 mkdir -p "$HOME"
 
 # A release directory holding `ghul` and a compiler, packed and checksummed
@@ -42,10 +47,10 @@ mkdir -p "$HOME"
 release() {
     local tag="$1" executable="$2" release_dir="$mirror/download/$1" payload="$scratch/payload-$1"
 
-    mkdir -p "$release_dir" "$payload/compilers/0.0.0-update-test"
+    mkdir -p "$release_dir" "$payload/compilers/0.0.0"
     cp "$executable" "$payload/ghul"
     chmod +x "$payload/ghul"
-    echo "a compiler" > "$payload/compilers/0.0.0-update-test/ghul-compiler"
+    echo "a compiler" > "$payload/compilers/0.0.0/ghul-compiler"
 
     tar -czf "$release_dir/ghul-cli-linux-x64.tar.gz" -C "$payload" ghul compilers
     cp "$repo_root/install.sh" "$release_dir/ghul-cli-install.sh"

@@ -877,9 +877,11 @@ namespace Ghul.Cli is
 
     // Updates ghul itself, then every managed component the machine
     // already holds: the compilers in the two stores and the wasmtime host.
-    // `--check` reports what is stale without changing anything. A
-    // component not installed is reported rather than installed - `update`
-    // refreshes what exists, and `ghul install <thing>` brings a thing in.
+    // `--check` reports what is stale without changing anything and without
+    // failing - the report is the answer, and a script that wants to know
+    // reads it. A component not installed is reported rather than
+    // installed - `update` refreshes what exists, and `ghul install <thing>`
+    // brings a thing in.
     cmd_update(rest: Collections.List[string]) -> int is
         let check_only = rest |> any(argument => argument =~ "--check")
 
@@ -925,7 +927,6 @@ namespace Ghul.Cli is
 
             if check_only then
                 Std.error.write_line("ghul: {kind} has {latest} available")
-                status = 1
                 continue
             fi
 
@@ -968,7 +969,7 @@ namespace Ghul.Cli is
         if check_only then
             Std.error.write_line("ghul: the wasmtime host has {latest} available")
 
-            return 1
+            return status
         fi
 
         Std.error.write_line("ghul: updating the wasmtime host to {latest}...")
