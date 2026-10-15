@@ -377,7 +377,7 @@ namespace Ghul.Project is
             fi
 
             if project.target == BuildTarget.WASM /\ WASM_HOST_SELECTION.chosen(project, global_host_wasm) =~ "node" then
-                if let problem: string = NODE_RUNTIME.run_problem() then
+                if let (problem): Result.ERROR = NODE_RUNTIME.run_problem() then
                     say(problem)
                     return 1
                 fi

@@ -46,7 +46,7 @@ namespace Ghul.Project is
         /// it, so availability is decided by the host the run would
         /// actually use rather than only the machine's default.
         chosen_for_wasm(manifest_host_wasm: string?, global_host_wasm: string?) -> bool static =>
-            !(chosen_for_runtime(manifest_host_wasm, global_host_wasm) =~ "node") \/ NODE_RUNTIME.problem() == null
+            !(chosen_for_runtime(manifest_host_wasm, global_host_wasm) =~ "node") \/ NODE_RUNTIME.problem()?
 
         /// The host the ladder chooses for a wasm run, as `resolve` and the
         /// dispatch ask it: the manifest's, the global defaults', or the

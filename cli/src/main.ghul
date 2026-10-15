@@ -473,7 +473,7 @@ namespace Ghul.Cli is
         // it is what needs node, and saying so here is the difference between
         // a project that will not run and one whose host was never installed.
         if command_line.targets.count == 1 /\ command_line.targets[0] == Ghul.Project.BuildTarget.WASM then
-            if let problem: string = Ghul.Project.NODE_RUNTIME.run_problem() then
+            if let (problem): ERROR = Ghul.Project.NODE_RUNTIME.run_problem() then
                 Std.error.write_line("ghul: {problem}")
             fi
         fi
@@ -1164,8 +1164,8 @@ namespace Ghul.Cli is
         if target == Ghul.Project.BuildTarget.LLVM then
             let found = LLVM_TOOLCHAIN.for_this_user().executable(compiler_version, requirements)
 
-            if let failure: ERROR = found then
-                say(failure.error)
+            if let (error): ERROR = found then
+                say(error)
                 return 1
             fi
 
@@ -1469,7 +1469,7 @@ namespace Ghul.Cli is
         // missing.
         if wants_run /\ project.target == Ghul.Project.BuildTarget.WASM /\ project.manifest.kind == Ghul.Project.ManifestKind.PROGRAM then
             if Ghul.Project.WASM_HOST_SELECTION.chosen(project, global_defaults.host_wasm) =~ "node" then
-                if let problem: string = Ghul.Project.NODE_RUNTIME.run_problem() then
+                if let (problem): ERROR = Ghul.Project.NODE_RUNTIME.run_problem() then
                     say(problem)
                     return 1
                 fi
@@ -1506,8 +1506,8 @@ namespace Ghul.Cli is
                         compiler_version,
                         Ghul.Project.COMPILER_REQUIREMENTS.read(compiler.directory))
 
-                if let failure: ERROR = found then
-                    say(failure.error)
+                if let (error): ERROR = found then
+                    say(error)
                     return 1
                 fi
 

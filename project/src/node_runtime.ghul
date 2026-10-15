@@ -1,4 +1,6 @@
 namespace Ghul.Project is
+    use Result.*
+
     /// The Node.js that runs a wasm build, and whether it is new enough to.
     /// A wasm module uses exception references, which Node runs from 22.19
     /// on the 22 line, 24.15 on the 24 line, and every release from 25 on.
@@ -10,31 +12,35 @@ namespace Ghul.Project is
         /// read.
         MINIMUM: string static => "22.19 or later on the 22 line, 24.15 or later on the 24 line, or 25 or later"
 
-        /// Why the Node.js on PATH cannot run a wasm build, or null where it
-        /// can: `no Node.js` where there is none, or the version found and
-        /// the version needed. Asked once a process: the answer comes from
-        /// running `node --version`.
-        problem() -> string? static is
+        /// Why the Node.js on PATH cannot run a wasm build, succeeding
+        /// where it can: `no Node.js` where there is none, or the version
+        /// found and the version needed. Asked once a process: the answer
+        /// comes from running `node --version`.
+        problem() -> Result[unit, string] static is
             if !_checked then
                 _problem = _ask()
                 _checked = true
             fi
 
-            return _problem
+            if let reason: string = _problem then
+                return ERROR(reason)
+            fi
+
+            return OK(_)
         si
 
         /// Why a wasm build cannot be run here, as a sentence on its own:
         /// what `problem` says, with no Node.js at all said in full.
-        run_problem() -> string? static is
-            if let problem: string = problem() then
+        run_problem() -> Result[unit, string] static is
+            if let (problem): Result.ERROR = problem() then
                 if problem =~ "no Node.js" then
-                    return "node was not found; running the wasm target needs Node.js {MINIMUM}"
+                    return ERROR("node was not found; running the wasm target needs Node.js {MINIMUM}")
                 fi
 
-                return problem
+                return ERROR(problem)
             fi
 
-            return null
+            return OK(_)
         si
 
         /// Why Node.js answering `version` to `node --version` cannot run a

@@ -3,6 +3,8 @@ namespace Ghul.Cli is
 
     use Ghul.Project.BuildTarget
 
+    use Result.*
+
     /// What this machine can build for, as target selection asks it: dotnet
     /// where a .NET SDK is installed, or for a script, which compiles
     /// against the runtime's own assemblies, a .NET runtime; llvm where
@@ -17,15 +19,15 @@ namespace Ghul.Cli is
     /// - manifest_host_wasm: the host the project's manifest names for wasm,
     ///   or null for a script, which has no manifest
     class MACHINE_TARGETS(_will_run: bool, _is_script: bool, _global_host_wasm: string?, _manifest_host_wasm: string?): Ghul.Project.TargetAvailability is
-        why_not(target: BuildTarget) -> string? =>
+        why_not(target: BuildTarget) -> Result[unit, string] =>
             case target
             when BuildTarget.DOTNET then
                 if _is_script then
-                    if Host.HOST.has_dotnet() then null else "no .NET" fi
+                    if Host.HOST.has_dotnet() then OK(_) else ERROR("no .NET") fi
                 elif Host.HOST.has_dotnet_sdk() then
-                    null
+                    OK(_)
                 else
-                    "no .NET SDK"
+                    ERROR("no .NET SDK")
                 fi
             when BuildTarget.LLVM then _why_not_llvm()
             when BuildTarget.WASM then
@@ -33,38 +35,38 @@ namespace Ghul.Cli is
                 // running needs something to run the module: the wasmtime
                 // host, which can be fetched, or Node.
                 if !_will_run then
-                    null
+                    OK(_)
                 elif Ghul.Project.WASM_HOST_SELECTION.chosen_for_wasm(_manifest_host_wasm, _global_host_wasm) then
-                    null
+                    OK(_)
                 else
                     Ghul.Project.NODE_RUNTIME.problem()
                 fi
             esac
 
-        _why_not_llvm() -> string? is
+        _why_not_llvm() -> Result[unit, string] is
             let named = System.Environment.get_environment_variable("GHUL_LLVM")
 
             if named? /\ named.length > 0 then
-                return null
+                return OK(_)
             fi
 
             let triple = LLVM_TOOLCHAIN.triple()
 
             if !triple? then
-                return "ghul-llvm is not built for this platform"
+                return ERROR("ghul-llvm is not built for this platform")
             fi
 
             let toolchain = LLVM_TOOLCHAIN.for_this_user()
 
             if toolchain.has_any(triple) then
-                return null
+                return OK(_)
             fi
 
-            if let problem: string = toolchain.fetch_problem() then
-                return "ghul-llvm cannot be fetched: {problem}"
+            if let (problem): Result.ERROR = toolchain.fetch_problem() then
+                return ERROR("ghul-llvm cannot be fetched: {problem}")
             fi
 
-            return null
+            return OK(_)
         si
     si
 si
