@@ -1,6 +1,8 @@
 namespace Ghul.Repl.Host is
     use Collections.LIST
 
+    use Result.*
+
     // What adding a reference or a package came to: the assemblies now
     // referenced, by name, and why nothing was, where nothing was.
     class ADDED_REFERENCES(names: Collections.List[string], problem: string?);
@@ -18,7 +20,7 @@ namespace Ghul.Repl.Host is
 
         // The package's assemblies, or why there are none. With no version
         // the latest stable release is taken.
-        assemblies(package: string, version: string?, directory: string) -> (paths: LIST[string], problem: string?) static is
+        assemblies(package: string, version: string?, directory: string) -> Result[LIST[string], string] static is
             let paths = LIST[string]()
 
             IO.Directory.create_directory(directory)
@@ -45,7 +47,7 @@ namespace Ghul.Repl.Host is
             let process = System.Diagnostics.Process.start(start_info)
 
             if !process? then
-                return (paths = paths, problem = "could not start dotnet to restore {package}")
+                return ERROR("could not start dotnet to restore {package}")
             fi
 
             // Both streams read at once: read one after the other, a child
@@ -62,14 +64,14 @@ namespace Ghul.Repl.Host is
                 catch e: System.Exception
                 yrt
 
-                return (paths = paths, problem = "restoring {package} took longer than {TIMEOUT_MS / 60000} minutes, so it was stopped")
+                return ERROR("restoring {package} took longer than {TIMEOUT_MS / 60000} minutes, so it was stopped")
             fi
 
             let said = output_read.result
             let _ = error_read.result
 
             if process.exit_code != 0 then
-                return (paths = paths, problem = "could not restore {package}: {first_error(said) ?? "dotnet publish failed"}")
+                return ERROR("could not restore {package}: {first_error(said) ?? "dotnet publish failed"}")
             fi
 
             for path in IO.Directory.get_files(output, "*.dll") do
@@ -80,7 +82,7 @@ namespace Ghul.Repl.Host is
 
             paths.sort(System.StringComparer.ordinal)
 
-            return (paths = paths, problem = null)
+            return OK(paths)
         si
 
         project(package: string, version: string?) -> string static =>

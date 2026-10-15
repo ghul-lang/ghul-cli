@@ -8,6 +8,8 @@ namespace Ghul.Cli.Tests is
     use Ghul.Project.PROJECT_SCAFFOLD
     use Ghul.Project.ReadOutcome
 
+    use Result.*
+
     use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
     use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
 
@@ -20,6 +22,11 @@ namespace Ghul.Cli.Tests is
             assert actual =~ expected else "expected '{expected}', got '{actual}'"
         si
 
+        _message(expected: string, parsed: Result[Ghul.Project.NEW_COMMAND_LINE, string]) is
+            assert !parsed? else "expected a problem, got a project"
+            _same(expected, (cast Result.ERROR(parsed)).error)
+        si
+
         _targets(targets: Collections.List[BuildTarget]) -> string =>
             string.join(",", targets |> Ghul.Pipes.map(t => BUILD_TARGETS.name(t)))
 
@@ -29,17 +36,17 @@ namespace Ghul.Cli.Tests is
         a_name_alone_lists_every_target_in_choice_order() is
             let parsed = PROJECT_SCAFFOLD.parse(LIST[string](["hello"]), TARGET_CHOICE.ORDER)
 
-            assert !parsed.problem?
-            _same("hello", parsed.directory ?? "")
-            _same("dotnet,wasm", _targets(parsed.targets))
+            assert parsed? else (cast Result.ERROR(parsed)).error
+            _same("hello", parsed!.directory ?? "")
+            _same("dotnet,wasm", _targets(parsed!.targets))
         si
 
         @Test()
         target_names_both_targets_in_the_order_given() is
             let parsed = PROJECT_SCAFFOLD.parse(LIST[string](["--target", "wasm,dotnet", "hello"]), [BuildTarget.DOTNET])
 
-            assert !parsed.problem?
-            _same("wasm,dotnet", _targets(parsed.targets))
+            assert parsed? else (cast Result.ERROR(parsed)).error
+            _same("wasm,dotnet", _targets(parsed!.targets))
         si
 
         // An explicit --target outranks the default, whichever it is.
@@ -47,24 +54,24 @@ namespace Ghul.Cli.Tests is
         target_names_the_llvm_target() is
             let parsed = PROJECT_SCAFFOLD.parse(LIST[string](["--target", "dotnet,wasm,llvm", "hello"]), [BuildTarget.DOTNET])
 
-            assert !parsed.problem?
-            assert PROJECT_SCAFFOLD.manifest_text("hello", parsed.targets).contains("\"targets\": [\"dotnet\", \"wasm\", \"llvm\"]")
+            assert parsed? else (cast Result.ERROR(parsed)).error
+            assert PROJECT_SCAFFOLD.manifest_text("hello", parsed!.targets).contains("\"targets\": [\"dotnet\", \"wasm\", \"llvm\"]")
         si
 
         @Test()
         target_named_overrides_the_default() is
             let parsed = PROJECT_SCAFFOLD.parse(LIST[string](["--target", "dotnet", "hello"]), [BuildTarget.WASM])
 
-            assert !parsed.problem?
-            _same("dotnet", _targets(parsed.targets))
+            assert parsed? else (cast Result.ERROR(parsed)).error
+            _same("dotnet", _targets(parsed!.targets))
         si
 
         @Test()
         an_unknown_target_a_missing_name_or_a_second_name_is_a_problem() is
-            _same("unknown target java; expected one of dotnet, wasm, llvm", PROJECT_SCAFFOLD.parse(LIST[string](["x", "--target", "java"]), [BuildTarget.DOTNET]).problem ?? "")
-            _same("a project name is needed", PROJECT_SCAFFOLD.parse(LIST[string](), [BuildTarget.DOTNET]).problem ?? "")
-            _same("expected one project name, not y as well", PROJECT_SCAFFOLD.parse(LIST[string](["x", "y"]), [BuildTarget.DOTNET]).problem ?? "")
-            _same("--target needs one or more targets, separated by commas: dotnet, wasm, llvm", PROJECT_SCAFFOLD.parse(LIST[string](["x", "--target"]), [BuildTarget.DOTNET]).problem ?? "")
+            _message("unknown target java; expected one of dotnet, wasm, llvm", PROJECT_SCAFFOLD.parse(LIST[string](["x", "--target", "java"]), [BuildTarget.DOTNET]))
+            _message("a project name is needed", PROJECT_SCAFFOLD.parse(LIST[string](), [BuildTarget.DOTNET]))
+            _message("expected one project name, not y as well", PROJECT_SCAFFOLD.parse(LIST[string](["x", "y"]), [BuildTarget.DOTNET]))
+            _message("--target needs one or more targets, separated by commas: dotnet, wasm, llvm", PROJECT_SCAFFOLD.parse(LIST[string](["x", "--target"]), [BuildTarget.DOTNET]))
         si
 
         @Test()

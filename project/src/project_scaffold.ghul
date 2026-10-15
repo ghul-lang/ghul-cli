@@ -1,4 +1,6 @@
 namespace Ghul.Project is
+    use Result.*
+
     use Collections.LIST
     use IO.Directory
     use IO.File
@@ -9,11 +11,9 @@ namespace Ghul.Project is
     ///
     /// - directory: the directory to create the project in
     /// - targets: the targets the project builds for, in the order given
-    /// - problem: what was wrong with the arguments, or null
     class NEW_COMMAND_LINE(
         directory: string?,
-        targets: Collections.List[BuildTarget],
-        problem: string?
+        targets: Collections.List[BuildTarget]
     ) is si
 
     /// Creates a project a newcomer can build and run straight away: a
@@ -26,7 +26,7 @@ namespace Ghul.Project is
         /// - arguments: the arguments after `new`
         /// - default_targets: the targets the project may be built for where
         ///   none is named
-        parse(arguments: Collections.List[string], default_targets: Collections.Iterable[BuildTarget]) -> NEW_COMMAND_LINE static is
+        parse(arguments: Collections.List[string], default_targets: Collections.Iterable[BuildTarget]) -> Result[NEW_COMMAND_LINE, string] static is
             let targets = LIST[BuildTarget]()
             let directory: string? mut = null
             let i mut = 0
@@ -36,14 +36,14 @@ namespace Ghul.Project is
 
                 if argument =~ "--target" then
                     if i + 1 >= arguments.count then
-                        return NEW_COMMAND_LINE(null, targets, "--target needs one or more targets, separated by commas: {BUILD_TARGETS.names}")
+                        return ERROR("--target needs one or more targets, separated by commas: {BUILD_TARGETS.names}")
                     fi
 
                     for name in arguments[i + 1].split([',']) do
                         let target = BUILD_TARGETS.named(name.trim())
 
                         if !target? then
-                            return NEW_COMMAND_LINE(null, targets, "unknown target {name}; expected one of {BUILD_TARGETS.names}")
+                            return ERROR("unknown target {name}; expected one of {BUILD_TARGETS.names}")
                         fi
 
                         if !targets.contains(target) then
@@ -53,7 +53,7 @@ namespace Ghul.Project is
 
                     i = i + 2
                 elif directory? then
-                    return NEW_COMMAND_LINE(null, targets, "expected one project name, not {argument} as well")
+                    return ERROR("expected one project name, not {argument} as well")
                 else
                     directory = argument
                     i = i + 1
@@ -61,14 +61,14 @@ namespace Ghul.Project is
             od
 
             if !directory? then
-                return NEW_COMMAND_LINE(null, targets, "a project name is needed")
+                return ERROR("a project name is needed")
             fi
 
             if targets.count == 0 then
                 targets.add_range(default_targets)
             fi
 
-            return NEW_COMMAND_LINE(directory, targets, null)
+            return OK(NEW_COMMAND_LINE(directory, targets))
         si
 
         /// The files a new project holds, each as a path relative to the
@@ -113,12 +113,12 @@ namespace Ghul.Project is
         /// project's directory.
         ///
         /// - command_line: the parsed arguments, with no problem
-        create(command_line: NEW_COMMAND_LINE) -> string? static is
+        create(command_line: NEW_COMMAND_LINE) -> Result[unit, string] static is
             let directory = Path.get_full_path(command_line.directory!)
             let name = Path.get_file_name(Path.trim_ending_directory_separator(directory)) ?? ""
 
             if Directory.exists(directory) /\ Directory.get_file_system_entries(directory).count > 0 then
-                return "{command_line.directory} already exists and is not empty"
+                return ERROR("{command_line.directory} already exists and is not empty")
             fi
 
             let written = files(name, command_line.targets)
@@ -128,7 +128,7 @@ namespace Ghul.Project is
             if let problems: ReadOutcome.PROBLEMS = read then
                 let first = if problems.problems.count > 0 then problems.problems[0].describe() else "it cannot be read" fi
 
-                return "{name} cannot name a project: {first}"
+                return ERROR("{name} cannot name a project: {first}")
             fi
 
             for file in written do
@@ -138,7 +138,7 @@ namespace Ghul.Project is
                 File.write_all_text(path, file.text)
             od
 
-            return null
+            return OK(_)
         si
     si
 si

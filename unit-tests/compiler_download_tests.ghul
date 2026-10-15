@@ -117,9 +117,9 @@ namespace Ghul.Cli.Tests is
             try
                 let download = COMPILER_DOWNLOAD(store, server.url())
 
-                let failure = download.install("2.0.0", _say_nothing)
+                let installed = download.install("2.0.0", _say_nothing)
 
-                assert failure == null;
+                assert installed?;
 
                 assert store.is_installed("2.0.0");
 
@@ -147,9 +147,10 @@ namespace Ghul.Cli.Tests is
             try
                 let download = COMPILER_DOWNLOAD(store, server.url())
 
-                let failure = download.install("9.9.9", _say_nothing)
+                let installed = download.install("9.9.9", _say_nothing)
 
-                assert failure? /\ failure.contains("9.9.9") /\ failure.contains("404");
+                assert !installed?;
+                assert (cast Result.ERROR(installed)).error.contains("9.9.9") /\ (cast Result.ERROR(installed)).error.contains("404");
 
                 assert !store.highest_version()?;
 
@@ -170,10 +171,10 @@ namespace Ghul.Cli.Tests is
             let (store, root) = _store()
 
             try
-                let (version, failure) = COMPILER_DOWNLOAD(store, server.url()).latest_release()
+                let latest = COMPILER_DOWNLOAD(store, server.url()).latest_release()
 
-                assert failure == null;
-                assert (version ?? "none") =~ "2.0.0";
+                assert latest?;
+                assert (latest!) =~ "2.0.0";
             finally
                 server.stop()
                 Directory.delete(feed_scratch, true)
@@ -187,10 +188,9 @@ namespace Ghul.Cli.Tests is
             let (store, root) = _store()
 
             try
-                let (version, failure) = COMPILER_DOWNLOAD(store, server.url()).latest_release()
+                let latest = COMPILER_DOWNLOAD(store, server.url()).latest_release()
 
-                assert !version?;
-                assert failure?;
+                assert !latest?;
             finally
                 server.stop()
                 Directory.delete(feed_scratch, true)
@@ -225,9 +225,9 @@ namespace Ghul.Cli.Tests is
                 let download = COMPILER_DOWNLOAD(store, "http://127.0.0.1:9")
 
                 for bad in ["../elsewhere", "1.0.0/extra", ""] do
-                    let failure = download.install(bad, _say_nothing)
+                    let installed = download.install(bad, _say_nothing)
 
-                    assert failure? /\ failure.contains("not a version");
+                    assert !installed? /\ (cast Result.ERROR(installed)).error.contains("not a version");
                 od
 
                 // The store is not even created: a refused version does

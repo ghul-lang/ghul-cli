@@ -8,6 +8,8 @@ namespace Ghul.Cli is
     use Ghul.Project.FILE_LOCK
     use Ghul.Project.LIBRARY_CACHE
 
+    use Result.*
+
     /// The `ghul-llvm` tool a build for the llvm target links with: an IR
     /// assembler, optimiser and linker in one executable, released with the
     /// runtime archives it links against beside it.
@@ -64,18 +66,18 @@ namespace Ghul.Cli is
         si
 
         /// Why releases cannot be fetched from where this toolchain reads
-        /// them, or null where they can: the directory exists, or the
+        /// them, succeeding where they can: the directory exists, or the
         /// release host answers within a few seconds. A host that did not
         /// answer is not asked again for ten minutes, so builds made offline
         /// do not each wait for it; the answer in that time repeats why it
         /// did not.
-        fetch_problem() -> string? is
+        fetch_problem() -> Result[unit, string] is
             if releases.starts_with("file://") then
                 if Directory.exists(System.Uri(releases).local_path) then
-                    return null
+                    return OK(_)
                 fi
 
-                return "{releases} does not exist"
+                return ERROR("{releases} does not exist")
             fi
 
             let unreachable = Path.join([root, ".unreachable"])
@@ -83,27 +85,27 @@ namespace Ghul.Cli is
             if File.exists(unreachable) /\ System.DateTime.utc_now - File.get_last_write_time_utc(unreachable) < System.TimeSpan.from_minutes(10.0) then
                 let reason = File.read_all_text(unreachable).trim()
 
-                return "{_host()} could not be reached{if reason.length > 0 then " ({reason})" else "" fi}"
+                return ERROR("{_host()} could not be reached{if reason.length > 0 then " ({reason})" else "" fi}")
             fi
 
-            if let reason: string = _probe() then
+            if let (error): ERROR = _probe() then
                 Directory.create_directory(root)
-                File.write_all_text(unreachable, reason)
+                File.write_all_text(unreachable, error)
 
-                return "{_host()} could not be reached ({reason})"
+                return ERROR("{_host()} could not be reached ({error})")
             fi
 
             if File.exists(unreachable) then
                 File.delete(unreachable)
             fi
 
-            return null
+            return OK(_)
         si
 
         // Asks the release host for anything at all, answering why it gave
-        // no answer, or null where it gave one. A 404 for the bare base is
+        // no answer, succeeding where it gave one. A 404 for the bare base is
         // an answer: it says the host is reachable.
-        _probe() -> string? is
+        _probe() -> Result[unit, string] is
             let client = System.Net.Http.HttpClient()
 
             try
@@ -113,15 +115,15 @@ namespace Ghul.Cli is
                 let request = System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.head, releases)
                 let _ = client.send_async(request).result
 
-                return null
+                return OK(_)
             catch e: Ghul.Exception
                 let cause = e.get_base_exception()
 
                 if isa Tasks.TaskCanceledException(cause) then
-                    return "no answer within 3 seconds"
+                    return ERROR("no answer within 3 seconds")
                 fi
 
-                return cause.message
+                return ERROR(cause.message)
             finally
                 client.dispose()
             yrt
@@ -179,23 +181,23 @@ namespace Ghul.Cli is
         ///
         /// - compiler_version: the compiler the build uses
         /// - requirements: what the compiler declares it needs, or null
-        executable(compiler_version: string, requirements: Ghul.Project.COMPILER_REQUIREMENTS?) -> (path: string?, problem: string?) is
+        executable(compiler_version: string, requirements: Ghul.Project.COMPILER_REQUIREMENTS?) -> Result[string, string] is
             let named = System.Environment.get_environment_variable("GHUL_LLVM")
 
             if named? /\ named.length > 0 then
-                return (path = named, problem = null)
+                return OK(named)
             fi
 
             let platform = triple()
 
             if !platform? then
-                return (path = null, problem = "the llvm target builds only on Linux x86-64")
+                return ERROR("the llvm target builds only on Linux x86-64")
             fi
 
             let tag = if let declared = requirements?.llvm then "v{declared}" else pinned_tag(compiler_version) fi
 
             if !tag? then
-                return (path = null, problem = "no ghul-llvm release is pinned for ghul.compiler {compiler_version}, which the llvm target needs {Ghul.Project.BUILD_TARGETS.minimum_compiler(Ghul.Project.BuildTarget.LLVM)} or newer for")
+                return ERROR("no ghul-llvm release is pinned for ghul.compiler {compiler_version}, which the llvm target needs {Ghul.Project.BUILD_TARGETS.minimum_compiler(Ghul.Project.BuildTarget.LLVM)} or newer for")
             fi
 
             return executable(tag, platform)
@@ -207,12 +209,12 @@ namespace Ghul.Cli is
         ///
         /// - tag: the release
         /// - triple: the platform
-        executable(tag: string, triple: string) -> (path: string?, problem: string?) is
+        executable(tag: string, triple: string) -> Result[string, string] is
             let directory = Path.join([root, tag, triple])
             let binary = Path.join([directory, "bin", "ghul-llvm"])
 
             if File.exists(binary) then
-                return (path = binary, problem = null)
+                return OK(binary)
             fi
 
             Directory.create_directory(root)
@@ -221,18 +223,18 @@ namespace Ghul.Cli is
 
             try
                 if File.exists(binary) then
-                    return (path = binary, problem = null)
+                    return OK(binary)
                 fi
 
-                if let problem: string = _fetch_into(tag, triple, directory) then
-                    return (path = null, problem = problem)
+                if let (error): ERROR = _fetch_into(tag, triple, directory) then
+                    return ERROR(error)
                 fi
 
                 if !File.exists(binary) then
-                    return (path = null, problem = "ghul-llvm {tag} has no bin/ghul-llvm")
+                    return ERROR("ghul-llvm {tag} has no bin/ghul-llvm")
                 fi
 
-                return (path = binary, problem = null)
+                return OK(binary)
             finally
                 lock.close()
             yrt
@@ -240,24 +242,24 @@ namespace Ghul.Cli is
 
         // Downloads the release archive, checks it against its published
         // SHA-256, unpacks it into a scratch directory beside the final one
-        // and renames it into place. Null on success.
-        _fetch_into(tag: string, triple: string, directory: string) -> string? is
+        // and renames it into place.
+        _fetch_into(tag: string, triple: string, directory: string) -> Result[unit, string] is
             let url = "{releases}/{tag}/{archive_name(triple)}"
 
-            let (archive, archive_problem) = fetch(url)
+            let archive = fetch(url)
 
-            if let problem: string = archive_problem then
-                return "cannot fetch ghul-llvm: {problem}"
+            if let (error): ERROR = archive then
+                return ERROR("cannot fetch ghul-llvm: {error}")
             fi
 
-            let (checksum, checksum_problem) = fetch("{url}.sha256")
+            let checksum = fetch("{url}.sha256")
 
-            if let problem: string = checksum_problem then
-                return "cannot fetch ghul-llvm: {problem}"
+            if let (error): ERROR = checksum then
+                return ERROR("cannot fetch ghul-llvm: {error}")
             fi
 
             if !matches_checksum(archive!, System.Text.Encoding.utf8.get_string(checksum!)) then
-                return "{url} does not match its published sha256"
+                return ERROR("{url} does not match its published sha256")
             fi
 
             let parent = Path.get_directory_name(directory)!
@@ -268,22 +270,22 @@ namespace Ghul.Cli is
 
                 let unpacked = unpack(archive!, scratch)
 
-                if !unpacked? then
-                    return "{url} holds no single top-level directory"
+                if let (error): ERROR = unpacked then
+                    return ERROR(error)
                 fi
 
-                _make_executable(Path.join([unpacked, "bin", "ghul-llvm"]))
+                _make_executable(Path.join([unpacked!, "bin", "ghul-llvm"]))
 
                 try
-                    Directory.move(unpacked, directory)
+                    Directory.move(unpacked!, directory)
                 catch e: IO.IOException
                     // Another process unpacked the same release first; its
                     // copy is complete, and this one is left to be deleted.
                 yrt
 
-                return null
+                return OK(_)
             catch e: Ghul.Exception
-                return "cannot unpack {url}: {e.message}"
+                return ERROR("cannot unpack {url}: {e.message}")
             finally
                 if Directory.exists(scratch) then
                     Directory.delete(scratch, true)
@@ -292,12 +294,12 @@ namespace Ghul.Cli is
         si
 
         /// Unpacks a gzipped tar archive into `into`, answering the one
-        /// directory it holds at its top level, or null where it holds
-        /// anything else there.
+        /// directory it holds at its top level, or why it holds anything
+        /// else there.
         ///
         /// - archive: the archive's bytes
         /// - into: an empty directory to unpack into
-        unpack(archive: ubyte[], into: string) -> string? static is
+        unpack(archive: ubyte[], into: string) -> Result[string, string] static is
             let compressed = use IO.MemoryStream(archive)
             let decompressed = use System.IO.Compression.GZipStream(compressed, System.IO.Compression.CompressionMode.DECOMPRESS)
 
@@ -306,10 +308,10 @@ namespace Ghul.Cli is
             let entries = Directory.get_file_system_entries(into)
 
             if entries.count != 1 \/ !Directory.exists(entries[0]) then
-                return null
+                return ERROR("the archive holds no single top-level directory")
             fi
 
-            return entries[0]
+            return OK(entries[0])
         si
 
         /// Whether `content` has the SHA-256 a published `.sha256` file
@@ -328,15 +330,15 @@ namespace Ghul.Cli is
         /// `file://` URL is read from the file it names.
         ///
         /// - url: an `http`, `https` or `file` URL
-        fetch(url: string) -> (bytes: ubyte[]?, problem: string?) static is
+        fetch(url: string) -> Result[ubyte[], string] static is
             if url.starts_with("file://") then
                 let path = System.Uri(url).local_path
 
                 if !File.exists(path) then
-                    return (bytes = null, problem = "{url} does not exist")
+                    return ERROR("{url} does not exist")
                 fi
 
-                return (bytes = File.read_all_bytes(path), problem = null)
+                return OK(File.read_all_bytes(path))
             fi
 
             let client = System.Net.Http.HttpClient()
@@ -347,12 +349,12 @@ namespace Ghul.Cli is
                 let response = client.get_async(url).result
 
                 if !response.is_success_status_code then
-                    return (bytes = null, problem = "{url} answered HTTP {cast int(response.status_code)}")
+                    return ERROR("{url} answered HTTP {cast int(response.status_code)}")
                 fi
 
-                return (bytes = response.content.read_as_byte_array_async().result, problem = null)
+                return OK(response.content.read_as_byte_array_async().result)
             catch e: Ghul.Exception
-                return (bytes = null, problem = "{url} could not be read ({e.get_type().name})")
+                return ERROR("{url} could not be read ({e.get_type().name})")
             finally
                 client.dispose()
             yrt

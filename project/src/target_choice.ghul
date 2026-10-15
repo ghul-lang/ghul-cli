@@ -1,12 +1,14 @@
 namespace Ghul.Project is
+    use Result.*
+
     use Collections.LIST
 
     /// What this machine can build for, asked one target at a time.
     trait TargetAvailability open is
-        /// Why `target` cannot be built here, or null where it can.
+        /// Why `target` cannot be built here, succeeding where it can.
         ///
         /// - target: the target asked about
-        why_not(target: BuildTarget) -> string?
+        why_not(target: BuildTarget) -> Result[unit, string]
     si
 
     /// The target a build is for, and why, where the command line may not
@@ -60,7 +62,7 @@ namespace Ghul.Project is
             let dotnet_passed_over mut = false
 
             for target in _order(listed, prefer) do
-                if let why: string = availability.why_not(target) then
+                if let (why): Result.ERROR = availability.why_not(target) then
                     reasons.add(why)
                     per_target.add("{BUILD_TARGETS.name(target)}: {why}")
                     dotnet_passed_over = dotnet_passed_over \/ target == BuildTarget.DOTNET

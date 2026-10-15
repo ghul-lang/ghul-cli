@@ -23,6 +23,8 @@ namespace Ghul.Repl.Host is
     // no scratch file, no scratch directory, no store entry. The caller
     // holds the store's install lock across an install, so the rename
     // lands under it.
+    use Result.*
+
     class COMPILER_DOWNLOAD(_store: COMPILER_STORE, _feed: string?) is
         DEFAULT_FEED: string static => "https://api.nuget.org/v3-flatcontainer"
 
@@ -36,9 +38,8 @@ namespace Ghul.Repl.Host is
 
         // The newest release the feed carries: the last version in its
         // index with no `-`, so a prerelease never wins over the release
-        // before it. Null where the index cannot be read, with `failure`
-        // saying why.
-        latest_release() -> (version: string?, failure: string?) is
+        // before it, or why the index cannot be read.
+        latest_release() -> Result[string, string] is
             let url = "{feed()}/ghul.compiler/index.json"
 
             let client = System.Net.Http.HttpClient()
@@ -52,7 +53,7 @@ namespace Ghul.Repl.Host is
                     let path = System.Uri(url).local_path
 
                     if !File.exists(path) then
-                        return (version = null, failure = "the feed at {url} does not exist")
+                        return ERROR("the feed at {url} does not exist")
                     fi
 
                     text = File.read_all_text(path)
@@ -61,14 +62,12 @@ namespace Ghul.Repl.Host is
                         let response = client.get_async(url).result
 
                         if !response.is_success_status_code then
-                            return (
-                                version = null,
-                                failure = "the feed at {url} answered HTTP {cast int(response.status_code)}")
+                            return ERROR("the feed at {url} answered HTTP {cast int(response.status_code)}")
                         fi
 
                         text = response.content.read_as_string_async().result
                     catch e: System.Exception
-                        return (version = null, failure = "the feed at {url} could not be read ({e.get_type().name})")
+                        return ERROR("the feed at {url} could not be read ({e.get_type().name})")
                     yrt
                 fi
 
@@ -81,10 +80,10 @@ namespace Ghul.Repl.Host is
                 od
 
                 if releases.count == 0 then
-                    return (version = null, failure = "the feed at {url} lists no releases")
+                    return ERROR("the feed at {url} lists no releases")
                 fi
 
-                return (version = releases[releases.count - 1], failure = null)
+                return OK(releases[releases.count - 1])
             finally
                 client.dispose()
             yrt
@@ -117,14 +116,13 @@ namespace Ghul.Repl.Host is
 
         // Installs `version`: downloads its package, extracts
         // `tools/net10.0/any` from it, and renames that onto the
-        // version's store directory. Returns null on success, or the
-        // failure to report, which names the version and, where the feed
-        // answered, the HTTP status.
-        install(version: string, say: (string) -> void) -> string? is
+        // version's store directory, or the failure to report, which names
+        // the version and, where the feed answered, the HTTP status.
+        install(version: string, say: (string) -> void) -> Result[unit, string] is
             // The version names a directory and a URL, so anything that
             // could reach outside a single name is refused outright.
             if version.length == 0 \/ version.contains("/") \/ version.contains("\\") \/ version.contains("..") then
-                return "ghul.compiler {version} is not a version"
+                return ERROR("ghul.compiler {version} is not a version")
             fi
 
             Directory.create_directory(_store.root)
@@ -135,24 +133,24 @@ namespace Ghul.Repl.Host is
             try
                 say("downloading ghul.compiler {version}...")
 
-                let download_failure = _download_package(version, package_scratch)
+                let downloaded = _download_package(version, package_scratch)
 
-                if let problem: string = download_failure then
-                    return problem
+                if let (error): ERROR = downloaded then
+                    return ERROR(error)
                 fi
 
                 let scratch_directory =
                     Path.join([_store.root, "{version}.tmp-{System.Environment.process_id}-{System.Guid.new_guid().to_string("N")}"])
 
                 try
-                    let extract_failure = _extract_tools_directory(package_scratch, scratch_directory)
+                    let extracted = _extract_tools_directory(package_scratch, scratch_directory)
 
-                    if let problem: string = extract_failure then
-                        return problem
+                    if let (error): ERROR = extracted then
+                        return ERROR(error)
                     fi
 
                     if !File.exists(Path.join([scratch_directory, "ghul.dll"])) then
-                        return "the ghul.compiler {version} package carries no compiler"
+                        return ERROR("the ghul.compiler {version} package carries no compiler")
                     fi
 
                     try
@@ -163,7 +161,7 @@ namespace Ghul.Repl.Host is
                         _delete_directory(scratch_directory)
                     yrt
 
-                    return null
+                    return OK(_)
                 finally
                     _delete_directory(scratch_directory)
                 yrt
@@ -177,19 +175,19 @@ namespace Ghul.Repl.Host is
         _package_url(version: string) -> string =>
             "{feed()}/ghul.compiler/{version}/ghul.compiler.{version}.nupkg"
 
-        _download_package(version: string, destination: string) -> string? is
+        _download_package(version: string, destination: string) -> Result[unit, string] is
             let url = _package_url(version)
 
             if url.starts_with("file://") then
                 let path = System.Uri(url).local_path
 
                 if !File.exists(path) then
-                    return "ghul.compiler {version} is not on the feed (no {url})"
+                    return ERROR("ghul.compiler {version} is not on the feed (no {url})")
                 fi
 
                 File.copy(path, destination, true)
 
-                return null
+                return OK(_)
             fi
 
             let client = System.Net.Http.HttpClient()
@@ -198,16 +196,16 @@ namespace Ghul.Repl.Host is
                 let response = client.get_async(url).result
 
                 if !response.is_success_status_code then
-                    return "ghul.compiler {version} is not on the feed (HTTP {cast int(response.status_code)})"
+                    return ERROR("ghul.compiler {version} is not on the feed (HTTP {cast int(response.status_code)})")
                 fi
 
                 let bytes = response.content.read_as_byte_array_async().result
 
                 File.write_all_bytes(destination, bytes)
 
-                return null
+                return OK(_)
             catch e: System.Exception
-                return "ghul.compiler {version} could not be downloaded ({e.get_type().name})"
+                return ERROR("ghul.compiler {version} could not be downloaded ({e.get_type().name})")
             finally
                 client.dispose()
             yrt
@@ -218,7 +216,7 @@ namespace Ghul.Repl.Host is
         // with.
         TOOLS_DIRECTORY_PREFIX: string static => "tools/net10.0/any/"
 
-        _extract_tools_directory(package: string, destination: string) -> string? is
+        _extract_tools_directory(package: string, destination: string) -> Result[unit, string] is
             let zip = System.IO.Compression.ZipFile.open_read(package)
 
             try
@@ -255,9 +253,9 @@ namespace Ghul.Repl.Host is
                     yrt
                 od
 
-                return null
+                return OK(_)
             catch e: System.Exception
-                return "the ghul.compiler package could not be read ({e.get_type().name})"
+                return ERROR("the ghul.compiler package could not be read ({e.get_type().name})")
             finally
                 zip.dispose()
             yrt

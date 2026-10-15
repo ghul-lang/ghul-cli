@@ -46,7 +46,7 @@ namespace Ghul.Project is
         /// it, so availability is decided by the host the run would
         /// actually use rather than only the machine's default.
         chosen_for_wasm(manifest_host_wasm: string?, global_host_wasm: string?) -> bool static =>
-            !(chosen_for_runtime(manifest_host_wasm, global_host_wasm) =~ "node") \/ NODE_RUNTIME.problem() == null
+            !(chosen_for_runtime(manifest_host_wasm, global_host_wasm) =~ "node") \/ NODE_RUNTIME.problem()?
 
         /// The host the ladder chooses for a wasm run, as `resolve` and the
         /// dispatch ask it: the manifest's, the global defaults', or the
@@ -55,9 +55,8 @@ namespace Ghul.Project is
             manifest_host_wasm ?? global_host_wasm ?? BUILTIN
 
         /// Installs the wasmtime host, fetching the newest ghul-wasmtime
-        /// release if no version is held. Null on success, or the failure
-        /// to report.
-        install(say: (string) -> void) -> string? static =>
+        /// release if no version is held, or the failure to report.
+        install(say: (string) -> void) -> Result[unit, string] static =>
             WASMTIME_DOWNLOAD.of(WASMTIME_STORE.for_this_user()).install(say)
     si
 si

@@ -3,6 +3,8 @@ namespace Ghul.Cli is
     use IO.File
     use IO.Path
 
+    use Result.*
+
     use System.Text.Json.JsonDocument
     use System.Text.Json.JsonElement
     use System.Text.Json.JsonValueKind
@@ -45,27 +47,25 @@ namespace Ghul.Cli is
         /// executable is refused rather than replaced.
         ///
         /// - executable: the running executable's path
-        install_root(executable: string?) -> (root: string?, problem: string?) static is
+        install_root(executable: string?) -> Result[string, string] static is
             if !executable? \/ executable.length == 0 then
-                return (root = null, problem = "the running executable could not be found")
+                return ERROR("the running executable could not be found")
             fi
 
             let resolved = _resolve_link(executable)
             let root = Path.get_directory_name(resolved)
 
             if !root? \/ Path.get_file_name(resolved) !~ "ghul" then
-                return (root = null, problem = "{resolved} was not installed by install.sh")
+                return ERROR("{resolved} was not installed by install.sh")
             fi
 
             for entry in Directory.get_file_system_entries(root) do
                 if Path.get_file_name(entry) !~ "ghul" then
-                    return (
-                        root = null,
-                        problem = "{root} holds more than the ghul executable, so it was not installed by install.sh")
+                    return ERROR("{root} holds more than the ghul executable, so it was not installed by install.sh")
                 fi
             od
 
-            return (root = root, problem = null)
+            return OK(root)
         si
 
         _resolve_link(path: string) -> string static is
@@ -138,19 +138,19 @@ namespace Ghul.Cli is
         si
 
         /// The tag of the latest release, or the reason it could not be read.
-        latest_tag() -> (tag: string?, problem: string?) is
+        latest_tag() -> Result[string, string] is
             let url = "{api}/releases/latest"
-            let (body, problem) = fetch(url)
+            let fetched = fetch(url)
 
-            if problem? then
-                return (tag = null, problem = problem)
+            if let (error): ERROR = fetched then
+                return ERROR(error)
             fi
 
-            if let tag: string = tag_of_release(System.Text.Encoding.utf8.get_string(body!)) then
-                return (tag = tag, problem = null)
+            if let tag: string = tag_of_release(System.Text.Encoding.utf8.get_string(fetched!)) then
+                return OK(tag)
             fi
 
-            return (tag = null, problem = "{url} named no release")
+            return ERROR("{url} named no release")
         si
 
         /// The install script published with `tag`, checked against its
@@ -158,26 +158,26 @@ namespace Ghul.Cli is
         /// with no checksum is refused, since it is what gets run.
         ///
         /// - tag: the release to fetch it from
-        install_script(tag: string) -> (script: ubyte[]?, problem: string?) is
+        install_script(tag: string) -> Result[ubyte[], string] is
             let url = "{releases}/{tag}/{INSTALL_SCRIPT}"
 
-            let (script, script_problem) = fetch(url)
+            let script = fetch(url)
 
-            if script_problem? then
-                return (script = null, problem = script_problem)
+            if let (error): ERROR = script then
+                return ERROR(error)
             fi
 
-            let (checksum, checksum_problem) = fetch("{url}.sha256")
+            let checksum = fetch("{url}.sha256")
 
-            if checksum_problem? then
-                return (script = null, problem = checksum_problem)
+            if let (error): ERROR = checksum then
+                return ERROR(error)
             fi
 
             if !matches_checksum(script!, System.Text.Encoding.utf8.get_string(checksum!)) then
-                return (script = null, problem = "{url} does not match its published sha256")
+                return ERROR("{url} does not match its published sha256")
             fi
 
-            return (script = script, problem = null)
+            return OK(script!)
         si
 
         /// The bytes at `url`, or the reason they could not be read. A
@@ -185,15 +185,15 @@ namespace Ghul.Cli is
         /// file system serves releases as `install.sh` lets it.
         ///
         /// - url: an `http`, `https` or `file` URL
-        fetch(url: string) -> (bytes: ubyte[]?, problem: string?) static is
+        fetch(url: string) -> Result[ubyte[], string] static is
             if url.starts_with("file://") then
                 let path = System.Uri(url).local_path
 
                 if !File.exists(path) then
-                    return (bytes = null, problem = "{url} does not exist")
+                    return ERROR("{url} does not exist")
                 fi
 
-                return (bytes = File.read_all_bytes(path), problem = null)
+                return OK(File.read_all_bytes(path))
             fi
 
             let client = System.Net.Http.HttpClient()
@@ -205,12 +205,12 @@ namespace Ghul.Cli is
                 let response = client.get_async(url).result
 
                 if !response.is_success_status_code then
-                    return (bytes = null, problem = "{url} answered HTTP {cast int(response.status_code)}")
+                    return ERROR("{url} answered HTTP {cast int(response.status_code)}")
                 fi
 
-                return (bytes = response.content.read_as_byte_array_async().result, problem = null)
+                return OK(response.content.read_as_byte_array_async().result)
             catch e: System.Exception
-                return (bytes = null, problem = "{url} could not be read ({e.get_type().name})")
+                return ERROR("{url} could not be read ({e.get_type().name})")
             finally
                 client.dispose()
             yrt

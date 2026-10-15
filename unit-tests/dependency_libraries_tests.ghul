@@ -60,8 +60,11 @@ namespace Ghul.Cli.Tests is
             return cast ReadOutcome.OK(MANIFEST_READER.read(File.read_all_text(path), path)).manifest
         si
 
-        _names(found: (libraries: Collections.List[Ghul.Project.SOURCE_LIBRARY], problem: string?)) -> string =>
-            string.join(" ", found.libraries |> Ghul.Pipes.map(l => "{l.name}@{l.version}"))
+        _names(libraries: Collections.List[Ghul.Project.SOURCE_LIBRARY]) -> string =>
+            string.join(" ", libraries |> Ghul.Pipes.map(l => "{l.name}@{l.version}"))
+
+        _message(found: Result[Collections.List[Ghul.Project.SOURCE_LIBRARY], string]) -> string =>
+            (cast Result.ERROR(found)).error
 
         @Test()
         each_library_follows_the_libraries_it_depends_on() is
@@ -75,10 +78,10 @@ namespace Ghul.Cli.Tests is
 
                 let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
 
-                assert !found.problem? else found.problem ?? ""
-                assert _names(found) =~ "alpha@0.0.0 beta@0.0.0 zeta@0.0.0" else _names(found)
-                assert found.libraries[0].files.count == 1
-                assert found.libraries[0].files[0] =~ Path.get_full_path(Path.combine(scratch, "alpha", "src", "alpha.ghul"))
+                assert found? else _message(found)
+                assert _names(found!) =~ "alpha@0.0.0 beta@0.0.0 zeta@0.0.0" else _names(found!)
+                assert found![0].files.count == 1
+                assert found![0].files[0] =~ Path.get_full_path(Path.combine(scratch, "alpha", "src", "alpha.ghul"))
             finally
                 _delete(scratch)
             yrt
@@ -93,8 +96,8 @@ namespace Ghul.Cli.Tests is
 
                 let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
 
-                assert !found.problem?
-                assert found.libraries.count == 0
+                assert found?
+                assert found!.count == 0
             finally
                 _delete(scratch)
             yrt
@@ -121,9 +124,9 @@ namespace Ghul.Cli.Tests is
 
                 let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
 
-                assert !found.problem? else found.problem ?? ""
-                assert _names(found) =~ "lib@1.2.0" else _names(found)
-                assert !found.libraries[0].root.starts_with(repository)
+                assert found? else _message(found)
+                assert _names(found!) =~ "lib@1.2.0" else _names(found!)
+                assert !found![0].root.starts_with(repository)
             finally
                 _delete(scratch)
             yrt
@@ -140,7 +143,7 @@ namespace Ghul.Cli.Tests is
 
                 let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
 
-                assert (found.problem ?? "") =~ "one depends on itself through two" else found.problem ?? "no problem"
+                assert _message(found) =~ "one depends on itself through two" else _message(found)
             finally
                 _delete(scratch)
             yrt
@@ -156,7 +159,7 @@ namespace Ghul.Cli.Tests is
 
                 let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
 
-                assert (found.problem ?? "") =~ "lib does not build for the wasm target" else found.problem ?? "no problem"
+                assert _message(found) =~ "lib does not build for the wasm target" else _message(found)
             finally
                 _delete(scratch)
             yrt
@@ -172,7 +175,7 @@ namespace Ghul.Cli.Tests is
 
                 let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.LLVM)
 
-                assert (found.problem ?? "") =~ "lib does not build for the llvm target" else found.problem ?? "no problem"
+                assert _message(found) =~ "lib does not build for the llvm target" else _message(found)
             finally
                 _delete(scratch)
             yrt
@@ -187,7 +190,7 @@ namespace Ghul.Cli.Tests is
 
                 let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
 
-                assert (found.problem ?? "") =~ "lib must be declared with a tag or a path" else found.problem ?? "no problem"
+                assert _message(found) =~ "lib must be declared with a tag or a path" else _message(found)
             finally
                 _delete(scratch)
             yrt

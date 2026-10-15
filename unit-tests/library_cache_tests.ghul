@@ -4,7 +4,6 @@ namespace Ghul.Cli.Tests is
     use IO.File
     use IO.Path
 
-    use Ghul.Project.CacheOutcome
     use Ghul.Project.GIT
     use Ghul.Project.LIBRARY_CACHE
 
@@ -60,14 +59,14 @@ namespace Ghul.Cli.Tests is
             return result.output.trim()
         si
 
-        _found(outcome: CacheOutcome) -> CacheOutcome.FOUND is
-            if let found: CacheOutcome.FOUND = outcome then
-                return found
+        _found(outcome: Result[(directory: string, commit: string), string]) -> (directory: string, commit: string) is
+            if let (problem): Result.ERROR = outcome then
+                Assert.fail("expected the library, got: {problem}")
+
+                throw System.Exception("unreachable")
             fi
 
-            Assert.fail("expected the library, got: {cast CacheOutcome.PROBLEM(outcome).message}")
-
-            throw System.Exception("unreachable")
+            return outcome!
         si
 
         _delete(path: string) is
@@ -144,12 +143,12 @@ namespace Ghul.Cli.Tests is
                         for attempt in 0..20 do
                             let outcome = cache.fetch_tag(url, "v1")
 
-                            if let found: CacheOutcome.FOUND = outcome then
-                                if found.commit !~ commit \/ !File.exists(Path.combine(found.directory, "lib.ghul")) then
-                                    problems.add("found {found.directory} at '{found.commit}'")
+                            if outcome? then
+                                if outcome!.commit !~ commit \/ !File.exists(Path.combine(outcome!.directory, "lib.ghul")) then
+                                    problems.add("found {outcome!.directory} at '{outcome!.commit}'")
                                 fi
                             else
-                                problems.add(cast CacheOutcome.PROBLEM(outcome).message)
+                                problems.add((cast Result.ERROR(outcome)).error)
                             fi
                         od
                     si))
@@ -231,8 +230,8 @@ namespace Ghul.Cli.Tests is
                 let repository = _repository(scratch)
                 let cache = LIBRARY_CACHE(Path.combine(scratch, "cache"))
 
-                if let problem: CacheOutcome.PROBLEM = cache.fetch_tag(_url(repository), "v9") then
-                    assert problem.message.contains("v9") else problem.message
+                if let (message): Result.ERROR = cache.fetch_tag(_url(repository), "v9") then
+                    assert message.contains("v9") else message
                 else
                     Assert.fail("expected a problem for a missing tag")
                 fi
@@ -264,8 +263,8 @@ namespace Ghul.Cli.Tests is
                 let missing = _url(Path.combine(scratch, "not-a-repository"))
                 let cache = LIBRARY_CACHE(Path.combine(scratch, "cache"))
 
-                if let problem: CacheOutcome.PROBLEM = cache.fetch_tag(missing, "v1") then
-                    assert problem.message.contains(missing) else problem.message
+                if let (message): Result.ERROR = cache.fetch_tag(missing, "v1") then
+                    assert message.contains(missing) else message
                 else
                     Assert.fail("expected a problem for a repository that is not there")
                 fi

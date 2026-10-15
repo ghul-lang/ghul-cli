@@ -5,6 +5,8 @@ namespace Ghul.Project is
     use IO.File
     use IO.Path
 
+    use Result.*
+
     /// The source libraries a manifest's own `dependencies` name, other than
     /// ghul-core and ghul-runtime, which are compiled into every build for a
     /// target with source libraries whether declared or not.
@@ -36,12 +38,16 @@ namespace Ghul.Project is
             manifest_directory: string,
             cache: LIBRARY_CACHE,
             target: BuildTarget
-        ) -> (libraries: Collections.List[SOURCE_LIBRARY], problem: string?) static is
+        ) -> Result[Collections.List[SOURCE_LIBRARY], string] static is
             let walk = _DEPENDENCY_WALK(cache, target)
 
-            walk.visit_all(manifest.dependencies, manifest_directory, manifest.name)
+            let visited = walk.visit_all(manifest.dependencies, manifest_directory, manifest.name)
 
-            return (libraries = walk.ordered, problem = walk.problem)
+            if let (problem): Result.ERROR = visited then
+                return ERROR(problem)
+            fi
+
+            return OK(walk.ordered)
         si
     si
 
@@ -54,7 +60,6 @@ namespace Ghul.Project is
         _visiting: SET[string]
 
         ordered: LIST[SOURCE_LIBRARY]
-        problem: string?
 
         init(cache: LIBRARY_CACHE, target: BuildTarget) is
             _cache = cache
@@ -65,51 +70,51 @@ namespace Ghul.Project is
             ordered = LIST[SOURCE_LIBRARY]()
         si
 
-        visit_all(dependencies: Collections.Map[string, DEPENDENCY], directory: string, from: string) is
+        visit_all(dependencies: Collections.Map[string, DEPENDENCY], directory: string, from: string) -> Result[unit, string] is
             let names = LIST[string](dependencies.keys)
 
             names.sort(System.StringComparer.ordinal)
 
             for name in names do
-                if problem? then
-                    return
-                fi
-
                 if !DEPENDENCY_LIBRARIES.is_implicit(name) then
-                    _visit(name, dependencies[name], directory, from)
+                    let visited = _visit(name, dependencies[name], directory, from)
+
+                    if let (problem): Result.ERROR = visited then
+                        return ERROR(problem)
+                    fi
                 fi
             od
+
+            return OK(_)
         si
 
-        _visit(name: string, declared: DEPENDENCY, directory: string, from: string) is
+        _visit(name: string, declared: DEPENDENCY, directory: string, from: string) -> Result[unit, string] is
             if _visiting.contains(name) then
-                problem = "{name} depends on itself through {from}"
-                return
+                return ERROR("{name} depends on itself through {from}")
             fi
 
             let located = _locate(name, declared, directory)
 
-            if let message: string = located.problem then
-                problem = message
-                return
+            if let (problem): Result.ERROR = located then
+                return ERROR(problem)
             fi
 
-            let root = located.root
+            let place = located!
+            let root = place.root
             let seen: string mut
 
             if _roots.try_get_value(name, seen ref) then
                 if seen !~ root then
-                    problem = "{name} is declared both at {seen} and at {root}"
+                    return ERROR("{name} is declared both at {seen} and at {root}")
                 fi
 
-                return
+                return OK(_)
             fi
 
             let manifest_path = MANIFEST_LOCATION.find_in(root)
 
             if !manifest_path? then
-                problem = "{name} at {root} has no {MANIFEST_LOCATION.FILE_NAME}"
-                return
+                return ERROR("{name} at {root} has no {MANIFEST_LOCATION.FILE_NAME}")
             fi
 
             let outcome = MANIFEST_READER.read(File.read_all_text(manifest_path), manifest_path)
@@ -117,23 +122,21 @@ namespace Ghul.Project is
             if let problems: ReadOutcome.PROBLEMS = outcome then
                 let first = if problems.problems.count > 0 then problems.problems[0].describe() else "it cannot be read" fi
 
-                problem = "{name}'s manifest at {manifest_path}: {first}"
-                return
+                return ERROR("{name}'s manifest at {manifest_path}: {first}")
             fi
 
             let manifest = cast ReadOutcome.OK(outcome).manifest
 
             if !(manifest.targets |> Ghul.Pipes.any(t => t == _target)) then
-                problem = "{name} does not build for the {BUILD_TARGETS.name(_target)} target"
-                return
+                return ERROR("{name} does not build for the {BUILD_TARGETS.name(_target)} target")
             fi
 
             _visiting.add(name)
-            visit_all(manifest.dependencies, root, name)
+            let visited = visit_all(manifest.dependencies, root, name)
             _visiting.remove(name)
 
-            if problem? then
-                return
+            if let (problem): Result.ERROR = visited then
+                return ERROR(problem)
             fi
 
             _roots[name] = root
@@ -141,36 +144,38 @@ namespace Ghul.Project is
             ordered.add(
                 SOURCE_LIBRARY(
                     manifest.name,
-                    manifest.version ?? located.version,
+                    manifest.version ?? place.version,
                     root,
                     SOURCE_SET.expand(root, manifest.sources)))
+
+            return OK(_)
         si
 
         // The directory a dependency's library is in, fetching it where it is
         // declared at a git tag, and the version its tag gives it.
-        _locate(name: string, declared: DEPENDENCY, directory: string) -> (root: string, version: string, problem: string?) is
+        _locate(name: string, declared: DEPENDENCY, directory: string) -> Result[(root: string, version: string), string] is
             if let path: DEPENDENCY.PATH = declared then
-                return (root = Path.get_full_path(Path.combine(directory, path.path)), version = "0.0.0", problem = null)
+                return OK((root = Path.get_full_path(Path.combine(directory, path.path)), version = "0.0.0"))
             fi
 
             let git = cast DEPENDENCY.GIT(declared)
 
             if !git.tag? then
-                return (root = "", version = "", problem = "{name} must be declared with a tag or a path")
+                return ERROR("{name} must be declared with a tag or a path")
             fi
 
             let tag = git.tag
             let fetched = _cache.fetch_tag(git.url, tag)
 
-            if let failed: CacheOutcome.PROBLEM = fetched then
-                return (root = "", version = "", problem = failed.message)
+            if let (problem): Result.ERROR = fetched then
+                return ERROR(problem)
             fi
 
-            let found = cast CacheOutcome.FOUND(fetched)
+            let found = fetched!
             let root = if let sub: string = git.directory then Path.join([found.directory, sub]) else found.directory fi
             let version = if tag.starts_with("v") then tag.substring(1) else tag fi
 
-            return (root = root, version = version, problem = null)
+            return OK((root = root, version = version))
         si
     si
 si

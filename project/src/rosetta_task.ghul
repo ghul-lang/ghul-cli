@@ -1,4 +1,6 @@
 namespace Ghul.Project is
+    use Result.*
+
     use Collections.LIST
     use Ghul.Pipes
     use System.Text.Json.JsonDocument
@@ -24,19 +26,16 @@ namespace Ghul.Project is
         targets: Collections.List[BuildTarget]
     ) is si
 
-    /// What the index says about the solution `ghul rosetta` was asked for,
-    /// or why it says nothing.
+    /// What the index says about the solution `ghul rosetta` was asked for.
     ///
-    /// - part: the solution, or null where there is a problem
+    /// - part: the solution
     /// - commit: the commit the index was generated from, or null
     /// - raster_version: the ghul.raster release the tasks are tested with,
     ///   or null
-    /// - problem: what was wrong, or null
     class ROSETTA_LOOKUP(
-        part: ROSETTA_PART?,
+        part: ROSETTA_PART,
         commit: string?,
-        raster_version: string?,
-        problem: string?
+        raster_version: string?
     ) is si
 
     /// Turns a Rosetta Code solution from ghul-rosetta-code into a project:
@@ -60,11 +59,11 @@ namespace Ghul.Project is
         /// - index: the text of index.json
         /// - name: a slug, or `<slug>/<NN-name>`
         /// - dotnet: whether this machine can build for the dotnet target
-        find(index: string, name: string, dotnet: bool) -> ROSETTA_LOOKUP static is
+        find(index: string, name: string, dotnet: bool) -> Result[ROSETTA_LOOKUP, string] static is
             let document = _parse(index)
 
             if !document? then
-                return ROSETTA_LOOKUP(null, null, null, "the Rosetta Code index cannot be read")
+                return ERROR("the Rosetta Code index cannot be read")
             fi
 
             let root = document.root_element
@@ -75,7 +74,7 @@ namespace Ghul.Project is
             let tasks: JsonElement mut
 
             if !root.try_get_property("tasks", tasks ref) \/ tasks.value_kind != JsonValueKind.ARRAY then
-                return ROSETTA_LOOKUP(null, commit, raster_version, "the Rosetta Code index lists no tasks")
+                return ERROR("the Rosetta Code index lists no tasks")
             fi
 
             for task in tasks.enumerate_array() do
@@ -92,20 +91,20 @@ namespace Ghul.Project is
 
                 for part in parts do
                     if (name =~ slug /\ parts.count == 1) \/ (_string(part, "id") ?? "") =~ name then
-                        return ROSETTA_LOOKUP(_part(part, dotnet), commit, raster_version, null)
+                        return OK(ROSETTA_LOOKUP(_part(part, dotnet), commit, raster_version))
                     fi
                 od
 
                 if name =~ slug then
                     let ids = string.join(", ", [_string(p, "id") ?? "" for p in parts])
 
-                    return ROSETTA_LOOKUP(null, commit, raster_version, "{slug} is solved more than one way; name one of {ids}")
+                    return ERROR("{slug} is solved more than one way; name one of {ids}")
                 fi
 
-                return ROSETTA_LOOKUP(null, commit, raster_version, "{slug} has no part {name}")
+                return ERROR("{slug} has no part {name}")
             od
 
-            return ROSETTA_LOOKUP(null, commit, raster_version, "no Rosetta Code task {slug} is solved in ghul-rosetta-code")
+            return ERROR("no Rosetta Code task {slug} is solved in ghul-rosetta-code")
         si
 
         /// The name of the project directory for `part`: the task's slug,

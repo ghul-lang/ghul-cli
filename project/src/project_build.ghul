@@ -4,6 +4,8 @@ namespace Ghul.Project is
     use IO.File
     use IO.Path
 
+    use Result.*
+
     /// How the compiler is started: the program, and the arguments that
     /// come before the build's own.
     class COMPILER_PROCESS(file_name: string, leading_arguments: Collections.List[string]) is
@@ -79,32 +81,30 @@ namespace Ghul.Project is
 
             let found = CORE_LIBRARY.find(project.manifest, project.directory, compiler_version, requirements, cache)
 
-            if let problem: LibraryOutcome.PROBLEM = found then
-                say(problem.message)
-                return null
-            fi
-
-            result.add(cast LibraryOutcome.FOUND(found).library)
-
-            let runtime = RUNTIME_LIBRARY.find(project.manifest, project.directory, compiler_version, requirements, cache)
-
-            if let problem: LibraryOutcome.PROBLEM = runtime then
-                say(problem.message)
-                return null
-            fi
-
-            if let library: LibraryOutcome.FOUND = runtime then
-                result.add(library.library)
-            fi
-
-            let dependencies = DEPENDENCY_LIBRARIES.find(project.manifest, project.directory, cache, project.target)
-
-            if let problem: string = dependencies.problem then
+            if let (problem): Result.ERROR = found then
                 say(problem)
                 return null
             fi
 
-            result.add_range(dependencies.libraries)
+            result.add(found!)
+
+            let runtime = RUNTIME_LIBRARY.find(project.manifest, project.directory, compiler_version, requirements, cache)
+
+            if let (problem): Result.ERROR = runtime then
+                say(problem)
+                return null
+            fi
+
+            result.add(runtime!)
+
+            let dependencies = DEPENDENCY_LIBRARIES.find(project.manifest, project.directory, cache, project.target)
+
+            if let (problem): Result.ERROR = dependencies then
+                say(problem)
+                return null
+            fi
+
+            result.add_range(dependencies!)
 
             return result
         si
@@ -356,7 +356,7 @@ namespace Ghul.Project is
                     // installed, fetched where it is not, as the compiler
                     // download already is on first use.
                     if WASM_HOST_SELECTION.resolve("wasmtime") == null then
-                        if let trouble: string = WASM_HOST_SELECTION.install(say) then
+                        if let (trouble): Result.ERROR = WASM_HOST_SELECTION.install(say) then
                             say(trouble)
                             say("the wasmtime host could not be installed; run ghul install wasmtime")
 
@@ -377,7 +377,7 @@ namespace Ghul.Project is
             fi
 
             if project.target == BuildTarget.WASM /\ WASM_HOST_SELECTION.chosen(project, global_host_wasm) =~ "node" then
-                if let problem: string = NODE_RUNTIME.run_problem() then
+                if let (problem): Result.ERROR = NODE_RUNTIME.run_problem() then
                     say(problem)
                     return 1
                 fi

@@ -3,16 +3,7 @@ namespace Ghul.Project is
     use IO.File
     use IO.Path
 
-    /// What finding a source library produced: the library to compile into
-    /// a build, or what went wrong.
-    ///
-    /// Two outcomes holding libraries compare by reference on the library:
-    /// nothing asks whether two findings are the same one.
-    @suppress("synthesized-equality-fallback")
-    union LibraryOutcome is
-        FOUND(library: SOURCE_LIBRARY);
-        PROBLEM(message: string);
-    si
+    use Result.*
 
     /// The core library a build for the wasm target compiles in: ghul-core,
     /// the library that gives the built-in types their members and supplies
@@ -104,7 +95,7 @@ namespace Ghul.Project is
             compiler_version: string,
             requirements: COMPILER_REQUIREMENTS?,
             cache: LIBRARY_CACHE
-        ) -> LibraryOutcome static is
+        ) -> Result[SOURCE_LIBRARY, string] static is
             let declared: DEPENDENCY mut
 
             if manifest.dependencies.try_get_value(NAME, declared ref) then
@@ -118,38 +109,36 @@ namespace Ghul.Project is
                     return _fetched(cache.fetch_tag(git.url, tag), git.directory)
                 fi
 
-                return LibraryOutcome.PROBLEM("{NAME} must be declared with a tag or a path")
+                return ERROR("{NAME} must be declared with a tag or a path")
             fi
 
             if let floor = requirements?.core then
                 let resolved = LIBRARY_RESOLVER(cache).resolve(NAME, repository(), floor, compiler_version)
 
-                if let tag = resolved.tag then
-                    return _fetched(cache.fetch_tag(repository(), tag), null)
+                if let (problem): Result.ERROR = resolved then
+                    return ERROR(problem)
                 fi
 
-                return LibraryOutcome.PROBLEM(resolved.problem ?? "no {NAME} release is known for ghul.compiler {compiler_version}")
+                return _fetched(cache.fetch_tag(repository(), resolved!), null)
             fi
 
             return _fetched(cache.fetch_tag(repository(), pinned_tag(compiler_version)), null)
         si
 
-        _fetched(outcome: CacheOutcome, directory: string?) -> LibraryOutcome static is
-            if let problem: CacheOutcome.PROBLEM = outcome then
-                return LibraryOutcome.PROBLEM(problem.message)
+        _fetched(outcome: Result[(directory: string, commit: string), string], directory: string?) -> Result[SOURCE_LIBRARY, string] static is
+            if let (problem): Result.ERROR = outcome then
+                return ERROR(problem)
             fi
 
-            let found = cast CacheOutcome.FOUND(outcome)
-
-            return _read(if let sub: string = directory then Path.join([found.directory, sub]) else found.directory fi)
+            return _read(if let sub: string = directory then Path.join([outcome!.directory, sub]) else outcome!.directory fi)
         si
 
         // The library in `root`, as its own manifest describes it.
-        _read(root: string) -> LibraryOutcome static is
+        _read(root: string) -> Result[SOURCE_LIBRARY, string] static is
             let manifest_path = MANIFEST_LOCATION.find_in(root)
 
             if !manifest_path? then
-                return LibraryOutcome.PROBLEM("{NAME} at {root} has no {MANIFEST_LOCATION.FILE_NAME}")
+                return ERROR("{NAME} at {root} has no {MANIFEST_LOCATION.FILE_NAME}")
             fi
 
             let outcome = MANIFEST_READER.read(File.read_all_text(manifest_path), manifest_path)
@@ -157,13 +146,13 @@ namespace Ghul.Project is
             if let problems: ReadOutcome.PROBLEMS = outcome then
                 let first = if problems.problems.count > 0 then problems.problems[0].describe() else "it cannot be read" fi
 
-                return LibraryOutcome.PROBLEM("{NAME}'s manifest at {manifest_path}: {first}")
+                return ERROR("{NAME}'s manifest at {manifest_path}: {first}")
             fi
 
             let manifest = cast ReadOutcome.OK(outcome).manifest
 
             return
-                LibraryOutcome.FOUND(
+                OK(
                     SOURCE_LIBRARY(
                         manifest.name,
                         manifest.version ?? "0.0.0",

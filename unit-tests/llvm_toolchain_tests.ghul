@@ -5,6 +5,8 @@ namespace Ghul.Cli.Tests is
 
     use Ghul.Cli.LLVM_TOOLCHAIN
 
+    use Result.*
+
     use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
     use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
 
@@ -53,17 +55,17 @@ namespace Ghul.Cli.Tests is
                 let toolchain = LLVM_TOOLCHAIN(Path.combine(scratch, "cache"), System.Uri(Path.combine(scratch, "releases")).absolute_uri)
                 let fetched = toolchain.executable("v1.0.0", TRIPLE)
 
-                assert !fetched.problem? else fetched.problem ?? ""
-                assert (fetched.path ?? "") =~ Path.join([scratch, "cache", "v1.0.0", TRIPLE, "bin", "ghul-llvm"])
-                assert File.read_all_text(fetched.path!) =~ "linker"
+                assert fetched? else (cast Result.ERROR(fetched)).error
+                assert fetched! =~ Path.join([scratch, "cache", "v1.0.0", TRIPLE, "bin", "ghul-llvm"])
+                assert File.read_all_text(fetched!) =~ "linker"
 
                 if !System.OperatingSystem.is_windows() then
-                    assert (cast int(File.get_unix_file_mode(fetched.path!)) & cast int(IO.UnixFileMode.USER_EXECUTE)) != 0
+                    assert (cast int(File.get_unix_file_mode(fetched!)) & cast int(IO.UnixFileMode.USER_EXECUTE)) != 0
                 fi
 
                 Directory.delete(Path.combine(scratch, "releases"), true)
 
-                assert (toolchain.executable("v1.0.0", TRIPLE).path ?? "") =~ fetched.path!
+                assert toolchain.executable("v1.0.0", TRIPLE)! =~ fetched!
             finally
                 Directory.delete(scratch, true)
             yrt
@@ -79,8 +81,8 @@ namespace Ghul.Cli.Tests is
                 let toolchain = LLVM_TOOLCHAIN(Path.combine(scratch, "cache"), System.Uri(Path.combine(scratch, "releases")).absolute_uri)
                 let fetched = toolchain.executable("v1.0.0", TRIPLE)
 
-                assert !fetched.path?
-                assert (fetched.problem ?? "").contains("does not match its published sha256") else fetched.problem ?? "no problem"
+                assert !fetched?
+                assert (cast Result.ERROR(fetched)).error.contains("does not match its published sha256") else (cast Result.ERROR(fetched)).error
                 assert !Directory.exists(Path.combine(scratch, "cache", "v1.0.0", TRIPLE))
             finally
                 Directory.delete(scratch, true)
@@ -97,8 +99,8 @@ namespace Ghul.Cli.Tests is
                 let toolchain = LLVM_TOOLCHAIN(Path.combine(scratch, "cache"), System.Uri(Path.combine(scratch, "releases")).absolute_uri)
                 let fetched = toolchain.executable("v9.9.9", TRIPLE)
 
-                assert !fetched.path?
-                assert (fetched.problem ?? "").starts_with("cannot fetch ghul-llvm") else fetched.problem ?? "no problem"
+                assert !fetched?
+                assert (cast Result.ERROR(fetched)).error.starts_with("cannot fetch ghul-llvm") else (cast Result.ERROR(fetched)).error
             finally
                 Directory.delete(scratch, true)
             yrt

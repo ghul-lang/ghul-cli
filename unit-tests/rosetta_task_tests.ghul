@@ -20,6 +20,11 @@ namespace Ghul.Cli.Tests is
             assert actual =~ expected else "expected '{expected}', got '{actual}'"
         si
 
+        _error(expected: string, found: Result[Ghul.Project.ROSETTA_LOOKUP, string]) is
+            assert !found? else "expected a problem, got a part"
+            _same(expected, (cast Result.ERROR(found)).error)
+        si
+
         _targets(targets: Collections.List[BuildTarget]) -> string =>
             string.join(",", [BUILD_TARGETS.name(t) for t in targets])
 
@@ -39,74 +44,73 @@ namespace Ghul.Cli.Tests is
         a_slug_finds_its_only_part_with_its_files_and_arguments() is
             let found = ROSETTA_TASK.find(_index, "abc-words", true)
 
-            assert !found.problem? else found.problem ?? ""
-            assert found.part?
+            assert found? else (cast Result.ERROR(found)).error
 
-            let part = found.part!
+            let part = found!.part
 
             _same("abc-words", part.id)
             _same("tasks/abc-words/abc-words.ghul", part.source)
             _same("unixdict.txt=data/unixdict.txt", string.join(";", ["{f.name}={f.path}" for f in part.files]))
             _same("first second", string.join(" ", part.args))
-            _same("abc123", found.commit ?? "")
-            _same("0.13.0", found.raster_version ?? "")
+            _same("abc123", found!.commit ?? "")
+            _same("0.13.0", found!.raster_version ?? "")
         si
 
         @Test()
         a_part_runs_first_on_dotnet_then_native_then_wasm() is
             let found = ROSETTA_TASK.find(_index, "abc-words", true)
 
-            _same("dotnet,llvm,wasm", _targets(found.part!.targets))
+            _same("dotnet,llvm,wasm", _targets(found!.part.targets))
         si
 
         @Test()
         a_machine_without_dotnet_leaves_the_dotnet_target_out() is
             let found = ROSETTA_TASK.find(_index, "abc-words", false)
 
-            _same("llvm,wasm", _targets(found.part!.targets))
+            _same("llvm,wasm", _targets(found!.part.targets))
         si
 
         @Test()
         a_part_passing_only_on_dotnet_builds_for_nothing_on_a_machine_without_it() is
             let found = ROSETTA_TASK.find(_index, "pair/01-one", false)
 
-            _same("", _targets(found.part!.targets))
+            _same("", _targets(found!.part.targets))
         si
 
         @Test()
         a_part_that_draws_leaves_the_dotnet_target_out() is
             let found = ROSETTA_TASK.find(_index, "fern", true)
 
-            assert found.part!.raster
-            _same("wasm", _targets(found.part!.targets))
+            assert found!.part.raster
+            _same("wasm", _targets(found!.part.targets))
         si
 
         @Test()
         a_task_solved_more_than_one_way_names_its_parts() is
             let found = ROSETTA_TASK.find(_index, "pair", true)
 
-            assert !found.part?
-            _same("pair is solved more than one way; name one of pair/01-one, pair/02-two", found.problem ?? "")
+            assert !found?
+            _same("pair is solved more than one way; name one of pair/01-one, pair/02-two", (cast Result.ERROR(found)).error)
         si
 
         @Test()
         a_part_id_finds_that_part() is
             let found = ROSETTA_TASK.find(_index, "pair/02-two", true)
 
-            _same("tasks/pair/02-two/02-two.ghul", found.part!.source)
-            _same("dotnet,llvm", _targets(found.part!.targets))
-            _same("pair-02-two", ROSETTA_TASK.directory_name(found.part!))
+            _same("tasks/pair/02-two/02-two.ghul", found!.part.source)
+            _same("dotnet,llvm", _targets(found!.part.targets))
+            _same("pair-02-two", ROSETTA_TASK.directory_name(found!.part))
         si
 
         @Test()
         an_unknown_slug_or_part_says_so() is
-            _same("no Rosetta Code task nothing is solved in ghul-rosetta-code", ROSETTA_TASK.find(_index, "nothing", true).problem ?? "")
-            _same("pair has no part pair/03-three", ROSETTA_TASK.find(_index, "pair/03-three", true).problem ?? "")
+            _error("no Rosetta Code task nothing is solved in ghul-rosetta-code", ROSETTA_TASK.find(_index, "nothing", true))
+            _error("pair has no part pair/03-three", ROSETTA_TASK.find(_index, "pair/03-three", true))
         si
 
         @Test()
         an_index_that_is_not_json_says_so() is
-            assert ROSETTA_TASK.find("not json", "abc-words", true).problem?
+            assert !ROSETTA_TASK.find("not json", "abc-words", true)?
         si
 
         @Test()
@@ -118,7 +122,7 @@ namespace Ghul.Cli.Tests is
         @Test()
         the_manifest_of_a_part_that_draws_compiles_in_ghul_raster() is
             let found = ROSETTA_TASK.find(_index, "fern", true)
-            let text = ROSETTA_TASK.manifest_text("fern", found.part!, found.part!.targets, found.raster_version)
+            let text = ROSETTA_TASK.manifest_text("fern", found!.part, found!.part.targets, found!.raster_version)
 
             let read = MANIFEST_READER.read(text, "/tmp/fern/ghul-project.json")
 
@@ -143,7 +147,7 @@ namespace Ghul.Cli.Tests is
         @Test()
         the_manifest_of_a_part_that_draws_nothing_has_no_dependencies() is
             let found = ROSETTA_TASK.find(_index, "abc-words", true)
-            let text = ROSETTA_TASK.manifest_text("abc-words", found.part!, found.part!.targets, found.raster_version)
+            let text = ROSETTA_TASK.manifest_text("abc-words", found!.part, found!.part.targets, found!.raster_version)
 
             assert !text.contains("dependencies") else text
             assert text.contains("\"targets\": [\"dotnet\", \"llvm\", \"wasm\"]") else text

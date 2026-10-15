@@ -23,21 +23,21 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         an_llvm_store__fetches_the_archive_named_with_the_triple() is
-            let (url, failure) = _download(true).archive_url("65.20.0")
+            let url = _download(true).archive_url("65.20.0")
 
             if HOST.rid() =~ "linux-x64" then
-                assert url =~ "https://example.test/releases/v65.20.0/ghul-compiler-llvm-x86_64-unknown-linux-musl.tar.gz" else url ?? "null"
+                assert url! =~ "https://example.test/releases/v65.20.0/ghul-compiler-llvm-x86_64-unknown-linux-musl.tar.gz" else (cast Result.ERROR(url)).error
             else
-                assert !url? /\ (failure ?? "").contains("llvm-built")
+                assert !url? /\ (cast Result.ERROR(url)).error.contains("llvm-built")
             fi
         si
 
         @Test()
         a_default_store__fetches_the_native_aot_archive() is
-            let (url, _) = _download(false).archive_url("65.20.0")
+            let url = _download(false).archive_url("65.20.0")
 
             if let rid: string = HOST.rid() then
-                assert url =~ "https://example.test/releases/v65.20.0/ghul-compiler-{rid}.tar.gz" else url ?? "null"
+                assert url! =~ "https://example.test/releases/v65.20.0/ghul-compiler-{rid}.tar.gz" else (cast Result.ERROR(url)).error
             fi
         si
 
