@@ -41,14 +41,18 @@ namespace Ghul.Project is
         /// built-in default is the wasmtime host, which a run fetches when
         /// it is missing, so the answer is yes wherever a fetch can reach
         /// the releases. A host named as node needs Node itself.
-        chosen_for_wasm(global_host_wasm: string?) -> bool static =>
-            !(chosen_for_runtime(global_host_wasm) =~ "node") \/ NODE_RUNTIME.problem() == null
+        ///
+        /// The manifest's own choice is honoured here as `chosen` honours
+        /// it, so availability is decided by the host the run would
+        /// actually use rather than only the machine's default.
+        chosen_for_wasm(manifest_host_wasm: string?, global_host_wasm: string?) -> bool static =>
+            !(chosen_for_runtime(manifest_host_wasm, global_host_wasm) =~ "node") \/ NODE_RUNTIME.problem() == null
 
         /// The host the ladder chooses for a wasm run, as `resolve` and the
         /// dispatch ask it: the manifest's, the global defaults', or the
         /// built-in one, for a project that names nothing itself.
-        chosen_for_runtime(global_host_wasm: string?) -> string static =>
-            global_host_wasm ?? BUILTIN
+        chosen_for_runtime(manifest_host_wasm: string?, global_host_wasm: string?) -> string static =>
+            manifest_host_wasm ?? global_host_wasm ?? BUILTIN
 
         /// Installs the wasmtime host, fetching the newest ghul-wasmtime
         /// release if no version is held. Null on success, or the failure

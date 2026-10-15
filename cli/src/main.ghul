@@ -1080,7 +1080,7 @@ namespace Ghul.Cli is
                 Collections.LIST[Ghul.Project.BuildTarget](Ghul.Project.TARGET_CHOICE.ORDER),
                 Collections.LIST[Ghul.Project.BuildTarget](),
                 environment_target(),
-                MACHINE_TARGETS(true, true, global_host))
+                MACHINE_TARGETS(true, true, global_host, null))
 
         if let problem: string = chosen.problem then
             Std.error.write_line("ghul: {problem}")
@@ -1429,7 +1429,7 @@ namespace Ghul.Cli is
         let named = command_line.target ?? environment_target()
 
         let chosen = Ghul.Project.PROJECT_LOADER.choose(
-            Directory.get_current_directory(), named, MACHINE_TARGETS(wants_run, false, global_defaults.host_wasm))
+            Directory.get_current_directory(), named, MACHINE_TARGETS(wants_run, false, global_defaults.host_wasm, Ghul.Project.PROJECT_LOADER.host_wasm(Directory.get_current_directory())))
 
         if let problem: string = chosen.problem then
             say(problem)
@@ -1761,7 +1761,7 @@ namespace Ghul.Cli is
             let named = options.target ?? environment_target()
 
             let chosen = Ghul.Project.PROJECT_LOADER.choose(
-                Directory.get_current_directory(), named, MACHINE_TARGETS(false, false, null))
+                Directory.get_current_directory(), named, MACHINE_TARGETS(false, false, null, null))
 
             if let problem: string = chosen.problem then
                 say(problem)

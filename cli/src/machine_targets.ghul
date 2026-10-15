@@ -7,11 +7,16 @@ namespace Ghul.Cli is
     /// where a .NET SDK is installed, or for a script, which compiles
     /// against the runtime's own assemblies, a .NET runtime; llvm where
     /// `ghul-llvm` is cached or can be fetched; and wasm wherever, so long as
-    /// Node.js is there to run it when the build is to be run.
+    /// something can run the module when the build is to be run - the host
+    /// the manifest, the machine's global defaults or the built-in default
+    /// chooses, which is the same choice a run makes.
     ///
     /// - will_run: whether what is built is to be run as well
     /// - is_script: whether a script is being built rather than a project
-    class MACHINE_TARGETS(_will_run: bool, _is_script: bool, _global_host_wasm: string?): Ghul.Project.TargetAvailability is
+    /// - global_host_wasm: the machine's global default wasm host
+    /// - manifest_host_wasm: the host the project's manifest names for wasm,
+    ///   or null for a script, which has no manifest
+    class MACHINE_TARGETS(_will_run: bool, _is_script: bool, _global_host_wasm: string?, _manifest_host_wasm: string?): Ghul.Project.TargetAvailability is
         why_not(target: BuildTarget) -> string? =>
             case target
             when BuildTarget.DOTNET then
@@ -29,7 +34,7 @@ namespace Ghul.Cli is
                 // host, which can be fetched, or Node.
                 if !_will_run then
                     null
-                elif Ghul.Project.WASM_HOST_SELECTION.chosen_for_wasm(_global_host_wasm) then
+                elif Ghul.Project.WASM_HOST_SELECTION.chosen_for_wasm(_manifest_host_wasm, _global_host_wasm) then
                     null
                 else
                     Ghul.Project.NODE_RUNTIME.problem()

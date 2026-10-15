@@ -108,6 +108,20 @@ namespace Ghul.Project is
             return CHOSEN_TARGET(null, null, null)
         si
 
+        /// The host the manifest in `directory` names for running a wasm
+        /// build, or null where it names none or cannot be read. Read
+        /// before the project is loaded, so target availability can honour
+        /// the manifest's own choice the way the run itself will.
+        host_wasm(directory: string) -> string? static is
+            let read = read_manifest(Path.get_full_path(directory))
+
+            if let manifest: MANIFEST = read.manifest then
+                return manifest.host_wasm
+            fi
+
+            return null
+        si
+
         /// The target a build is for: the one named, which the manifest has
         /// to list, or the only one it lists.
         ///
