@@ -3,7 +3,6 @@ namespace Ghul.Cli.Tests is
     use Collections.MAP
 
     use Ghul.Project.LIBRARY_CACHE
-    use Ghul.Project.LibraryOutcome
     use Ghul.Project.BUILD_MODE
     use Ghul.Project.BuildTarget
     use Ghul.Project.CompilerBuild
@@ -66,8 +65,8 @@ namespace Ghul.Cli.Tests is
             let cache = LIBRARY_CACHE(IO.Path.combine(IO.Path.get_temp_path(), "ghul-unused-cache"))
             let found = RUNTIME_LIBRARY.find(project.manifest, project.directory, "60.0.0", null, cache)
 
-            assert isa LibraryOutcome.PROBLEM(found) else "expected the build to be refused"
-            assert cast LibraryOutcome.PROBLEM(found).message.contains("no ghul-runtime release is known for ghul.compiler 60.0.0")
+            assert !found? else "expected the build to be refused"
+            assert (cast Result.ERROR(found)).error.contains("no ghul-runtime release is known for ghul.compiler 60.0.0")
         si
 
         @Test()

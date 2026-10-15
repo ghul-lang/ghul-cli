@@ -7,13 +7,15 @@ namespace Ghul.Cli.Tests is
     use Ghul.Project.TARGET_CHOICE
     use Ghul.Project.TargetAvailability
 
+    use Result.*
+
     use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
     use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
 
     // A machine that can build exactly the targets it is given.
     class _MACHINE(_can: BuildTarget[]): TargetAvailability is
-        why_not(target: BuildTarget) -> string? =>
-            if _can |> Ghul.Pipes.any(t => t == target) then null else "no {BUILD_TARGETS.name(target)}" fi
+        why_not(target: BuildTarget) -> Result[unit, string] =>
+            if _can |> Ghul.Pipes.any(t => t == target) then OK(_) else ERROR("no {BUILD_TARGETS.name(target)}") fi
     si
 
     // Which target a build takes where the command line may not say.

@@ -5,6 +5,8 @@ namespace Ghul.Cli.Tests is
 
     use Ghul.Cli.SELF_UPDATE
 
+    use Result.*
+
     use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
     use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
 
@@ -78,10 +80,10 @@ namespace Ghul.Cli.Tests is
                 let executable = Path.join([root, "ghul"])
                 File.write_all_text(executable, "")
 
-                let (found, problem) = SELF_UPDATE.install_root(executable)
+                let found = SELF_UPDATE.install_root(executable)
 
-                assert !problem?
-                assert found =~ Path.get_full_path(root)
+                assert found? else (cast Result.ERROR(found)).error
+                assert found! =~ Path.get_full_path(root)
             finally
                 Directory.delete(root, true)
             yrt
@@ -101,10 +103,10 @@ namespace Ghul.Cli.Tests is
                 let link = Path.join([scratch, "ghul-link"])
                 File.create_symbolic_link(link, executable)
 
-                let (found, problem) = SELF_UPDATE.install_root(link)
+                let found = SELF_UPDATE.install_root(link)
 
-                assert !problem?
-                assert found =~ Path.get_full_path(root)
+                assert found? else (cast Result.ERROR(found)).error
+                assert found! =~ Path.get_full_path(root)
             finally
                 Directory.delete(scratch, true)
             yrt
@@ -119,10 +121,9 @@ namespace Ghul.Cli.Tests is
                 File.write_all_text(executable, "")
                 File.write_all_text(Path.join([root, "notes.txt"]), "")
 
-                let (found, problem) = SELF_UPDATE.install_root(executable)
+                let found = SELF_UPDATE.install_root(executable)
 
                 assert !found?
-                assert problem?
             finally
                 Directory.delete(root, true)
             yrt
@@ -136,10 +137,9 @@ namespace Ghul.Cli.Tests is
                 let executable = Path.join([root, "ghul-cli"])
                 File.write_all_text(executable, "")
 
-                let (found, problem) = SELF_UPDATE.install_root(executable)
+                let found = SELF_UPDATE.install_root(executable)
 
                 assert !found?
-                assert problem?
             finally
                 Directory.delete(root, true)
             yrt
@@ -153,15 +153,14 @@ namespace Ghul.Cli.Tests is
                 let path = Path.join([root, "latest"])
                 File.write_all_text(path, "body")
 
-                let (bytes, problem) = SELF_UPDATE.fetch(System.Uri(path).absolute_uri)
+                let body = SELF_UPDATE.fetch(System.Uri(path).absolute_uri)
 
-                assert !problem?
-                assert System.Text.Encoding.utf8.get_string(bytes!) =~ "body"
+                assert body? else (cast Result.ERROR(body)).error
+                assert System.Text.Encoding.utf8.get_string(body!) =~ "body"
 
-                let (missing, missing_problem) = SELF_UPDATE.fetch(System.Uri(Path.join([root, "absent"])).absolute_uri)
+                let missing = SELF_UPDATE.fetch(System.Uri(Path.join([root, "absent"])).absolute_uri)
 
                 assert !missing?
-                assert missing_problem?
             finally
                 Directory.delete(root, true)
             yrt
@@ -193,10 +192,10 @@ namespace Ghul.Cli.Tests is
 
             try
                 let update = SELF_UPDATE("{server.url()}/api", "{server.url()}/download")
-                let (tag, problem) = update.latest_tag()
+                let tag = update.latest_tag()
 
-                assert !problem?
-                assert tag =~ "v1.2.3"
+                assert tag? else (cast Result.ERROR(tag)).error
+                assert tag! =~ "v1.2.3"
             finally
                 server.stop()
             yrt
@@ -209,9 +208,9 @@ namespace Ghul.Cli.Tests is
 
             try
                 let update = SELF_UPDATE("{server.url()}/api", "{server.url()}/download")
-                let (fetched, problem) = update.install_script("v1.2.3")
+                let fetched = update.install_script("v1.2.3")
 
-                assert !problem?
+                assert fetched? else (cast Result.ERROR(fetched)).error
                 assert System.Text.Encoding.utf8.get_string(fetched!) =~ System.Text.Encoding.utf8.get_string(script)
             finally
                 server.stop()
@@ -225,10 +224,9 @@ namespace Ghul.Cli.Tests is
 
             try
                 let update = SELF_UPDATE("{server.url()}/api", "{server.url()}/download")
-                let (fetched, problem) = update.install_script("v1.2.3")
+                let fetched = update.install_script("v1.2.3")
 
                 assert !fetched?
-                assert problem?
             finally
                 server.stop()
             yrt
@@ -241,10 +239,9 @@ namespace Ghul.Cli.Tests is
 
             try
                 let update = SELF_UPDATE("{server.url()}/api", "{server.url()}/download")
-                let (fetched, problem) = update.install_script("v1.2.3")
+                let fetched = update.install_script("v1.2.3")
 
                 assert !fetched?
-                assert problem?
             finally
                 server.stop()
             yrt
