@@ -1,0 +1,595 @@
+namespace Ghul.Project is
+    use Result.*
+
+    use Collections.LIST
+    use Ghul.Pipes;
+    use IO.Directory
+    use IO.File
+    use IO.FileMode
+    use IO.FileAccess
+    use IO.FileShare
+    use IO.FileStream
+    use IO.Path
+    use IO.Std
+    use System.Formats.Tar.TarFile
+    use System.IO.Compression.GZipStream
+    use System.IO.Compression.CompressionMode
+    use System.Text.Json.JsonDocument
+    use System.Text.Json.JsonDocumentOptions
+    use System.Text.Json.JsonCommentHandling
+    use System.Text.Json.JsonElement
+    use System.Text.Json.JsonValueKind
+
+    // Where the Node.js distributions ghul-cli has downloaded live: one
+    // directory per release under `$XDG_CACHE_HOME/ghul-cli/node`
+    // (`~/.cache/ghul-cli/node` where that is unset), holding the
+    // distribution unpacked from the release's tarball or zip. Several
+    // releases are held at once and the highest usable one is the one run,
+    // alongside the compilers and libraries it shares the cache with;
+    // `ghul cache clear` takes them with the rest.
+    class NODE_STORE(root: string) is
+        // This user's store, beside the compilers and libraries the cache
+        // already holds.
+        for_this_user() -> NODE_STORE static =>
+            NODE_STORE(Path.join([LIBRARY_CACHE.cache_home(), "node"]))
+
+        // The directory the release `version` unpacks into, whether or not
+        // it is there.
+        directory(version: string) -> string => Path.join([root, version])
+
+        // The node executable of the release `version`, whether or not it
+        // is there: the distribution root's `bin/node`, or `node.exe`
+        // beside it on Windows.
+        binary(version: string) -> string => Path.join([directory(version), NODE_STORE.node_file_name()])
+
+        node_file_name() -> string static =>
+            if System.OperatingSystem.is_windows() then "node.exe" else "bin/node" fi
+
+        // Held while a release is being downloaded into the store, so two
+        // `ghul` processes racing to install the same release take turns
+        // rather than both writing it.
+        install_lock_path() -> string => Path.join([root, ".install.lock"])
+
+        // The executable of the highest release held that runs the wasm
+        // target, or null where the store holds none.
+        installed() -> string? is
+            if let version: string = highest_usable() then
+                return binary(version)
+            fi
+
+            return null
+        si
+
+        // The highest held release that runs the wasm target, or null.
+        // Directories whose node executable is missing, or which name no
+        // usable version, are not releases.
+        highest_usable() -> string? is
+            let best: string? mut = null
+
+            if Directory.exists(root) then
+                for directory in Directory.get_directories(root) do
+                    let version = Path.get_file_name(directory) ?? ""
+
+                    if !File.exists(binary(version)) then
+                        continue
+                    fi
+
+                    if !NODE_RUNTIME.is_supported_version(version) then
+                        continue
+                    fi
+
+                    if !best? \/ NODE_RUNTIME.compare_versions(version, best) > 0 then
+                        best = version
+                    fi
+                od
+            fi
+
+            return best
+        si
+
+        // Whether the release `version` is held.
+        is_installed(version: string) -> bool => File.exists(binary(version))
+    si
+
+    // Fetches a Node.js release from nodejs.org into a `NODE_STORE`. Shaped
+    // as `WASMTIME_DOWNLOAD` is, with the two additions a distribution needs
+    // that a single binary does not: the newest release is read from
+    // `https://nodejs.org/dist/index.json`, which lists every release newest
+    // first, and the downloaded archive's SHA-256 is checked against the
+    // line's `SHASUMS256.txt` before anything is unpacked. What lands here is
+    // executable code from a publisher outside the ghūl releases, so it is
+    // verified where the ghul-lang downloads are not.
+    //
+    // The version chosen is the newest long-term-support line that runs the
+    // wasm target and carries this machine's distribution, else the newest
+    // release that does. An explicitly named version that could never run a
+    // wasm build is refused: installing it would fill the store with a host
+    // nothing can use.
+    class NODE_DOWNLOAD(_store: NODE_STORE, _base: string?) is
+        DEFAULT_BASE: string static => "https://nodejs.org/dist"
+
+        // A download for `store`, with the distribution base named by
+        // GHUL_NODE_BASE where that is set, so a mirror or a test can
+        // serve the releases from elsewhere.
+        of(store: NODE_STORE) -> NODE_DOWNLOAD static =>
+            NODE_DOWNLOAD(
+                store, System.Environment.get_environment_variable("GHUL_NODE_BASE"))
+
+        base() -> string => _base ?? DEFAULT_BASE
+
+        // The newest release the index lists that runs the wasm target and
+        // carries a distribution for this machine, as its `v`-less version,
+        // or the failure to report.
+        latest_version() -> Result[string, string] is
+            let text = _get("{base()}/index.json")
+
+            if let (error): ERROR = text then
+                return ERROR(error)
+            fi
+
+            try
+                if let version: string = pick_version(text!) then
+                    return OK(version)
+                fi
+
+                return ERROR("nodejs.org lists no release that runs the wasm target on this platform")
+            catch e: System.Exception
+                return ERROR("the nodejs.org release index could not be read ({e.get_type().name})")
+            yrt
+        si
+
+        // The version to take from an index.json body, as text: the first
+        // entry that is LTS, runs the wasm target and carries this
+        // machine's distribution file; where none is, the first entry that
+        // runs it. Read entry by entry rather than through a schema: beyond
+        // `version`, `lts` and `files` the index's shape is nodejs.org's own.
+        pick_version(index_text: string) -> string? static is
+            let platform = _platform()
+
+            if !platform? then
+                return null
+            fi
+
+            let tag = platform.tag
+
+            let options = _[JsonDocumentOptions]
+
+            options.comment_handling = JsonCommentHandling.SKIP
+            options.allow_trailing_commas = true
+
+            let document = use JsonDocument.parse(index_text, options)
+            let fallback: string? mut = null
+
+            for element in document.root_element.enumerate_array() do
+                let version_value: JsonElement mut
+
+                if !element.try_get_property("version", version_value ref) then
+                    continue
+                fi
+
+                if let version: string = version_value.get_string() then
+                    if !NODE_RUNTIME.is_supported_version(version) then
+                        continue
+                    fi
+
+                    if !_entry_has_file(element, tag) then
+                        continue
+                    fi
+
+                    if !_entry_lts(element) then
+                        if !fallback? then
+                            fallback = version
+                        fi
+
+                        continue
+                    fi
+
+                    return version
+                fi
+            od
+
+            return fallback
+        si
+
+        _entry_has_file(element: JsonElement, tag: string) -> bool static is
+            let files_value: JsonElement mut
+
+            if !element.try_get_property("files", files_value ref) \/
+                files_value.value_kind != JsonValueKind.ARRAY then
+                return false
+            fi
+
+            for name in files_value.enumerate_array() do
+                if let text: string = name.get_string() /\ text =~ tag then
+                    return true
+                fi
+            od
+
+            return false
+        si
+
+        // An entry's `lts` is `false` for a Current release and the line's
+        // code name, quoted, for an LTS one.
+        _entry_lts(element: JsonElement) -> bool static is
+            let lts_value: JsonElement mut
+
+            return element.try_get_property("lts", lts_value ref) /\
+                lts_value.value_kind != JsonValueKind.FALSE
+        si
+
+        // The distribution file suffix for this machine, as nodejs.org
+        // names its releases: `-linux-x64.tar.gz`, `-darwin-arm64.tar.gz`,
+        // `-win-x64.zip`. Null for a platform no release carries.
+        _file_suffix() -> string? static is
+            if let platform: (tag: string, suffix: string) = _platform() then
+                return platform.suffix
+            fi
+
+            return null
+        si
+
+        // This machine in the terms nodejs.org uses: the name its
+        // index.json `files` vocabulary gives a release for — `linux-x64`,
+        // `osx-arm64-tar`, `win-x64` — and the suffix of the archive file
+        // the release carries — `-linux-x64.tar.gz`, `-darwin-arm64.tar.gz`,
+        // `-win-x64.zip`. The two name the same thing differently, so they
+        // are derived together. Null for a platform no release carries.
+        _platform() -> (tag: string, suffix: string)? static is
+            let os =
+                if System.OperatingSystem.is_windows() then
+                    "win"
+                elif System.OperatingSystem.is_linux() then
+                    "linux"
+                elif System.OperatingSystem.is_mac_o_s() then
+                    "darwin"
+                else
+                    return null
+                fi
+
+            let arch =
+                if System.Runtime.InteropServices.RuntimeInformation.process_architecture == System.Runtime.InteropServices.Architecture.ARM64 then
+                    "arm64"
+                else
+                    "x64"
+                fi
+
+            if os =~ "win" then
+                return (tag = "win-{arch}", suffix = "-win-{arch}.zip")
+            fi
+
+            if os =~ "darwin" then
+                return (tag = "osx-{arch}-tar", suffix = "-darwin-{arch}.tar.gz")
+            fi
+
+            return (tag = "linux-{arch}", suffix = "-linux-{arch}.tar.gz")
+        si
+
+        // Installs the newest release that runs the wasm target, or the
+        // failure to report.
+        install(say: (string) -> void) -> Result[unit, string] is
+            let version = latest_version()
+
+            if let (error): ERROR = version then
+                return ERROR("could not read the nodejs.org release index: {error}")
+            fi
+
+            return install(version!, say)
+        si
+
+        // Brings the store to the newest usable release, reporting through
+        // `say` the way `WASMTIME_DOWNLOAD.update` does: that the newest is
+        // already held, that a newer one is available (looked at, not
+        // taken, where `check_only`), or the download of it.
+        update(check_only: bool, say: (string) -> void) -> Result[unit, string] is
+            let version = latest_version()
+
+            if let (error): ERROR = version then
+                return ERROR("could not read the nodejs.org release index: {error}")
+            fi
+
+            let newest = version!
+
+            if _store.is_installed(newest) then
+                say("node {newest} is the latest")
+
+                return OK(_)
+            fi
+
+            if let held: string = _store.highest_usable() then
+                if NODE_RUNTIME.compare_versions(newest, held) <= 0 then
+                    say("node {held} is the latest")
+
+                    return OK(_)
+                fi
+            fi
+
+            if check_only then
+                say("node has {newest} available")
+
+                return OK(_)
+            fi
+
+            say("updating node to {newest}")
+
+            return install(newest, say)
+        si
+
+        // Downloads the release `version` names into the store, or the
+        // failure to report. A leading `v` is accepted and dropped, since
+        // that is how a release is named on the dist pages. Guarded by the
+        // store's install lock and re-checked once it is held, so two
+        // processes racing to install the same release download it once
+        // between them.
+        install(version: string, say: (string) -> void) -> Result[unit, string] is
+            let name = if version.starts_with("v") then version[1..<0] else version fi
+
+            if name.length == 0 \/ name.contains("/") \/ name.contains("\\") \/ name.contains("..") then
+                return ERROR("node {version} is not a version")
+            fi
+
+            if !NODE_RUNTIME.is_supported_version(name) then
+                return ERROR("node {name} cannot run the wasm target, which needs Node.js {NODE_RUNTIME.MINIMUM}")
+            fi
+
+            let platform = _file_suffix()
+
+            if !platform? then
+                return ERROR("there is no Node.js release for this platform")
+            fi
+
+            let suffix = platform
+            let archive = "node-v{name}{suffix}"
+
+            Directory.create_directory(_store.root)
+
+            let lock_stream = use FILE_LOCK.acquire(_store.install_lock_path(), null)
+
+            if _store.is_installed(name) then
+                say("node {name} is already installed")
+
+                return OK(_)
+            fi
+
+            let sums = _get("{base()}/v{name}/SHASUMS256.txt")
+
+            if let (error): ERROR = sums then
+                return ERROR("the node {name} checksums could not be read: {error}")
+            fi
+
+            let digest = _expected_digest(sums!, archive)
+
+            if !digest? then
+                return ERROR("the node {name} checksums do not list {archive}")
+            fi
+
+            let scratch = Path.join([
+                Path.get_temp_path(),
+                "ghul-node.{System.Environment.process_id}.{System.Guid.new_guid().to_string("N")}"
+            ])
+
+            say("downloading node {name}")
+
+            try
+                let downloaded = _download("{base()}/v{name}/{archive}", name, scratch, digest, say)
+
+                if let (error): ERROR = downloaded then
+                    return ERROR(error)
+                fi
+
+                return _install(scratch, name)
+            finally
+                if File.exists(scratch) then
+                    File.delete(scratch)
+                fi
+            yrt
+        si
+
+        // Fetches `url` into `destination`, chunk by chunk so progress can
+        // be reported as the bytes arrive. The whole payload is hashed and
+        // must equal `digest`, the checksum the release's SHASUMS256.txt
+        // records; a mismatch or a failure deletes the partial file and the
+        // install stops before anything is unpacked.
+        _download(url: string, version: string, destination: string, digest: string, say: (string) -> void) -> Result[unit, string] is
+            let client = use System.Net.Http.HttpClient()
+
+            try
+                let response = use client.get_async(url).result
+
+                if !response.is_success_status_code then
+                    return ERROR("node {version} has no release file for this platform (HTTP {cast int(response.status_code)})")
+                fi
+
+                let stream = use response.content.read_as_stream_async().result
+                let memory = use IO.MemoryStream()
+                let buffer = repeat(0ub, 65536) |> collect()
+                let total = response.content.headers?.content_length ?? 0L
+                let got mut = 0L
+                let percent mut = -1
+                let read mut = stream.read(buffer, 0, buffer.count)
+
+                while read > 0 do
+                    memory.write(buffer, 0, read)
+                    got = got + cast long(read)
+
+                    if total > 0L then
+                        let now = cast int(got * 100L / total)
+
+                        if now != percent then
+                            percent = now
+
+                            if now % 5 == 0 \/ now == 100 then
+                                say("downloading node {version}: {now}%")
+                            fi
+                        fi
+                    fi
+
+                    read = stream.read(buffer, 0, buffer.count)
+                od
+
+                if got == 0L then
+                    return ERROR("node {version} downloaded no bytes")
+                fi
+
+                let bytes = memory.to_array()
+                let actual = System.Convert.to_hex_string(
+                    System.Security.Cryptography.SHA256.hash_data(bytes)).to_lower_invariant()
+
+                if actual !~ digest then
+                    return ERROR("node {version} failed its checksum (expected {digest}, got {actual})")
+                fi
+
+                IO.File.write_all_bytes(destination, bytes)
+
+                return OK(_)
+            catch e: System.Exception
+                if File.exists(destination) then
+                    File.delete(destination)
+                fi
+
+                return ERROR("node {version} could not be downloaded ({e.get_type().name})")
+            yrt
+        si
+
+        // Unpacks the downloaded archive into the store: into a uniquely
+        // named scratch directory first, and the distribution's own top
+        // directory renamed onto the version's store directory only once
+        // complete, so a reader never sees a half-unpacked release and a
+        // failed install leaves nothing behind. The node executable is made
+        // executable after the move, since the permissions a tarball
+        // carries are not trusted.
+        _install(archive_scratch: string, name: string) -> Result[unit, string] is
+            let unpacked_directory = Path.join([
+                _store.root,
+                ".tmp-{name}-{System.Environment.process_id}-{System.Guid.new_guid().to_string("N")}"
+            ])
+
+            try
+                let unpacked = _unpack(archive_scratch, unpacked_directory)
+
+                if let (error): ERROR = unpacked then
+                    return ERROR(error)
+                fi
+
+                // A release's archive unpacks to one top directory; the
+                // name it carries the package extension dropped, which
+                // varies by platform, so it is taken from the extraction
+                // rather than rebuilt. An archive with no directory at its
+                // root is not a release's.
+                let held = Directory.get_directories(unpacked_directory)
+
+                if held.count == 0 then
+                    return ERROR("the node {name} archive holds no distribution")
+                fi
+
+                let inner = held[0]
+
+                if !File.exists(Path.join([inner, NODE_STORE.node_file_name()])) then
+                    return ERROR("the node {name} archive carries no node executable")
+                fi
+
+                try
+                    Directory.move(inner, _store.directory(name))
+                catch e: IO.IOException
+                    // Another process finished the same release first: its
+                    // copy is complete, and ours is redundant.
+                    return OK(_)
+                yrt
+
+                if !System.OperatingSystem.is_windows() then
+                    if let problem = _mark_executable(_store.binary(name)) then
+                        Directory.delete(_store.directory(name), true)
+
+                        return ERROR(problem)
+                    fi
+                fi
+
+                return OK(_)
+            finally
+                _delete_directory(unpacked_directory)
+            yrt
+        si
+
+        _mark_executable(path: string) -> string? is
+            let start_info = System.Diagnostics.ProcessStartInfo()
+
+            start_info.file_name = "chmod"
+            start_info.argument_list.add("+x")
+            start_info.argument_list.add(path)
+            start_info.use_shell_execute = false
+
+            try
+                if let process = System.Diagnostics.Process.start(start_info) then
+                    process.wait_for_exit()
+
+                    if process.exit_code != 0 then
+                        return "chmod +x {path} failed (exit {process.exit_code})"
+                    fi
+
+                    return null
+                fi
+
+                return "chmod could not be started"
+            catch e: System.Exception
+                return "chmod +x {path} failed ({e.get_type().name})"
+            yrt
+        si
+
+        // The digest SHASUMS256.txt records for `archive`: a `<hex>  <name>`
+        // line matched by its name. Split on the space rather than sliced at
+        // its index.
+        _expected_digest(sums_text: string, archive: string) -> string? is
+            for line in sums_text.split(['\n']) do
+                if line.ends_with(" {archive}") then
+                    let hex = line.split([' '])[0]
+
+                    return hex.to_lower_invariant()
+                fi
+            od
+
+            return null
+        si
+
+        _unpack(archive: string, destination: string) -> Result[unit, string] is
+            Directory.create_directory(destination)
+
+            try
+                if archive.ends_with(".zip") then
+                    System.IO.Compression.ZipFile.extract_to_directory(archive, destination, true)
+
+                    return OK(_)
+                fi
+
+                let input = use FileStream(archive, FileMode.OPEN, FileAccess.READ, FileShare.NONE)
+                let gzip = use GZipStream(input, CompressionMode.DECOMPRESS)
+
+                TarFile.extract_to_directory(gzip, destination, true)
+
+                return OK(_)
+            catch e: System.Exception
+                return ERROR("the node archive could not be read ({e.get_type().name})")
+            yrt
+        si
+
+        _get(url: string) -> Result[string, string] is
+            let client = use System.Net.Http.HttpClient()
+
+            try
+                let response = use client.get_async(url).result
+
+                if !response.is_success_status_code then
+                    return ERROR("{url} answered HTTP {cast int(response.status_code)}")
+                fi
+
+                return OK(response.content.read_as_string_async().result)
+            catch e: System.Exception
+                return ERROR("{url} could not be read ({e.get_type().name})")
+            yrt
+        si
+
+        _delete_directory(path: string) is
+            if Directory.exists(path) then
+                Directory.delete(path, true)
+            fi
+        si
+    si
+si

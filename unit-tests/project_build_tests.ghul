@@ -146,8 +146,8 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        a_wasm_program_runs_under_the_wasmtime_host_by_default() is
-            let command = PROJECT_RUN.command(_project(ManifestKind.PROGRAM, BuildTarget.WASM), "/p/out/wasm/app.wasm", LIST[string](["a"]), null, "/opt/ghul/ghul-wasmtime")
+        a_wasm_program_runs_under_the_wasmtime_host_its_manifest_names() is
+            let command = PROJECT_RUN.command(_project_host(ManifestKind.PROGRAM, BuildTarget.WASM, "wasmtime"), "/p/out/wasm/app.wasm", LIST[string](["a"]), null, "/opt/ghul/ghul-wasmtime")
 
             assert !command.problem?
             _same("/opt/ghul/ghul-wasmtime", command.file_name)

@@ -435,7 +435,7 @@ namespace Ghul.Cli is
         out.write_line("       ghul run [--target <name>] [--debug] [--optimise <0-3>] [-- args...]")
         out.write_line("       ghul project response-file --output <path> [--source-globs <path>] [--target <name>]")
         out.write_line("       ghul project compiler")
-        out.write_line("       ghul install <compiler|wasmtime|llvm> [--version <version>]")
+        out.write_line("       ghul install <compiler|wasmtime|node|llvm> [--version <version>]")
         out.write_line("       ghul update [--version <tag>] [--check]")
         out.write_line("       ghul cache clear")
         out.write_line("       ghul repl")
@@ -473,11 +473,21 @@ namespace Ghul.Cli is
         Std.error.write_line("ghul: created {command_line.directory}; cd into it and ghul run")
 
         // A project for wasm alone builds wherever the compiler does; running
-        // it is what needs node, and saying so here is the difference between
-        // a project that will not run and one whose host was never installed.
+        // it needs a host, and saying so here is the difference between a
+        // project that will not run and one whose host was never installed.
+        // The ladder's built-in default fetches the wasmtime host where
+        // there is no node, so only a machine whose chosen host is node and
+        // which holds no node that runs the target is warned about.
         if command_line.targets.count == 1 /\ command_line.targets[0] == Ghul.Project.BuildTarget.WASM then
-            if let (problem): ERROR = Ghul.Project.NODE_RUNTIME.run_problem() then
-                Std.error.write_line("ghul: {problem}")
+            let host_problem: string? mut = null
+            let global_host = Ghul.Project.GLOBAL_DEFAULTS.read(Ghul.Project.GLOBAL_DEFAULTS.path(), host_problem ref).host_wasm
+
+            if !Ghul.Project.WASM_HOST_SELECTION.chosen_for_wasm(null, global_host) then
+                if let (problem): ERROR = Ghul.Project.NODE_RUNTIME.run_problem() then
+                    Std.error.write_line("ghul: {problem}")
+                fi
+
+                Std.error.write_line("ghul: ghul install node brings one in")
             fi
         fi
 
@@ -613,7 +623,7 @@ namespace Ghul.Cli is
         od
 
         if things.count == 0 then
-            Std.error.write_line("usage: ghul install <compiler|wasmtime|llvm> [--version <version>]")
+            Std.error.write_line("usage: ghul install <compiler|wasmtime|node|llvm> [--version <version>]")
             return 1
         fi
 
@@ -630,6 +640,8 @@ namespace Ghul.Cli is
             return cmd_install_compiler(others)
         elif thing =~ "wasmtime" then
             return cmd_install_wasmtime(version)
+        elif thing =~ "node" then
+            return cmd_install_node(version)
         elif thing =~ "llvm" then
             let llvm_rest = Collections.LIST[string](["--llvm"])
             for argument in others do
@@ -639,8 +651,34 @@ namespace Ghul.Cli is
             return cmd_install_compiler(llvm_rest)
         fi
 
-        Std.error.write_line("ghul: unknown thing '{thing}'; install compiler, wasmtime or llvm")
+        Std.error.write_line("ghul: unknown thing '{thing}'; install compiler, wasmtime, node or llvm")
         return 1
+    si
+
+    // Installs the newest Node.js release that runs the wasm target, or
+    // the release `version` names, into the cache. Unlike the wasmtime
+    // host a run fetches for itself, a node is installed only when asked:
+    // the ladder reaches for PATH's node first, and fetching a distribution
+    // the user did not ask for is a different surprise.
+    cmd_install_node(version: string?) -> int is
+        let store = Ghul.Project.NODE_STORE.for_this_user()
+        let download = Ghul.Project.NODE_DOWNLOAD.of(store)
+
+        let say = (line: string) -> void => Std.error.write_line(line)
+
+        let result =
+            if let wanted: string = version then
+                download.install(wanted, say)
+            else
+                download.install(say)
+            fi
+
+        if let (problem): Ghul.Result.ERROR = result then
+            Std.error.write_line("ghul: {problem}")
+            return 1
+        fi
+
+        return 0
     si
 
     // Installs the newest wasmtime host, or the release `version` names.
@@ -880,8 +918,8 @@ namespace Ghul.Cli is
     si
 
     // Updates ghul itself, then every managed component the machine
-    // already holds: the compilers in the two stores and the wasmtime host.
-    // `--check` reports what is stale without changing anything and without
+    // already holds: the compilers in the two stores, the wasmtime host,
+    // and any node in its store. `--check` reports what is stale without changing anything and without
     // failing - the report is the answer, and a script that wants to know
     // reads it. A component not installed is reported rather than
     // installed - `update` refreshes what exists, and `ghul install <thing>`
@@ -954,19 +992,35 @@ namespace Ghul.Cli is
 
         if store.installed() == null then
             Std.error.write_line("ghul: the wasmtime host is not installed (ghul install wasmtime brings it in)")
+        else
+            let failure =
+                Ghul.Project.WASMTIME_DOWNLOAD.of(store).update(
+                    check_only,
+                    line => Std.error.write_line("ghul: {line}"))
 
-            return status
+            if let problem: string = failure then
+                Std.error.write_line("ghul: the wasmtime host could not be updated: {problem}")
+
+                status = 1
+            fi
         fi
 
-        let failure =
-            Ghul.Project.WASMTIME_DOWNLOAD.of(store).update(
-                check_only,
-                line => Std.error.write_line("ghul: {line}"))
+        // A node the machine holds in its store: refreshed the same way.
+        // A store holding nothing says nothing — a machine served by the
+        // node on its PATH, or by the wasmtime host, is not stale.
+        let node_store = Ghul.Project.NODE_STORE.for_this_user()
 
-        if let problem: string = failure then
-            Std.error.write_line("ghul: the wasmtime host could not be updated: {problem}")
+        if node_store.installed() != null then
+            let failure =
+                Ghul.Project.NODE_DOWNLOAD.of(node_store).update(
+                    check_only,
+                    line => Std.error.write_line("ghul: {line}"))
 
-            return 1
+            if let problem: string = failure then
+                Std.error.write_line("ghul: node could not be updated: {problem}")
+
+                status = 1
+            fi
         fi
 
         return status
@@ -1467,15 +1521,17 @@ namespace Ghul.Cli is
             Ghul.Project.BUILD_MODE(command_line.debug, command_line.optimise ?? project.manifest.options.optimise)
 
         // Said before building rather than after, so a run that cannot
-        // happen does not wait for a build first. Only a run whose host is
-        // Node needs Node; the wasmtime host is fetched where it is
-        // missing.
+        // happen does not wait for a build first. Only a run whose chosen
+        // host is node needs node: the ladder's built-in default falls back
+        // to the wasmtime host, which fetches itself where it is missing.
         if wants_run /\ project.target == Ghul.Project.BuildTarget.WASM /\ project.manifest.kind == Ghul.Project.ManifestKind.PROGRAM then
-            if Ghul.Project.WASM_HOST_SELECTION.chosen(project, global_defaults.host_wasm) =~ "node" then
+            if !Ghul.Project.WASM_HOST_SELECTION.chosen_for_wasm(project.manifest.host_wasm, global_defaults.host_wasm) then
                 if let (problem): ERROR = Ghul.Project.NODE_RUNTIME.run_problem() then
                     say(problem)
-                    return 1
                 fi
+
+                say("ghul install node brings one in")
+                return 1
             fi
         fi
 

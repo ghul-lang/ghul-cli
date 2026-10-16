@@ -1,0 +1,77 @@
+namespace Ghul.Cli.Tests is
+    use Ghul.Project.NODE_DOWNLOAD
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // Which release `pick_version` takes from an index.json body. The
+    // fixtures list every platform a Node release carries a distribution
+    // for in each entry's `files`, so the answers do not depend on the
+    // machine the tests run on; the entries that are meant to be skipped
+    // carry no platform file at all, so they are skipped everywhere.
+    @TestClass()
+    class NODE_DOWNLOAD_TESTS is
+        init() is si
+
+        _files_all: string static =>
+            "\"linux-x64\",\"linux-arm64\",\"osx-x64-pkg\",\"osx-x64-tar\",\"osx-arm64-tar\",\"win-x64\",\"win-arm64\""
+
+        _entry(version: string, lts: string, files: string) -> string static =>
+            "{{\n        \"version\": \"{version}\",\n        \"lts\": {lts},\n        \"files\": [{files}]\n      }}"
+
+        _index(entries: string[]) -> string static =>
+            "[\n      {string.join(",\n      ", entries)}\n    ]"
+
+        // A Current release ahead of an LTS one: the LTS is taken, being
+        // what `ghul install node` should bring in.
+        @Test()
+        pick_version__prefers_the_newest_lts_over_a_newer_current() is
+            let index = _index([
+                _entry("v26.0.0", "false", _files_all),
+                _entry("v24.15.0", "\"Jod\"", _files_all),
+                _entry("v22.14.0", "\"Jod\"", _files_all)])
+
+            assert NODE_DOWNLOAD.pick_version(index) =~ "v24.15.0"
+        si
+
+        // Every LTS below the floor the wasm target needs: the newest
+        // Current that runs the target is taken instead.
+        @Test()
+        pick_version__falls_back_to_a_current_when_no_lts_runs_the_target() is
+            let index = _index([
+                _entry("v26.0.0", "false", _files_all),
+                _entry("v24.12.0", "\"Jod\"", _files_all),
+                _entry("v22.14.0", "\"Jod\"", _files_all)])
+
+            assert NODE_DOWNLOAD.pick_version(index) =~ "v26.0.0"
+        si
+
+        // A release that carries no distribution for any platform is not
+        // installable and is passed over.
+        @Test()
+        pick_version__skips_a_release_with_no_distribution_files() is
+            let index = _index([
+                _entry("v24.15.0", "\"Jod\"", "\"headers\",\"docs\""),
+                _entry("v24.16.0", "false", _files_all)])
+
+            assert NODE_DOWNLOAD.pick_version(index) =~ "v24.16.0"
+        si
+
+        // A release older than the floor the wasm target needs is not
+        // taken, LTS though it is.
+        @Test()
+        pick_version__skips_releases_that_cannot_run_the_wasm_target() is
+            let index = _index([
+                _entry("v24.14.0", "\"Jod\"", _files_all),
+                _entry("v22.14.0", "\"Jod\"", _files_all)])
+
+            assert !NODE_DOWNLOAD.pick_version(index)?
+        si
+
+        // An empty index answers nothing.
+        @Test()
+        pick_version__of_an_empty_index__is_null() is
+            assert !NODE_DOWNLOAD.pick_version("[]")?
+        si
+    si
+si

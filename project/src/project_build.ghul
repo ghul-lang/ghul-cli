@@ -315,10 +315,12 @@ namespace Ghul.Project is
                 when BuildTarget.WASM then
                     if WASM_HOST_SELECTION.chosen(project, global_host_wasm) =~ "node" then
                         all.add(Path.change_extension(output, ".mjs") ?? output)
-                        "node"
+                        // The node the run starts: a distribution the store
+                        // holds, else the node on PATH.
+                        wasm_host ?? "node"
                     else
                         all.add(output)
-                        wasm_host ?? WASM_HOST_SELECTION.BUILTIN
+                        wasm_host ?? "wasmtime"
                     fi
                 when BuildTarget.LLVM then
                     output
@@ -351,20 +353,38 @@ namespace Ghul.Project is
             say: (string) -> void
         ) -> int static is
             let wasm_host_executable mut =
-                if project.target == BuildTarget.WASM /\ !(WASM_HOST_SELECTION.chosen(project, global_host_wasm) =~ "node") then
-                    // The host the ladder chose: resolved where it is
-                    // installed, fetched where it is not, as the compiler
-                    // download already is on first use.
-                    if WASM_HOST_SELECTION.resolve("wasmtime") == null then
-                        if let (trouble): Result.ERROR = WASM_HOST_SELECTION.install(say) then
-                            say(trouble)
-                            say("the wasmtime host could not be installed; run ghul install wasmtime")
+                if project.target == BuildTarget.WASM then
+                    if WASM_HOST_SELECTION.chosen(project, global_host_wasm) =~ "node" then
+                        // A node that runs the wasm target: one the store
+                        // holds, or the node on PATH. Neither means the run
+                        // cannot happen, and nothing is fetched for it:
+                        // `ghul install node` is the user's to run.
+                        if WASM_HOST_SELECTION.resolve("node") == null then
+                            if let (problem): Result.ERROR = NODE_RUNTIME.run_problem() then
+                                say(problem)
+                            fi
+
+                            say("ghul install node brings one in")
 
                             return 1
                         fi
-                    fi
 
-                    WASM_HOST_SELECTION.resolve("wasmtime")
+                        WASM_HOST_SELECTION.resolve("node")
+                    else
+                        // The host the ladder chose: resolved where it is
+                        // installed, fetched where it is not, as the compiler
+                        // download already is on first use.
+                        if WASM_HOST_SELECTION.resolve("wasmtime") == null then
+                            if let (trouble): Result.ERROR = WASM_HOST_SELECTION.install(say) then
+                                say(trouble)
+                                say("the wasmtime host could not be installed; run ghul install wasmtime")
+
+                                return 1
+                            fi
+                        fi
+
+                        WASM_HOST_SELECTION.resolve("wasmtime")
+                    fi
                 else
                     null
                 fi
@@ -374,13 +394,6 @@ namespace Ghul.Project is
             if let problem: string = to_run.problem then
                 say(problem)
                 return 1
-            fi
-
-            if project.target == BuildTarget.WASM /\ WASM_HOST_SELECTION.chosen(project, global_host_wasm) =~ "node" then
-                if let (problem): Result.ERROR = NODE_RUNTIME.run_problem() then
-                    say(problem)
-                    return 1
-                fi
             fi
 
             let start_info = System.Diagnostics.ProcessStartInfo()

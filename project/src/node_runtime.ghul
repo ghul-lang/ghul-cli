@@ -73,6 +73,48 @@ namespace Ghul.Project is
         is_supported(major: int, minor: int) -> bool static =>
             major >= 25 \/ (major == 24 /\ minor >= 15) \/ (major == 22 /\ minor >= 19)
 
+        /// Whether the version `text` names runs a wasm build. A leading `v`
+        /// is accepted, as dist pages and `node --version` write it; a text
+        /// that is not a version is not a version that runs the target.
+        ///
+        /// - text: a version like `24.15.0` or `v22.19.0`
+        is_supported_version(text: string) -> bool static is
+            let trimmed = if text.starts_with("v") then text[1..<0] else text fi
+            let version: System.Version? mut
+
+            if System.Version.try_parse(trimmed, version ref) /\ version? then
+                return is_supported(version.major, version.minor)
+            fi
+
+            return false
+        si
+
+        /// How the versions `left` and `right` order: negative when the left
+        /// is the lesser, positive when the greater, zero when they are the
+        /// same. Leading `v`s and patch differences are read; texts that are
+        /// not versions order as text.
+        ///
+        /// - left: the first version
+        /// - right: the second version
+        compare_versions(left: string, right: string) -> int static is
+            let a: System.Version? mut
+            let b: System.Version? mut
+
+            if !System.Version.try_parse(_without_v(left.trim()), a ref) \/
+                !System.Version.try_parse(_without_v(right.trim()), b ref) then
+                return left.compare_to(right)
+            fi
+
+            if let one: System.Version = a, two: System.Version = b then
+                return one.compare_to(two)
+            fi
+
+            return left.compare_to(right)
+        si
+
+        _without_v(text: string) -> string static =>
+            if text.starts_with("v") then text[1..<0] else text fi
+
         _ask() -> string? static is
             let start_info = System.Diagnostics.ProcessStartInfo()
 
