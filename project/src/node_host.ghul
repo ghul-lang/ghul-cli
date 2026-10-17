@@ -230,7 +230,7 @@ namespace Ghul.Project is
 
         // This machine in the terms nodejs.org uses: the name its
         // index.json `files` vocabulary gives a release for — `linux-x64`,
-        // `osx-arm64-tar`, `win-x64` — and the suffix of the archive file
+        // `osx-arm64-tar`, `win-x64-zip` — and the suffix of the archive file
         // the release carries — `-linux-x64.tar.gz`, `-darwin-arm64.tar.gz`,
         // `-win-x64.zip`. The two name the same thing differently, so they
         // are derived together. Null for a platform no release carries.
@@ -254,7 +254,7 @@ namespace Ghul.Project is
                 fi
 
             if os =~ "win" then
-                return (tag = "win-{arch}", suffix = "-win-{arch}.zip")
+                return (tag = "win-{arch}-zip", suffix = "-win-{arch}.zip")
             fi
 
             if os =~ "darwin" then

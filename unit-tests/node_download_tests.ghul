@@ -13,8 +13,9 @@ namespace Ghul.Cli.Tests is
     class NODE_DOWNLOAD_TESTS is
         init() is si
 
+        // The spellings nodejs.org's index actually uses, per dist/index.json.
         _files_all: string static =>
-            "\"linux-x64\",\"linux-arm64\",\"osx-x64-pkg\",\"osx-x64-tar\",\"osx-arm64-tar\",\"win-x64\",\"win-arm64\""
+            "\"linux-x64\",\"linux-arm64\",\"osx-x64-pkg\",\"osx-x64-tar\",\"osx-arm64-tar\",\"win-x64-zip\",\"win-arm64-zip\""
 
         _entry(version: string, lts: string, files: string) -> string static =>
             "{{\n        \"version\": \"{version}\",\n        \"lts\": {lts},\n        \"files\": [{files}]\n      }}"
