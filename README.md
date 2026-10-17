@@ -75,8 +75,9 @@ options, and `--dry-run` reports what it would do.
 Without .NET, `ghul` builds projects for the llvm and wasm targets. An llvm
 build links a native executable with `ghul-llvm`, which `ghul` fetches the
 first time it is needed. A wasm build runs with Node.js 22.19 or later on the
-22 line, 24.15 or later on the 24 line, or 25 or later, which has to be
-installed separately. Both fetch ghul-core and ghul-runtime with `git`.
+22 line, 24.15 or later on the 24 line, or 25 or later; where the machine has
+none, `ghul` runs the module under the wasmtime host instead, which it fetches
+the first time it is needed. Both fetch ghul-core and ghul-runtime with `git`.
 
 Which machines that covers follows from the builds that exist. `ghul` is a
 .NET tool except as its Linux x64 native archive, and the compilers that build
@@ -130,7 +131,7 @@ ghul rosetta <task>[/<part>] [<directory>]  # fetch a Rosetta Code solution as a
 ghul build [--target <name>] [--debug] [--optimise <0-3>] [overrides]  # build the project in this directory
 ghul run [--target <name>] [--debug] [--optimise <0-3>] [overrides] [-- args...]  # build, then run it
 ghul project response-file|compiler         # what editors read (see below)
-ghul install <compiler|wasmtime|llvm>       # install or update a component
+ghul install <compiler|wasmtime|node|llvm>  # install or update a component
 ghul update [--version <tag>] [--check]     # update ghul and every installed component
 ghul cache clear                            # empty the compiled-script cache
 ghul repl [--no-server] [--no-default-use]  # start an interactive session
@@ -162,9 +163,13 @@ version is already installed. `GHUL_COMPILER_FEED` names a different feed to
 download from, for a mirror or an offline network.
 
 `ghul install llvm` does the same as `--llvm` did. `ghul install wasmtime`
-installs the wasmtime host that runs wasm programs on a machine without
-Node.js, into a store of its own; a run that needs it and finds it missing
-downloads the latest release first.
+installs the wasmtime host that runs wasm programs where there is no Node.js;
+a run that needs it and finds it missing downloads the latest release first.
+`ghul install node` brings a Node.js distribution into the cache from
+nodejs.org — the newest LTS release that runs the wasm target, falling back
+to the newest release when no LTS does, verified against the release's
+published checksums — for a machine that wants the node host
+without installing Node system-wide.
 
 `ghul install-compiler --llvm` installs the compiler built with the llvm
 target instead, a native executable that builds for the `wasm` and `llvm`
@@ -252,12 +257,16 @@ steps, each filling only what the one before leaves unset.
    { "defaults": { "host": { "wasm": "wasmtime" } } }
    ```
 
-3. Nothing said anywhere, the built-in default is the wasmtime host.
+3. Nothing said anywhere, the built-in default is node, which runs these
+   builds faster than the wasmtime host; where the machine has no node that
+   runs the wasm target, a run falls back to the wasmtime host, which it
+   fetches where it is missing. A host named by the manifest or the global
+   file is honoured rather than swapped: where it cannot be started, the
+   run says so and names `ghul install`.
 
 A project that names a host itself is never overridden by the global file.
 The built-in order a build follows is dotnet first, then wasm; llvm is never
-chosen automatically, and neither is node - name them in the manifest to use
-them.
+chosen automatically.
 
 When a run chooses the wasmtime host and finds it missing, it downloads the
 newest release first, as the compiler is downloaded on first use.

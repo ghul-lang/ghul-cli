@@ -1,0 +1,105 @@
+namespace Ghul.Cli.Tests is
+    use IO.Directory
+    use IO.File
+    use IO.Path
+
+    use Ghul.Project.NODE_RUNTIME
+    use Ghul.Project.NODE_STORE
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // What a node store answers over a scratch directory: which releases
+    // are held, which of them the wasm target can run, and which of those
+    // is the one to use.
+    @TestClass()
+    class NODE_STORE_TESTS is
+        init() is si
+
+        _store(versions: string[]) -> (store: NODE_STORE, root: string) is
+            let root = Path.combine(Path.get_temp_path(), "ghul-node-store-{System.Guid.new_guid().to_string("N")}")
+
+            for v in versions do
+                _install(root, v)
+            od
+
+            return (store = NODE_STORE(root), root = root)
+        si
+
+        _delete(root: string) is
+            if Directory.exists(root) then
+                Directory.delete(root, true)
+            fi
+        si
+
+        // One installed release: the distribution's node executable, under
+        // the name and place the store reads it at on this platform.
+        _install(root: string, version: string) is
+            let directory = Path.join([root, version])
+
+            Directory.create_directory(directory)
+
+            if !System.OperatingSystem.is_windows() then
+                Directory.create_directory(Path.join([directory, "bin"]))
+            fi
+
+            File.write_all_text(Path.join([directory, NODE_STORE.node_file_name()]), "node {version}")
+        si
+
+        @Test()
+        highest_usable__of_an_empty_store__is_null() is
+            let (store, root) = _store([])
+
+            try
+                assert !store.highest_usable()?;
+                assert store.installed() == null;
+            finally
+                _delete(root)
+            yrt
+        si
+
+        @Test()
+        highest_usable__picks_the_highest_supported_release() is
+            let (store, root) = _store(["22.10.0", "22.19.0", "24.14.0"])
+
+            try
+                assert store.highest_usable() =~ "22.19.0";
+            finally
+                _delete(root)
+            yrt
+        si
+
+        @Test()
+        highest_usable__ignores_a_release_whose_executable_is_missing() is
+            let directory = Path.join([Path.get_temp_path(), "ghul-node-store-{System.Guid.new_guid().to_string("N")}"])
+
+            Directory.create_directory(Path.join([directory, "24.15.0"]))
+
+            let store = NODE_STORE(directory)
+
+            try
+                assert !store.highest_usable()?;
+            finally
+                _delete(directory)
+            yrt
+        si
+
+        @Test()
+        compare_versions__orders_by_numbers_not_text() is
+            assert NODE_RUNTIME.compare_versions("24.15.0", "24.9.0") > 0;
+            assert NODE_RUNTIME.compare_versions("v22.19.0", "22.19.0") == 0;
+            assert NODE_RUNTIME.compare_versions("25.0.0", "24.100.0") > 0;
+        si
+
+        @Test()
+        is_supported_version__follows_the_wasm_floor() is
+            assert NODE_RUNTIME.is_supported_version("25.0.0");
+            assert NODE_RUNTIME.is_supported_version("24.15.0");
+            assert !NODE_RUNTIME.is_supported_version("24.14.0");
+            assert NODE_RUNTIME.is_supported_version("22.19.0");
+            assert !NODE_RUNTIME.is_supported_version("22.18.0");
+            assert !NODE_RUNTIME.is_supported_version("23.6.0");
+            assert !NODE_RUNTIME.is_supported_version("not-a-version");
+        si
+    si
+si

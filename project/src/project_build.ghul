@@ -301,8 +301,7 @@ namespace Ghul.Project is
             project: LOADED_PROJECT,
             output: string,
             arguments: Collections.List[string],
-            global_host_wasm: string?,
-            wasm_host: string?
+            host: (host: string, executable: string)?
         ) -> (file_name: string, arguments: Collections.List[string], problem: string?) static is
             let all = LIST[string]()
 
@@ -310,22 +309,26 @@ namespace Ghul.Project is
                 return (file_name = "", arguments = all, problem = "{project.manifest.name} is a library, which cannot be run")
             fi
 
-            let file_name =
-                case project.target
-                when BuildTarget.WASM then
-                    if WASM_HOST_SELECTION.chosen(project, global_host_wasm) =~ "node" then
+            let file_name mut = ""
+
+            if project.target == BuildTarget.WASM then
+                if let pair = host then
+                    if pair.host =~ "node" then
                         all.add(Path.change_extension(output, ".mjs") ?? output)
-                        "node"
                     else
                         all.add(output)
-                        wasm_host ?? WASM_HOST_SELECTION.BUILTIN
                     fi
-                when BuildTarget.LLVM then
-                    output
-                when BuildTarget.DOTNET then
-                    all.add(output)
-                    "dotnet"
-                esac
+
+                    file_name = pair.executable
+                else
+                    return (file_name = "", arguments = all, problem = "the wasm host for this run was not resolved")
+                fi
+            elif project.target == BuildTarget.LLVM then
+                file_name = output
+            else
+                all.add(output)
+                file_name = "dotnet"
+            fi
 
             for argument in arguments do
                 all.add(argument)
@@ -350,37 +353,29 @@ namespace Ghul.Project is
             global_host_wasm: string?,
             say: (string) -> void
         ) -> int static is
-            let wasm_host_executable mut =
-                if project.target == BuildTarget.WASM /\ !(WASM_HOST_SELECTION.chosen(project, global_host_wasm) =~ "node") then
-                    // The host the ladder chose: resolved where it is
-                    // installed, fetched where it is not, as the compiler
-                    // download already is on first use.
-                    if WASM_HOST_SELECTION.resolve("wasmtime") == null then
-                        if let (trouble): Result.ERROR = WASM_HOST_SELECTION.install(say) then
-                            say(trouble)
-                            say("the wasmtime host could not be installed; run ghul install wasmtime")
+            let wasm_host mut = (host = "", executable = "")
 
-                            return 1
-                        fi
-                    fi
+            if project.target == BuildTarget.WASM then
+                // The host the ladder chose, resolved to an executable:
+                // node where the machine holds one that runs the target,
+                // the wasmtime host otherwise, fetched when it is missing
+                // the way the compiler download is on first use.
+                let chosen_host = WASM_HOST_SELECTION.effective(project, global_host_wasm, say)
 
-                    WASM_HOST_SELECTION.resolve("wasmtime")
-                else
-                    null
+                if let (trouble): Result.ERROR = chosen_host then
+                    say(trouble)
+                    return 1
                 fi
 
-            let to_run = command(project, output, arguments, global_host_wasm, wasm_host_executable)
+                wasm_host = chosen_host!
+            fi
+
+            let to_run = command(project, output, arguments,
+                if project.target == BuildTarget.WASM then wasm_host else null fi)
 
             if let problem: string = to_run.problem then
                 say(problem)
                 return 1
-            fi
-
-            if project.target == BuildTarget.WASM /\ WASM_HOST_SELECTION.chosen(project, global_host_wasm) =~ "node" then
-                if let (problem): Result.ERROR = NODE_RUNTIME.run_problem() then
-                    say(problem)
-                    return 1
-                fi
             fi
 
             let start_info = System.Diagnostics.ProcessStartInfo()
@@ -400,7 +395,7 @@ namespace Ghul.Project is
                 fi
             catch e: System.ComponentModel.Win32Exception
                 if project.target == BuildTarget.WASM then
-                    say("node was not found; running the wasm target needs Node.js")
+                    say("the wasm host {to_run.file_name} could not be started")
                 elif project.target == BuildTarget.LLVM then
                     say("{to_run.file_name} could not be run")
                 else
