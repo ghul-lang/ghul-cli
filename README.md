@@ -256,9 +256,12 @@ steps, each filling only what the one before leaves unset.
    { "defaults": { "host": { "wasm": "wasmtime" } } }
    ```
 
-3. Nothing said anywhere, the built-in default prefers Node.js — a
-   distribution the machine has, or one `ghul install node` brought in — and
-   falls back to the wasmtime host, which a run fetches where it is missing.
+3. Nothing said anywhere, the built-in default is node, which runs these
+   builds faster than the wasmtime host; where the machine has no node that
+   runs the wasm target, a run falls back to the wasmtime host, which it
+   fetches where it is missing. A host named by the manifest or the global
+   file is honoured rather than swapped: where it cannot be started, the
+   run says so and names `ghul install`.
 
 A project that names a host itself is never overridden by the global file.
 The built-in order a build follows is dotnet first, then wasm; llvm is never

@@ -32,13 +32,18 @@ namespace Ghul.Cli.Tests is
             fi
         si
 
-        // One installed release: the distribution's bin/node, as the
-        // unpacked archive leaves it.
+        // One installed release: the distribution's node executable, under
+        // the name and place the store reads it at on this platform.
         _install(root: string, version: string) is
-            let directory = Path.join([root, version, "bin"])
+            let directory = Path.join([root, version])
 
             Directory.create_directory(directory)
-            File.write_all_text(Path.join([directory, "node"]), "node {version}")
+
+            if !System.OperatingSystem.is_windows() then
+                Directory.create_directory(Path.join([directory, "bin"]))
+            fi
+
+            File.write_all_text(Path.join([directory, NODE_STORE.node_file_name()]), "node {version}")
         si
 
         @Test()
