@@ -366,7 +366,9 @@ namespace Ghul.Project is
 
             let scratch = Path.join([
                 Path.get_temp_path(),
-                "ghul-node.{System.Environment.process_id}.{System.Guid.new_guid().to_string("N")}"
+                // The package extension, kept on the scratch name: the
+                // extraction chooses zip or tar by it.
+                "ghul-node.{System.Environment.process_id}.{System.Guid.new_guid().to_string("N")}{suffix}"
             ])
 
             say("downloading node {name}")
