@@ -655,8 +655,8 @@ namespace Ghul.Cli is
         return 1
     si
 
-    // Installs the newest Node.js release that runs the wasm target, or
-    // the release `version` names, into the cache. Unlike the wasmtime
+    // Installs the newest LTS Node.js release that runs the wasm target,
+    // or the release `version` names, into the cache. Unlike the wasmtime
     // host a run fetches for itself, a node is installed only when asked:
     // the ladder reaches for PATH's node first, and fetching a distribution
     // the user did not ask for is a different surprise.

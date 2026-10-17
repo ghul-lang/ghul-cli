@@ -117,9 +117,10 @@ namespace Ghul.Project is
 
         base() -> string => _base ?? DEFAULT_BASE
 
-        // The newest release the index lists that runs the wasm target and
-        // carries a distribution for this machine, as its `v`-less version,
-        // or the failure to report.
+        // The release to install from the index the newest LTS that runs
+        // the wasm target and carries a distribution for this machine,
+        // falling back to the newest release that does when no LTS is, as
+        // its `v`-less version, or the failure to report.
         latest_version() -> Result[string, string] is
             let text = _get("{base()}/index.json")
 
@@ -264,7 +265,8 @@ namespace Ghul.Project is
             return (tag = "linux-{arch}", suffix = "-linux-{arch}.tar.gz")
         si
 
-        // Installs the newest release that runs the wasm target, or the
+        // Installs the newest LTS release that runs the wasm target,
+        // falling back to the newest release when no LTS does, or the
         // failure to report.
         install(say: (string) -> void) -> Result[unit, string] is
             let version = latest_version()

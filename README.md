@@ -166,8 +166,9 @@ download from, for a mirror or an offline network.
 installs the wasmtime host that runs wasm programs where there is no Node.js;
 a run that needs it and finds it missing downloads the latest release first.
 `ghul install node` brings a Node.js distribution into the cache from
-nodejs.org — the newest release that runs the wasm target, verified against
-the release's published checksums — for a machine that wants the node host
+nodejs.org — the newest LTS release that runs the wasm target, falling back
+to the newest release when no LTS does, verified against the release's
+published checksums — for a machine that wants the node host
 without installing Node system-wide.
 
 `ghul install-compiler --llvm` installs the compiler built with the llvm
