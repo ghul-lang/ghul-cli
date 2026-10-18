@@ -45,8 +45,18 @@ namespace Ghul.Project is
                 return (manifest = null, messages = messages)
             fi
 
-            return (manifest = cast ReadOutcome.OK(outcome).manifest, messages = messages)
+            let manifest = cast ReadOutcome.OK(outcome).manifest
+
+            if manifest.ignores_dotnet /\ !_warned_dotnet then
+                _warned_dotnet = true
+
+                IO.Std.error.write_line("ghul: warning: {MANIFEST_LOCATION.FILE_NAME}: ghul does not build for dotnet, so the dotnet target is ignored")
+            fi
+
+            return (manifest = manifest, messages = messages)
         si
+
+        _warned_dotnet: bool static
 
         /// The project in `directory`, built for `target_name`.
         ///

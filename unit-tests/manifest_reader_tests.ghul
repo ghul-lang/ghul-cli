@@ -67,6 +67,7 @@ namespace Ghul.Cli.Tests is
     WRONG_DEPENDENCIES: string static => "{{\"name\": \"app\", \"dependencies\": []}}"
     WRONG_TARGETS: string static => "{{\"name\": \"app\", \"targets\": \"wasm\"}}"
     DOTNET_TARGET: string static => "{{\"name\": \"app\", \"targets\": [\"dotnet\", \"wasm\"]}}"
+    DOTNET_ONLY_TARGET: string static => "{{\"name\": \"app\", \"targets\": [\"dotnet\"]}}"
     LIBRARY_DOTNET_TARGET: string static => "{{\"name\": \"lib\", \"kind\": \"library\", \"targets\": [\"wasm\", \"dotnet\"]}}"
     TWO_PROBLEMS: string static => "{{\"name\": \"app\", \"kind\": \"script\", \"targets\": [\"js\"]}}"
     TRAILING_COMMA: string static => "{{\"name\": \"app\",}}"
@@ -320,13 +321,30 @@ namespace Ghul.Cli.Tests is
             assert problems[0].contains("targets");
         si
 
+        // A project made before ghul stopped building for dotnet lists it
+        // beside wasm; it reads with its other targets, flagged so the
+        // reader can say dotnet was ignored.
         @Test()
-        a_manifest_naming_dotnet__is_a_problem() is
-            let problems = _problems(DOTNET_TARGET)
+        a_manifest_naming_dotnet_beside_other_targets__reads_with_its_other_targets() is
+            let manifest = _read(DOTNET_TARGET)!
+
+            assert manifest.targets.count == 1;
+            assert manifest.targets[0] == BuildTarget.WASM;
+            assert manifest.ignores_dotnet;
+        si
+
+        @Test()
+        a_manifest_naming_only_dotnet__is_a_problem() is
+            let problems = _problems(DOTNET_ONLY_TARGET)
 
             assert problems.count == 1;
             assert problems[0].contains("ghul does not build for dotnet") else problems[0];
-            assert problems[0].contains("take dotnet out of this list") else problems[0];
+            assert problems[0].contains("list wasm or llvm instead") else problems[0];
+        si
+
+        @Test()
+        a_manifest_not_naming_dotnet__does_not_ignore_it() is
+            assert !_read("{{\"name\": \"app\", \"targets\": [\"wasm\"]}}")!.ignores_dotnet;
         si
 
         // ghul-core lists dotnet among its targets, being built for .NET by
