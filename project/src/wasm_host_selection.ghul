@@ -33,7 +33,8 @@ namespace Ghul.Project is
 
         /// The executable that starts the host `name` on this machine: for
         /// node, the `node` on PATH where it runs the wasm target, else the
-        /// newest release `ghul install node` brought into the cache; for
+        /// one the installer brought in, else the newest release
+        /// `ghul install node` brought into the cache; for
         /// wasmtime, the installed host. Null where the name's host is not
         /// there to start.
         resolve(name: string) -> string? static is
@@ -42,7 +43,7 @@ namespace Ghul.Project is
                     return "node"
                 fi
 
-                return NODE_STORE.for_this_user().installed()
+                return NODE_STORE.installed_for_this_user().installed() ?? NODE_STORE.for_this_user().installed()
             fi
 
             return WASMTIME_STORE.for_this_user().installed()
