@@ -67,6 +67,7 @@ namespace Ghul.Cli.Tests is
     WRONG_DEPENDENCIES: string static => "{{\"name\": \"app\", \"dependencies\": []}}"
     WRONG_TARGETS: string static => "{{\"name\": \"app\", \"targets\": \"wasm\"}}"
     DOTNET_TARGET: string static => "{{\"name\": \"app\", \"targets\": [\"dotnet\", \"wasm\"]}}"
+    LIBRARY_DOTNET_TARGET: string static => "{{\"name\": \"lib\", \"kind\": \"library\", \"targets\": [\"wasm\", \"dotnet\"]}}"
     TWO_PROBLEMS: string static => "{{\"name\": \"app\", \"kind\": \"script\", \"targets\": [\"js\"]}}"
     TRAILING_COMMA: string static => "{{\"name\": \"app\",}}"
     NOT_JSON: string static => "this is not json"
@@ -326,6 +327,17 @@ namespace Ghul.Cli.Tests is
             assert problems.count == 1;
             assert problems[0].contains("ghul does not build for dotnet") else problems[0];
             assert problems[0].contains("take dotnet out of this list") else problems[0];
+        si
+
+        // ghul-core lists dotnet among its targets, being built for .NET by
+        // other means; a library is compiled in from source, so the entry is
+        // skipped rather than refused.
+        @Test()
+        a_library_naming_dotnet__reads_with_its_other_targets() is
+            let manifest = _read(LIBRARY_DOTNET_TARGET)!
+
+            assert manifest.targets.count == 1;
+            assert manifest.targets[0] == BuildTarget.WASM;
         si
 
         @Test()
