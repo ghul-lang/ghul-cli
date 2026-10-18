@@ -97,11 +97,9 @@ target `GHUL_TARGET` names. A script is cached, by the script, the target,
 the compiler and the libraries and `ghul-llvm` it was built with, so it
 compiles once. A script that compiles says nothing.
 
-What does not work without .NET, today:
-
-- **`ghul compile`**, which writes a script's .NET assembly.
-- **The REPL and the Jupyter kernel.** Each cell is compiled to a .NET
-  assembly and run inside the tool, which the native build cannot do.
+What does not work without .NET, today: **the REPL and the Jupyter kernel.**
+Each cell is compiled to a .NET assembly and run inside the tool, which the
+native build cannot do.
 
 The REPL on wasm is planned in
 [ghul-lang/ghul#3480](https://github.com/ghul-lang/ghul/issues/3480).
@@ -148,11 +146,12 @@ is a file whose name ends in `.ghul`, or an executable file that starts with
 To run a script named `run`, `new`, `compile`, `cache`, `install-compiler`,
 `update` or `version`, write `ghul -- <name>`.
 
-`ghul compile` compiles the script and prints the path to the compiled
-binary. It installs the compiler first if it needs to, and it does not run
-the result. The path is the only thing it writes to standard output, so
-`$(ghul compile script.ghul)` captures it. Compiler messages go to standard
-error.
+`ghul compile` builds the script exactly as running it would, into the same
+cache entry, and prints the path to what runs: for wasm the loader, which
+`node` runs, and for llvm the executable. It installs the compiler first if
+it needs to, and it does not run the result. The path is the only thing it
+writes to standard output, so `node $(ghul compile script.ghul)` runs it.
+Compiler messages go to standard error.
 
 `ghul install-compiler` installs `ghul.compiler` into `ghul`'s own compiler
 store, so that the first script does not wait for the install. With no
