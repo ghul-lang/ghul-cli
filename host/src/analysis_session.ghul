@@ -364,9 +364,13 @@ namespace Ghul.Repl.Host is
             close()
         si
 
+        // Each request names its kind twice: an analyser before 66.0.0 reads
+        // `command`, and needs it first in the object, and a later one reads
+        // `kind`.
         _edit_request(source: string) -> string =>
             ANALYSER_FRAMES.write(json is
                 json.write_string("command", "edit")
+                json.write_string("kind", "edit")
                 json.write_start_array("files")
                 json.write_start_object()
                 json.write_string("path", INPUT_PATH)
@@ -378,6 +382,7 @@ namespace Ghul.Repl.Host is
         _position_request(command: string, request: CELL_REQUEST, line: int, column: int, is_complete: bool) -> string =>
             ANALYSER_FRAMES.write(json is
                 json.write_string("command", command)
+                json.write_string("kind", command)
                 json.write_string("path", INPUT_PATH)
                 json.write_number("line", line + request.prelude_line_count)
                 json.write_number("column", column)
@@ -390,6 +395,7 @@ namespace Ghul.Repl.Host is
         _add_references_request(paths: Collections.List[string]) -> string =>
             ANALYSER_FRAMES.write(json is
                 json.write_string("command", "add_references")
+                json.write_string("kind", "add_references")
                 json.write_start_array("paths")
 
                 for path in paths do
