@@ -40,8 +40,14 @@ namespace Ghul.Cli is
         /// The platform `ghul-llvm` is released for that this machine is,
         /// as a target triple, or null where there is no release for it.
         triple() -> string? static is
-            if Host.HOST.rid() =~ "linux-x64" then
+            let rid = Host.HOST.rid()
+
+            if rid =~ "linux-x64" then
                 return "x86_64-unknown-linux-musl"
+            fi
+
+            if rid =~ "linux-arm64" then
+                return "aarch64-unknown-linux-musl"
             fi
 
             return null
@@ -191,7 +197,7 @@ namespace Ghul.Cli is
             let platform = triple()
 
             if !platform? then
-                return ERROR("the llvm target builds only on Linux x86-64")
+                return ERROR("the llvm target builds only on Linux x64 and arm64")
             fi
 
             let tag = if let declared = requirements?.llvm then "v{declared}" else pinned_tag(compiler_version) fi
