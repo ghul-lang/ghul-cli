@@ -7,7 +7,6 @@ namespace Ghul.Project is
         /// - target: the target to name
         name(target: BuildTarget) -> string static =>
             case target
-            when BuildTarget.DOTNET then "dotnet"
             when BuildTarget.WASM then "wasm"
             when BuildTarget.LLVM then "llvm"
             esac
@@ -16,7 +15,7 @@ namespace Ghul.Project is
         ///
         /// - spelling: a target as the compiler and a manifest spell it
         named(spelling: string) -> BuildTarget? static is
-            for target in [BuildTarget.DOTNET, BuildTarget.WASM, BuildTarget.LLVM] do
+            for target in [BuildTarget.WASM, BuildTarget.LLVM] do
                 if spelling =~ name(target) then
                     return target
                 fi
@@ -26,15 +25,17 @@ namespace Ghul.Project is
         si
 
         /// Every target's name, separated by commas, for a message.
-        names: string static => "dotnet, wasm, llvm"
+        names: string static => "wasm, llvm"
 
-        /// Whether a build for `target` compiles its core library, its
-        /// runtime and its library dependencies in from source, rather than
-        /// referencing .NET assemblies.
+        /// Whether `spelling` names the dotnet target, which ghul does not
+        /// build for.
         ///
-        /// - target: the target being built
-        has_source_libraries(target: BuildTarget) -> bool static =>
-            target != BuildTarget.DOTNET
+        /// - spelling: a target as a manifest or the command line spells it
+        is_dotnet(spelling: string) -> bool static => spelling =~ "dotnet"
+
+        /// What a manifest, `--target` or `GHUL_TARGET` naming dotnet is told.
+        DOTNET_UNSUPPORTED: string static =>
+            "ghul does not build for dotnet; for .NET, use the .NET SDK with a .ghulproj and dotnet build"
 
         /// The earliest compiler that builds for `target`, or null where any
         /// compiler does. An llvm build at a chosen optimisation level needs
@@ -61,13 +62,11 @@ namespace Ghul.Project is
             elif mode.debug then "a debug build for "
             else "" fi
 
-        /// The earliest compiler that builds for `target` at all, or null
-        /// where any compiler does.
+        /// The earliest compiler that builds for `target` at all.
         ///
         /// - target: the target being built
         minimum_compiler(target: BuildTarget) -> string? static =>
             case target
-            when BuildTarget.DOTNET then null
             when BuildTarget.WASM then CORE_LIBRARY.MINIMUM_COMPILER
             when BuildTarget.LLVM then "65.5.0"
             esac

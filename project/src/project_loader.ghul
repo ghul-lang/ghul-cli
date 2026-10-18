@@ -69,14 +69,6 @@ namespace Ghul.Project is
                 return _failed(message)
             fi
 
-            if !BUILD_TARGETS.has_source_libraries(chosen.target) then
-                for name in manifest.dependencies.keys do
-                    if !DEPENDENCY_LIBRARIES.is_implicit(name) then
-                        return _failed("{name}: source library dependencies are not supported for the dotnet target")
-                    fi
-                od
-            fi
-
             return LoadOutcome.LOADED(LOADED_PROJECT(manifest, full_directory, chosen.target))
         si
 
@@ -131,20 +123,24 @@ namespace Ghul.Project is
             let listed = string.join(", ", targets |> Ghul.Pipes.map(t => COMPILER_ARGUMENTS.target_name(t)))
 
             if let name: string = target_name then
+                if BUILD_TARGETS.is_dotnet(name) then
+                    return (target = BuildTarget.WASM, problem = BUILD_TARGETS.DOTNET_UNSUPPORTED)
+                fi
+
                 for target in targets do
                     if COMPILER_ARGUMENTS.target_name(target) =~ name then
                         return (target = target, problem = null)
                     fi
                 od
 
-                return (target = BuildTarget.DOTNET, problem = "the manifest does not list the target {name}; it lists {listed}")
+                return (target = BuildTarget.WASM, problem = "the manifest does not list the target {name}; it lists {listed}")
             fi
 
             if targets.count == 1 then
                 return (target = targets[0], problem = null)
             fi
 
-            return (target = BuildTarget.DOTNET, problem = "the manifest lists more than one target; name one with --target: {listed}")
+            return (target = BuildTarget.WASM, problem = "the manifest lists more than one target; name one with --target: {listed}")
         si
 
         _failed(message: string) -> LoadOutcome static =>

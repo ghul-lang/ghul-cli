@@ -42,6 +42,10 @@ namespace Ghul.Project is
                     for name in arguments[i + 1].split([',']) do
                         let target = BUILD_TARGETS.named(name.trim())
 
+                        if !target? /\ BUILD_TARGETS.is_dotnet(name.trim()) then
+                            return ERROR(BUILD_TARGETS.DOTNET_UNSUPPORTED)
+                        fi
+
                         if !target? then
                             return ERROR("unknown target {name}; expected one of {BUILD_TARGETS.names}")
                         fi

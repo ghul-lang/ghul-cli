@@ -73,7 +73,7 @@ namespace Ghul.Cli.Tests is
             try
                 _project(Path.combine(scratch, "app"), "app", "\"wasm\"", "\"zeta\": {{ \"path\": \"../zeta\" }}, \"alpha\": {{ \"path\": \"../alpha\" }}")
                 _project(Path.combine(scratch, "zeta"), "zeta", "\"wasm\"", "\"alpha\": {{ \"path\": \"../alpha\" }}, \"beta\": {{ \"path\": \"../beta\" }}")
-                _project(Path.combine(scratch, "beta"), "beta", "\"wasm\", \"dotnet\"", "\"alpha\": {{ \"path\": \"../alpha\" }}")
+                _project(Path.combine(scratch, "beta"), "beta", "\"wasm\", \"llvm\"", "\"alpha\": {{ \"path\": \"../alpha\" }}")
                 _project(Path.combine(scratch, "alpha"), "alpha", "\"wasm\"", "")
 
                 let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
@@ -155,7 +155,7 @@ namespace Ghul.Cli.Tests is
 
             try
                 _project(Path.combine(scratch, "app"), "app", "\"wasm\"", "\"lib\": {{ \"path\": \"../lib\" }}")
-                _project(Path.combine(scratch, "lib"), "lib", "\"dotnet\"", "")
+                _project(Path.combine(scratch, "lib"), "lib", "\"llvm\"", "")
 
                 let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
 
@@ -197,11 +197,11 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        a_dotnet_build_with_a_source_library_dependency_is_refused() is
+        a_dotnet_build_is_refused() is
             let scratch = _scratch()
 
             try
-                _project(scratch, "app", "\"wasm\", \"dotnet\"", "\"lib\": {{ \"path\": \"../lib\" }}")
+                _project(scratch, "app", "\"wasm\"", "\"lib\": {{ \"path\": \"../lib\" }}")
 
                 let refused = PROJECT_LOADER.load(scratch, "dotnet")
 
@@ -209,7 +209,7 @@ namespace Ghul.Cli.Tests is
 
                 let failed = cast LoadOutcome.FAILED(refused)
 
-                assert failed.messages |> Ghul.Pipes.any(m => m.contains("lib: source library dependencies are not supported for the dotnet target"))
+                assert failed.messages |> Ghul.Pipes.any(m => m.contains("ghul does not build for dotnet"))
 
                 assert isa LoadOutcome.LOADED(PROJECT_LOADER.load(scratch, "wasm"))
             finally

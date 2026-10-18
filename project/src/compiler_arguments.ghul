@@ -123,9 +123,7 @@ namespace Ghul.Project is
                 add(["--library"])
             fi
 
-            if target != BuildTarget.DOTNET then
-                add(["--target", target_name(target)])
-            fi
+            add(["--target", target_name(target)])
 
             for library in libraries do
                 add(["--library-source", "{library.name}@{library.version}={library.root}"])

@@ -39,7 +39,7 @@ cat > "$program/ghul-project.json" <<'JSON'
 {
     // a comment and a trailing comma, both of which a manifest may carry
     "name": "greeter",
-    "targets": ["dotnet"],
+    "targets": ["wasm"],
 }
 JSON
 cat > "$program/src/main.ghul" <<'GHUL'
@@ -59,8 +59,8 @@ GHUL
 
 echo "project: a two-file program builds..." >&2
 (cd "$program" && dotnet "$cli" build) >&2 || fail "ghul build failed"
-[[ -f "$program/out/dotnet/greeter.exe" ]] || fail "expected out/dotnet/greeter.exe"
-[[ -f "$program/out/dotnet/ghul-runtime.dll" ]] || fail "expected ghul-runtime.dll beside the build"
+[[ -f "$program/out/wasm/greeter.wasm" ]] || fail "expected out/wasm/greeter.wasm"
+[[ -f "$program/out/wasm/greeter.mjs" ]] || fail "expected the greeter.mjs loader beside the build"
 
 echo "project: 'ghul run <script>' still runs the script, beside a manifest..." >&2
 cat > "$program/script.ghul" <<'GHUL'
@@ -83,7 +83,7 @@ namespace Shapes is
 si
 GHUL
 (cd "$library" && dotnet "$cli" build) >&2 || fail "ghul build of a library failed"
-[[ -f "$library/out/dotnet/shapes.dll" ]] || fail "expected out/dotnet/shapes.dll"
+[[ -f "$library/out/wasm/shapes.wasm" ]] || fail "expected out/wasm/shapes.wasm"
 
 echo "project: a library is not run..." >&2
 if err="$(cd "$library" && dotnet "$cli" run 2>&1 >/dev/null)"; then
@@ -102,22 +102,32 @@ if err="$(cd "$broken" && dotnet "$cli" build 2>&1)"; then
 fi
 [[ "$err" == *"ghul: ghul-project.json: name:"* ]] || fail "unexpected message for a bad manifest: $err"
 
-echo "project: a source library dependency is refused for the dotnet target..." >&2
-dependent="$scratch/dependent"
-mkdir -p "$dependent/src"
-cat > "$dependent/ghul-project.json" <<'JSON'
-{ "name": "dependent", "dependencies": { "scratch": { "path": "../shapes" } } }
+echo "project: a manifest listing dotnet is refused..." >&2
+dotnet_manifest="$scratch/dotnet-manifest"
+mkdir -p "$dotnet_manifest/src"
+cat > "$dotnet_manifest/ghul-project.json" <<'JSON'
+{ "name": "dotnet-manifest", "targets": ["dotnet"] }
 JSON
-if err="$(cd "$dependent" && dotnet "$cli" build 2>&1)"; then
-    fail "expected a dotnet build with a source library dependency to fail"
+if err="$(cd "$dotnet_manifest" && dotnet "$cli" build 2>&1)"; then
+    fail "expected a manifest listing dotnet to fail"
 fi
-[[ "$err" == *"ghul: scratch: source library dependencies are not supported for the dotnet target"* ]] || fail "unexpected message for dependencies: $err"
+[[ "$err" == *"ghul does not build for dotnet"* ]] || fail "unexpected message for a dotnet manifest: $err"
+
+echo "project: --target dotnet is refused..." >&2
+if err="$(cd "$program" && dotnet "$cli" build --target dotnet 2>&1)"; then
+    fail "expected --target dotnet to fail"
+fi
+[[ "$err" == *"ghul does not build for dotnet"* ]] || fail "unexpected message for --target dotnet: $err"
+if err="$(cd "$scratch" && dotnet "$cli" new refused --target dotnet 2>&1)"; then
+    fail "expected ghul new --target dotnet to fail"
+fi
+[[ "$err" == *"ghul does not build for dotnet"* ]] || fail "unexpected message from ghul new --target dotnet: $err"
 
 echo "project: a target the manifest does not list is refused..." >&2
-if err="$(cd "$program" && dotnet "$cli" build --target wasm 2>&1)"; then
+if err="$(cd "$program" && dotnet "$cli" build --target llvm 2>&1)"; then
     fail "expected an unlisted target to fail"
 fi
-[[ "$err" == *"ghul: the manifest does not list the target wasm; it lists dotnet"* ]] || fail "unexpected message for an unlisted target: $err"
+[[ "$err" == *"ghul: the manifest does not list the target llvm; it lists wasm"* ]] || fail "unexpected message for an unlisted target: $err"
 
 echo "project: 'ghul build' with no manifest fails..." >&2
 empty="$scratch/empty"
@@ -139,9 +149,9 @@ compiler="$(cd "$program" && dotnet "$cli" project compiler 2>/dev/null)"
 [[ -n "$compiler" ]] || fail "ghul project compiler printed nothing"
 editor_build="$scratch/editor-build"
 mkdir -p "$editor_build"
-(cd "$program" && eval "$compiler" "@$response_file" src/main.ghul src/greeting.ghul -o "$editor_build/greeter.exe") >&2 \
+(cd "$program" && eval "$compiler" "@$response_file" src/main.ghul src/greeting.ghul -o "$editor_build/greeter.wasm") >&2 \
     || fail "the compiler ghul named did not compile the project's sources with the response file"
-[[ -f "$editor_build/greeter.exe" ]] || fail "expected the editor round trip to produce greeter.exe"
+[[ -f "$editor_build/greeter.wasm" ]] || fail "expected the editor round trip to produce greeter.wasm"
 
 echo "project: the editor files report a manifest's problems..." >&2
 if err="$(cd "$broken" && dotnet "$cli" project response-file --output "$scratch/x.rsp" 2>&1)"; then
@@ -203,11 +213,9 @@ if err="$(cd "$wasm" && GHUL_COMPILER=/bin/false GHUL_COMPILER_VERSION=latest do
 fi
 [[ "$err" == *"GHUL_COMPILER and GHUL_COMPILER_VERSION are both set"* ]] || fail "unexpected message for both compiler variables: $err"
 
-echo "project: ghul new creates a project that builds and runs on both targets..." >&2
-(cd "$scratch" && dotnet "$cli" new scaffolded --target dotnet,wasm 2>/dev/null) || fail "ghul new failed"
+echo "project: ghul new creates a project that builds and runs on wasm..." >&2
+(cd "$scratch" && dotnet "$cli" new scaffolded --target wasm,llvm 2>/dev/null) || fail "ghul new failed"
 [[ -f "$scratch/scaffolded/.gitignore" ]] || fail "ghul new wrote no .gitignore"
-out="$(cd "$scratch/scaffolded" && dotnet "$cli" run --target dotnet 2>/dev/null)" || fail "ghul run of a new project failed on dotnet"
-check "$out" "hello" "new project output on dotnet"
 out="$(cd "$scratch/scaffolded" && dotnet "$cli" run --target wasm 2>/dev/null)" || fail "ghul run of a new project failed on wasm"
 check "$out" "hello" "new project output on wasm"
 
@@ -221,7 +229,7 @@ echo "project: a wasm build refuses a manifest naming a compiler below the minim
 old_wasm="$scratch/old-wasm"
 mkdir -p "$old_wasm/src"
 cat > "$old_wasm/ghul-project.json" <<'JSON'
-{ "name": "old-wasm", "targets": ["dotnet", "wasm"], "compiler": "64.11.0" }
+{ "name": "old-wasm", "targets": ["wasm"], "compiler": "64.11.0" }
 JSON
 cat > "$old_wasm/src/main.ghul" <<'GHUL'
 IO.Std.write_line("hello")

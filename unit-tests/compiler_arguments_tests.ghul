@@ -45,7 +45,7 @@ namespace Ghul.Cli.Tests is
                 "app",
                 null,
                 kind,
-                LIST[BuildTarget]([BuildTarget.DOTNET, BuildTarget.WASM]),
+                LIST[BuildTarget]([BuildTarget.WASM, BuildTarget.LLVM]),
                 LIST[string](["src/**/*.ghul"]),
                 null,
                 options,
@@ -61,30 +61,30 @@ namespace Ghul.Cli.Tests is
         _joined(arguments: Collections.List[string]) -> string => string.join(" ", arguments)
 
         @Test()
-        a_plain_program_for_dotnet_has_only_the_output_and_sources() is
+        a_plain_program_has_the_target_the_output_and_sources() is
             _same(
-                "-o out/app.exe a.ghul b.ghul",
+                "--target wasm -o out/app a.ghul b.ghul",
                 _joined(
                     COMPILER_ARGUMENTS.for_build(
                         _manifest(ManifestKind.PROGRAM, _plain_options()),
-                        BuildTarget.DOTNET,
+                        BuildTarget.WASM,
                         _no_libraries(),
                         BUILD_MODE.release,
-                        "out/app.exe",
+                        "out/app",
                         LIST[string](["a.ghul", "b.ghul"]))))
         si
 
         @Test()
         a_library_is_built_with_the_library_flag() is
             _same(
-                "--library",
+                "--library --target wasm",
                 _joined(
                     COMPILER_ARGUMENTS.options(
-                        _manifest(ManifestKind.LIBRARY, _plain_options()), BuildTarget.DOTNET, _no_libraries())))
+                        _manifest(ManifestKind.LIBRARY, _plain_options()), BuildTarget.WASM, _no_libraries())))
         si
 
         @Test()
-        a_target_other_than_dotnet_is_named() is
+        the_target_is_always_named() is
             _same(
                 "--target wasm",
                 _joined(
@@ -95,35 +95,35 @@ namespace Ghul.Cli.Tests is
         @Test()
         underscore_access_is_passed_when_set() is
             _same(
-                "--underscore-access protected",
+                "--underscore-access protected --target wasm",
                 _joined(
                     COMPILER_ARGUMENTS.options(
                         _manifest(ManifestKind.PROGRAM, _options("protected", false, [], [], [], [])),
-                        BuildTarget.DOTNET,
+                        BuildTarget.WASM,
                         _no_libraries())))
         si
 
         @Test()
         global_namespace_is_passed_only_when_true() is
             _same(
-                "--global-namespace",
+                "--global-namespace --target wasm",
                 _joined(
                     COMPILER_ARGUMENTS.options(
                         _manifest(ManifestKind.PROGRAM, _options(null, true, [], [], [], [])),
-                        BuildTarget.DOTNET,
+                        BuildTarget.WASM,
                         _no_libraries())))
         si
 
         @Test()
         list_options_are_one_comma_separated_flag_and_each_define_its_own() is
             _same(
-                "--default-use Collections,IO.Std.write_line --define DEBUG --define TRACE --suppress a,b --warn-as-error c",
+                "--default-use Collections,IO.Std.write_line --define DEBUG --define TRACE --suppress a,b --warn-as-error c --target wasm",
                 _joined(
                     COMPILER_ARGUMENTS.options(
                         _manifest(
                             ManifestKind.PROGRAM,
                             _options(null, false, ["Collections", "IO.Std.write_line"], ["DEBUG", "TRACE"], ["a", "b"], ["c"])),
-                        BuildTarget.DOTNET,
+                        BuildTarget.WASM,
                         _no_libraries())))
         si
 

@@ -437,7 +437,7 @@ namespace Ghul.Project is
             let value: JsonElement mut
 
             if !root.try_get_property("targets", value ref) then
-                return LIST[BuildTarget]([BuildTarget.DOTNET])
+                return LIST[BuildTarget]([BuildTarget.WASM])
             fi
 
             return _target_list("targets", value)
@@ -509,6 +509,8 @@ namespace Ghul.Project is
                     _report(key, "an entry is not a string")
                 elif let target = BUILD_TARGETS.named(entry.get_string() ?? "") then
                     targets.add(target)
+                elif BUILD_TARGETS.is_dotnet(entry.get_string() ?? "") then
+                    _report(key, "{BUILD_TARGETS.DOTNET_UNSUPPORTED}; take dotnet out of this list")
                 else
                     _report(key, "unknown target '{entry.get_string()}'")
                 fi
