@@ -57,6 +57,13 @@ jobs:
     - name: Restore local tools
       run: dotnet tool restore
 
+    # The tool manifest's pin is only a local-dev fallback; this
+    # repoints at the latest published ghul.compiler so the build
+    # compiles this project's own sources with the newest compiler
+    # regardless of when the manifest was last bumped.
+    - name: Update the local ghul.compiler to the latest published
+      run: dotnet tool update --local ghul.compiler
+
     - name: Run unit tests
       run: dotnet test unit-tests
 
@@ -72,6 +79,13 @@ jobs:
 
     - name: Restore local tools
       run: dotnet tool restore
+
+    # The tool manifest's pin is only a local-dev fallback; this
+    # repoints at the latest published ghul.compiler so the build
+    # compiles this project's own sources with the newest compiler
+    # regardless of when the manifest was last bumped.
+    - name: Update the local ghul.compiler to the latest published
+      run: dotnet tool update --local ghul.compiler
 
     - name: Run smoke test
       run: ./tests/smoke.sh
@@ -122,6 +136,13 @@ jobs:
 
     - name: Restore local tools
       run: dotnet tool restore
+
+    # The tool manifest's pin is only a local-dev fallback; this
+    # repoints at the latest published ghul.compiler so the build
+    # compiles this project's own sources with the newest compiler
+    # regardless of when the manifest was last bumped.
+    - name: Update the local ghul.compiler to the latest published
+      run: dotnet tool update --local ghul.compiler
 
     - name: Run unit tests
       run: dotnet test unit-tests
@@ -199,6 +220,13 @@ jobs:
 
     - name: Restore local tools
       run: dotnet tool restore
+
+    # The tool manifest's pin is only a local-dev fallback; this
+    # repoints at the latest published ghul.compiler so the build
+    # compiles this project's own sources with the newest compiler
+    # regardless of when the manifest was last bumped.
+    - name: Update the local ghul.compiler to the latest published
+      run: dotnet tool update --local ghul.compiler
 
     # Published under the name the tool command is, since the binary the
     # project produces is named after the project.
