@@ -240,13 +240,13 @@ if err="$(cd "$old_wasm" && dotnet "$cli" build --target wasm 2>&1)"; then
 fi
 [[ "$err" == *"ghul.compiler 64.11.0 is asked for, but the wasm target needs"* ]] || fail "unexpected message for an old compiler: $err"
 
-echo "project: an llvm build fetches the ghul-llvm release pinned for its compiler..." >&2
+echo "project: an llvm build fetches the ghul-llvm release chosen for its compiler..." >&2
 (cd "$scratch" && dotnet "$cli" new native --target llvm 2>/dev/null) || fail "ghul new --target llvm failed"
 grep -q '"targets": \["llvm"\]' "$scratch/native/ghul-project.json" || fail "ghul new --target llvm wrote no llvm target"
 if err="$(cd "$scratch/native" && GHUL_LLVM_RELEASES="file://$scratch/no-releases" dotnet "$cli" build 2>&1)"; then
     fail "expected an llvm build with no ghul-llvm release to fail"
 fi
-[[ "$err" == *"cannot fetch ghul-llvm: file://$scratch/no-releases/"* ]] || fail "unexpected message for a missing ghul-llvm release: $err"
+[[ "$err" == *"cannot list the ghul-llvm releases: file://$scratch/no-releases does not exist"* ]] || fail "unexpected message for a missing ghul-llvm release: $err"
 
 echo "project: the programs under tests/projects build and print what they should..." >&2
 (cd "$repo_root" && dotnet tool restore >/dev/null && dotnet ghul-test --use-ghul-cli --ghul "dotnet $cli" tests/projects) >&2 \

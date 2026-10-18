@@ -242,7 +242,7 @@ namespace Ghul.Cli is
                 let base = System.Uri(releases).local_path
 
                 if !Directory.exists(base) then
-                    return ERROR("{releases} does not exist")
+                    return ERROR("cannot list the ghul-llvm releases: {releases} does not exist")
                 fi
 
                 let listing = Text.STRING_BUILDER()
@@ -257,14 +257,14 @@ namespace Ghul.Cli is
             let suffix = "/releases/download"
 
             if !releases.ends_with(suffix) then
-                return ERROR("cannot list the releases at {releases}")
+                return ERROR("cannot list the ghul-llvm releases at {releases}")
             fi
 
             let repository = releases.substring(0, releases.length - suffix.length)
             let listed = Ghul.Project.GIT.run(Collections.LIST[string](["ls-remote", "--tags", "--refs", repository]), null)
 
             if !listed.succeeded then
-                return ERROR("cannot list the releases of {repository}: {listed.error.trim()}")
+                return ERROR("cannot list the ghul-llvm releases of {repository}: {listed.error.trim()}")
             fi
 
             return OK(Ghul.Project.LIBRARY_RESOLVER.release_tags(listed.output))
