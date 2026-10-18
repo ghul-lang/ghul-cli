@@ -15,7 +15,11 @@ namespace Ghul.Project is
         compiler_build: CompilerBuild,
         prefer: Collections.List[BuildTarget],
         host_wasm: string?
-    ) is si
+    ) is
+        /// Whether a program's manifest lists dotnet beside the targets ghul
+        /// builds for, which ghul leaves out of its targets.
+        ignores_dotnet: bool public
+    si
 
     // Whether the project is something to run or something to depend on.
     enum ManifestKind is

@@ -10,6 +10,7 @@ namespace Ghul.Project is
     // is not a manifest, so a walk that found any returns nothing.
     class MANIFEST_PARSER is
         _problems: Collections.LIST[MANIFEST_PROBLEM]
+        _ignored_dotnet: bool
 
         init() is
             _problems = LIST[MANIFEST_PROBLEM]()
@@ -46,7 +47,11 @@ namespace Ghul.Project is
                 return null
             fi
 
-            return MANIFEST(name, version, kind, targets, sources, compiler, options, dependencies, compiler_build, prefer, host_wasm)
+            let manifest = MANIFEST(name, version, kind, targets, sources, compiler, options, dependencies, compiler_build, prefer, host_wasm)
+
+            manifest.ignores_dotnet = _ignored_dotnet
+
+            return manifest
         si
 
         // A member read as a string, or nothing when the key is absent.
@@ -498,7 +503,9 @@ namespace Ghul.Project is
 
         // A library may list dotnet among its targets, being built for .NET by
         // other means; ghul skips it there and compiles the library in from
-        // source. A program naming dotnet is refused.
+        // source. A program naming dotnet beside other targets has it
+        // skipped too, with a warning, and one naming nothing else is
+        // refused.
         _target_list(key: string, value: JsonElement, kind: ManifestKind) -> Collections.List[BuildTarget] is
             if value.value_kind != JsonValueKind.ARRAY then
                 _report(key, "the value is not a list")
@@ -506,6 +513,7 @@ namespace Ghul.Project is
             fi
 
             let targets = LIST[BuildTarget]()
+            let names_dotnet mut = false
 
             for entry in value.enumerate_array() do
                 if entry.value_kind != JsonValueKind.STRING then
@@ -513,13 +521,19 @@ namespace Ghul.Project is
                 elif let target = BUILD_TARGETS.named(entry.get_string() ?? "") then
                     targets.add(target)
                 elif BUILD_TARGETS.is_dotnet(entry.get_string() ?? "") then
-                    if kind != ManifestKind.LIBRARY then
-                        _report(key, "{BUILD_TARGETS.DOTNET_UNSUPPORTED}; take dotnet out of this list")
-                    fi
+                    names_dotnet = true
                 else
                     _report(key, "unknown target '{entry.get_string()}'")
                 fi
             od
+
+            if names_dotnet /\ kind != ManifestKind.LIBRARY then
+                if targets.count == 0 then
+                    _report(key, "{BUILD_TARGETS.DOTNET_UNSUPPORTED}; list wasm or llvm instead")
+                else
+                    _ignored_dotnet = true
+                fi
+            fi
 
             return targets
         si
