@@ -63,7 +63,7 @@ namespace Ghul.Cli is
             let triple = LLVM_TOOLCHAIN.triple()
 
             if !triple? then
-                return ERROR("ghul-llvm is not built for this platform")
+                return ERROR("ghul-llvm is not built for {Host.HOST.rid() ?? "this platform"}; it is released for linux-x64 only")
             fi
 
             let toolchain = LLVM_TOOLCHAIN.for_this_user()

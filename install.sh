@@ -131,10 +131,12 @@ esac
 
 rid="${os_name}-${arch_name}"
 
-# Linux x64 is the only platform an archive is published for.
-if [ "${rid}" != "linux-x64" ]; then
-    fail "ghul-cli is not built for ${rid}; install the .NET SDK and run 'dotnet tool install -g ghul.cli' instead"
-fi
+# An archive is published for Linux on x64 and on arm64. The arm64 one carries
+# the tool alone: ghul runs its compiler under Node there, and fetches it.
+case "${rid}" in
+    linux-x64 | linux-arm64) ;;
+    *) fail "ghul-cli is not built for ${rid}; install the .NET SDK and run 'dotnet tool install -g ghul.cli' instead" ;;
+esac
 
 # --- how we fetch ------------------------------------------------------------
 
@@ -312,19 +314,23 @@ if [ ! -x "${work}/unpack/ghul" ]; then
     fail "the archive holds no ghul executable at its root"
 fi
 
-if [ ! -d "${work}/unpack/compilers" ]; then
-    fail "the archive holds no compilers directory beside ghul"
-fi
+# The x64 archive ships a Native AOT compiler beside the tool; the arm64 one
+# ships none, since ghul runs the wasm-built compiler under Node there.
+# Checked before anything is replaced, so an x64 archive with no compiler in
+# it leaves the installed tool as it was.
+if [ "${rid}" = "linux-x64" ]; then
+    if [ ! -d "${work}/unpack/compilers" ]; then
+        fail "the archive holds no compilers directory beside ghul"
+    fi
 
-# Checked before anything is replaced, so an archive with no compiler in it
-# leaves the installed tool as it was.
-shipped_any=""
-for shipped in "${work}"/unpack/compilers/*; do
-    [ -d "${shipped}" ] && shipped_any="true"
-done
+    shipped_any=""
+    for shipped in "${work}"/unpack/compilers/*; do
+        [ -d "${shipped}" ] && shipped_any="true"
+    done
 
-if [ -z "${shipped_any}" ]; then
-    fail "the archive ships no compiler"
+    if [ -z "${shipped_any}" ]; then
+        fail "the archive ships no compiler"
+    fi
 fi
 
 # --- install -----------------------------------------------------------------

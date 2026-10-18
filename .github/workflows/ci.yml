@@ -376,8 +376,128 @@ jobs:
           ghul-cli-install.sh
           ghul-cli-install.sh.sha256
 
+  # The same tool for Linux on arm64, a Raspberry Pi among them, built on a
+  # native arm64 runner so that the build and the smoke test below both run
+  # on the architecture they are for. The archive holds the tool alone: ghul
+  # runs the wasm-built compiler under Node on arm64, and fetches it.
+  aot_release_archive_arm64:
+    name: Build the Native AOT archive for arm64
+    needs: [version]
+    runs-on: ubuntu-24.04-arm
+
+    timeout-minutes: 30
+
+    if: ${{ github.event_name != 'pull_request' }}
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Set up .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v7
+      with:
+        node-version: '24'
+
+    - name: Install the native build tools
+      run: sudo apt-get update -qq && sudo apt-get install -y -qq clang zlib1g-dev
+
+    - name: Restore local tools
+      run: dotnet tool restore
+
+    - name: Build the tool with Native AOT
+      shell: bash
+      run: |
+        set -euo pipefail
+        dotnet publish cli/ghul-cli.ghulproj -c Release -r linux-arm64 \
+          -p:PublishAot=true \
+          -p:Version=${{ needs.version.outputs.package }} \
+          -o build
+
+        mv build/ghul-cli build/ghul
+        rm -f build/ghul-cli.dbg
+
+    - name: Check the tool reports this release's version
+      shell: bash
+      run: |
+        set -euo pipefail
+        reported="$(build/ghul --version 2>&1 | head -n 1)"
+        echo "${reported}"
+
+        if ! printf '%s' "${reported}" | grep -q -- "${{ needs.version.outputs.package }}"; then
+          echo "the tool reports '${reported}'; expected version ${{ needs.version.outputs.package }}" >&2
+          exit 1
+        fi
+
+    - name: Test ghul update
+      shell: bash
+      run: ./tests/update.sh build/ghul
+
+    - name: Check the archive is self-contained
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        if ldd build/ghul 2>/dev/null | grep -qiE 'libcoreclr|libhostfxr|libhostpolicy|libstdc\+\+'; then
+          echo "build/ghul links a runtime or toolchain library:" >&2
+          ldd build/ghul >&2
+          exit 1
+        fi
+
+        actual="$(cd build && find . -type f | sed 's|^\./||' | sort)"
+
+        if [ "${actual}" != "ghul" ]; then
+          echo "the payload is not the tool alone:" >&2
+          printf '%s\n' "${actual}" >&2
+          exit 1
+        fi
+
+    # What a Raspberry Pi user does first, on an arm64 machine: a project
+    # made by the tool, and its program built by the wasm-built compiler
+    # under Node and run, with nothing of .NET on the path.
+    - name: Make and run a project with the tool
+      shell: bash
+      run: |
+        set -euo pipefail
+        scratch="$(mktemp -d)"
+        home="${scratch}/home"
+        mkdir -p "${home}"
+
+        ghul="${PWD}/build/ghul"
+        node_directory="$(dirname "$(command -v node)")"
+        cd "${scratch}"
+
+        run() { env -i HOME="${home}" PATH="${node_directory}:/usr/bin:/bin" "${ghul}" "$@"; }
+
+        run new hello
+        cd hello
+        out="$(run run)"
+        echo "${out}"
+
+        if ! printf '%s' "${out}" | grep -qi 'hello'; then
+          echo "the program printed '${out}'" >&2
+          exit 1
+        fi
+
+    - name: Pack the archive
+      shell: bash
+      run: |
+        set -euo pipefail
+        tar -czf ghul-cli-linux-arm64.tar.gz -C build ghul
+        sha256sum ghul-cli-linux-arm64.tar.gz >ghul-cli-linux-arm64.tar.gz.sha256
+
+    - uses: actions/upload-artifact@v7
+      with:
+        name: aot-archive-arm64
+        path: |
+          ghul-cli-linux-arm64.tar.gz
+          ghul-cli-linux-arm64.tar.gz.sha256
+
   create_release:
-    needs: [version, publish_package, aot_release_archive]
+    needs: [version, publish_package, aot_release_archive, aot_release_archive_arm64]
     name: Create release
     runs-on: ubuntu-latest
 
@@ -404,6 +524,12 @@ jobs:
         name: aot-archive
         path: aot
 
+    - name: Download the Native AOT archive for arm64
+      uses: actions/download-artifact@v8
+      with:
+        name: aot-archive-arm64
+        path: aot
+
     - name: Create changelog
       run: git log -1 --format="%s%n%n%b%n%n" >changelog.txt
 
@@ -419,6 +545,8 @@ jobs:
           ./nupkg/ghul.project.${{ needs.version.outputs.package }}.nupkg \
           ./aot/ghul-cli-linux-x64.tar.gz \
           ./aot/ghul-cli-linux-x64.tar.gz.sha256 \
+          ./aot/ghul-cli-linux-arm64.tar.gz \
+          ./aot/ghul-cli-linux-arm64.tar.gz.sha256 \
           ./aot/ghul-cli-install.sh \
           ./aot/ghul-cli-install.sh.sha256 \
           --title "${{ needs.version.outputs.tag }}" \

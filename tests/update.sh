@@ -24,6 +24,11 @@ fail() {
     exit 1
 }
 
+case "$(uname -m)" in
+    aarch64 | arm64) rid="linux-arm64" ;;
+    *) rid="linux-x64" ;;
+esac
+
 running="$("$aot" version | head -n 1 | cut -d' ' -f2)"
 running="${running%%+*}"
 newer="99.0.0"
@@ -47,17 +52,23 @@ mkdir -p "$HOME"
 release() {
     local tag="$1" executable="$2" release_dir="$mirror/download/$1" payload="$scratch/payload-$1"
 
-    mkdir -p "$release_dir" "$payload/compilers/0.0.0"
+    mkdir -p "$release_dir" "$payload"
     cp "$executable" "$payload/ghul"
     chmod +x "$payload/ghul"
-    echo "a compiler" > "$payload/compilers/0.0.0/ghul-compiler"
 
-    tar -czf "$release_dir/ghul-cli-linux-x64.tar.gz" -C "$payload" ghul compilers
+    # The x64 archive ships a compiler beside the tool; the arm64 one does not.
+    if [ "$rid" = "linux-x64" ]; then
+        mkdir -p "$payload/compilers/0.0.0"
+        echo "a compiler" > "$payload/compilers/0.0.0/ghul-compiler"
+        tar -czf "$release_dir/ghul-cli-$rid.tar.gz" -C "$payload" ghul compilers
+    else
+        tar -czf "$release_dir/ghul-cli-$rid.tar.gz" -C "$payload" ghul
+    fi
     cp "$repo_root/install.sh" "$release_dir/ghul-cli-install.sh"
 
     (
         cd "$release_dir"
-        sha256sum ghul-cli-linux-x64.tar.gz > ghul-cli-linux-x64.tar.gz.sha256
+        sha256sum "ghul-cli-$rid.tar.gz" > "ghul-cli-$rid.tar.gz.sha256"
         sha256sum ghul-cli-install.sh > ghul-cli-install.sh.sha256
     )
 }
