@@ -201,10 +201,11 @@ jobs:
           --no-symbols
 
   # What a user installs when they have no .NET: the tool compiled with
-  # Native AOT, and the Native AOT compiler it ships beside it. Both are
-  # statically linked and run with nothing but the C library, so the install
+  # Native AOT, which runs with nothing but the C library, so the install
   # needs no SDK, no runtime, and no build tooling - the runner has a C
-  # toolchain, and that is the only place one appears.
+  # toolchain, and that is the only place one appears. The compiler is not in
+  # the archive: the first build fetches one, so the two versions are not
+  # tied together.
   aot_release_archive:
     name: Build the Native AOT archive
     needs: [version]
@@ -268,42 +269,6 @@ jobs:
       shell: bash
       run: ./tests/update.sh build/ghul
 
-    # The newest compiler release, rather than a pinned one: the archive is
-    # what a user installs to get going, and a compiler a version behind is
-    # what they then have to update. The job fails if that release has no
-    # Native AOT archive, which is the honest signal that the compiler has
-    # not shipped one yet.
-    - name: Fetch the Native AOT compiler
-      shell: bash
-      run: |
-        set -euo pipefail
-        compiler=$(
-          curl -fsSL https://api.nuget.org/v3-flatcontainer/ghul.compiler/index.json \
-            | tr ',' '\n' \
-            | grep -oE '"[0-9]+\.[0-9]+\.[0-9]+"' \
-            | tr -d '"' \
-            | sort -V \
-            | tail -n 1
-        )
-
-        if [ -z "${compiler}" ]; then
-          echo "no ghul.compiler release could be read from the feed" >&2
-          exit 1
-        fi
-
-        echo "compiler=${compiler}" >>"$GITHUB_ENV"
-        echo "shipping ghul.compiler ${compiler}"
-
-        url="https://github.com/ghul-lang/ghul/releases/download/v${compiler}/ghul-compiler-linux-x64.tar.gz"
-
-        if ! curl -fsSL "${url}" -o compiler.tar.gz; then
-          echo "ghul.compiler ${compiler} has no Native AOT archive at ${url}" >&2
-          exit 1
-        fi
-
-        mkdir -p "build/compilers/${compiler}"
-        tar -xzf compiler.tar.gz -C "build/compilers/${compiler}" --strip-components=1
-
     # The one property this whole thing exists for: what is installed runs
     # on its own. A binary that had picked up a dependency on the .NET
     # runtime, or an archive that carried a toolchain, would still install
@@ -314,13 +279,7 @@ jobs:
       run: |
         set -euo pipefail
 
-        # The version the step before wrote to $GITHUB_ENV is already in
-        # this step's environment; $GITHUB_ENV itself is a different file
-        # for every step, so it is read from the environment and not from
-        # there.
-        payload="build/compilers/${compiler:?the compiler version was not passed through}"
-
-        for binary in build/ghul "${payload}/ghul-compiler"; do
+        for binary in build/ghul; do
           if [ ! -x "${binary}" ]; then
             echo "${binary} is not executable" >&2
             exit 1
@@ -335,34 +294,24 @@ jobs:
           echo "${binary}: $(ldd "${binary}" | grep -c '=>' ) shared libraries, none of them .NET"
         done
 
-        # The archive holds the tool and one compiler, and nothing else: no
-        # toolchain, no runtime, no package, no debug symbols. The list is
-        # named rather than counted, so anything that turns up unexpected -
-        # a stray runtime file, a leftover from the publish - fails here
-        # rather than shipping and breaking on the user's machine.
+        # The archive holds the tool and nothing else: no compiler, no
+        # toolchain, no runtime, no package, no debug symbols. A stray file
+        # from the publish fails here rather than shipping.
         actual="$(cd build && find . -type f | sed 's|^\./||' | sort)"
 
-        expected=$(printf '%s\n' \
-          "ghul" \
-          "compilers/${compiler}/analysis-protocol.runtimeconfig.json" \
-          "compilers/${compiler}/ghul-compiler" \
-          "compilers/${compiler}/ghul-runtime.dll" \
-          "compilers/${compiler}/requirements.json" \
-          "compilers/${compiler}/wasm.dll" \
-          | sort)
-
-        if ! diff -u <(printf '%s\n' "${expected}" | sort) <(printf '%s\n' "${actual}"); then
-          echo "the payload is not the tool and one compiler" >&2
+        if [ "${actual}" != "ghul" ]; then
+          echo "the payload is not the tool alone:" >&2
+          printf '%s\n' "${actual}" >&2
           exit 1
         fi
 
-        echo "payload is exactly the tool and one compiler."
+        echo "payload is exactly the tool."
 
     - name: Pack the archive
       shell: bash
       run: |
         set -euo pipefail
-        tar -czf ghul-cli-linux-x64.tar.gz -C build ghul compilers
+        tar -czf ghul-cli-linux-x64.tar.gz -C build ghul
         cp install.sh ghul-cli-install.sh
         sha256sum ghul-cli-linux-x64.tar.gz >ghul-cli-linux-x64.tar.gz.sha256
         sha256sum ghul-cli-install.sh >ghul-cli-install.sh.sha256

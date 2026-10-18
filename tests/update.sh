@@ -47,7 +47,7 @@ export GHUL_COMPILER_FEED="file://$mirror/feed"
 printf '{"versions": ["0.0.0"]}\n' > "$mirror/feed/ghul.compiler/index.json"
 mkdir -p "$HOME"
 
-# A release directory holding `ghul` and a compiler, packed and checksummed
+# A release directory holding `ghul`, packed and checksummed
 # the way the release job packs them.
 release() {
     local tag="$1" executable="$2" release_dir="$mirror/download/$1" payload="$scratch/payload-$1"
@@ -56,14 +56,7 @@ release() {
     cp "$executable" "$payload/ghul"
     chmod +x "$payload/ghul"
 
-    # The x64 archive ships a compiler beside the tool; the arm64 one does not.
-    if [ "$rid" = "linux-x64" ]; then
-        mkdir -p "$payload/compilers/0.0.0"
-        echo "a compiler" > "$payload/compilers/0.0.0/ghul-compiler"
-        tar -czf "$release_dir/ghul-cli-$rid.tar.gz" -C "$payload" ghul compilers
-    else
-        tar -czf "$release_dir/ghul-cli-$rid.tar.gz" -C "$payload" ghul
-    fi
+    tar -czf "$release_dir/ghul-cli-$rid.tar.gz" -C "$payload" ghul
     cp "$repo_root/install.sh" "$release_dir/ghul-cli-install.sh"
 
     (

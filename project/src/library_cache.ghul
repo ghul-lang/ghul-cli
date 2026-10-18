@@ -67,6 +67,8 @@ namespace Ghul.Project is
                 let directory = Path.join([repository, commit])
 
                 if !Directory.exists(directory) then
+                    IO.Std.error.write_line("ghul: fetching {url} {tag}...")
+
                     let fetched = _fetch_into(url, tag, commit, repository, directory)
 
                     if let (problem): Result.ERROR = fetched then

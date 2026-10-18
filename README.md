@@ -68,13 +68,12 @@ curl -fsSL https://raw.githubusercontent.com/ghul-lang/ghul-cli/main/install.sh 
 
 This installs `ghul` as a native executable, built with .NET Native AOT, which
 needs nothing installed but the C library: no .NET runtime and no SDK. It is
-built for Linux on x64 and on arm64, a Raspberry Pi 4 or 5 among them. On x64
-the archive also carries the Native AOT compiler; on arm64 it carries the tool
-alone, and `ghul` runs the wasm-built compiler under Node, fetching it and a
-Node the first time they are needed. The tool goes into
-`~/.local/opt/ghul`, linked from `~/.local/bin/ghul`, and the compiler an x64
-archive ships goes into the compiler cache above. `sh install.sh --help` lists the
-options, and `--dry-run` reports what it would do.
+built for Linux on x64 and on arm64, a Raspberry Pi 4 or 5 among them. The
+archive holds the tool alone, so the compiler is never out of date with it:
+the first build fetches one into the compiler cache above, the wasm-built
+compiler under Node by default. The tool goes into `~/.local/opt/ghul`, linked
+from `~/.local/bin/ghul`. `sh install.sh --help` lists the options, and
+`--dry-run` reports what it would do.
 
 `ghul update` updates it in place.
 
@@ -89,7 +88,7 @@ ghul-core and ghul-runtime with `git`.
 Without .NET, the compiler itself is the wasm-built one, run by Node: a
 single archive every release publishes for every platform, fetched the first
 time it is needed. The Node it runs under is the one on `PATH`, or the one
-`ghul install node` brought in. On a machine with no Node, `ghul` uses the
+`ghul install node` brought in. On a machine with no Node, `ghul` fetches the
 Native AOT compiler instead, which is published for Linux x64 only; on arm64
 there is none, so the machine needs Node, and `ghul install node` brings one in.
 
