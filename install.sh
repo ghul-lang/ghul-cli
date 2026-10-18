@@ -118,6 +118,11 @@ esac
 
 rid="${os_name}-${arch_name}"
 
+# Linux x64 is the only platform an archive is published for.
+if [ "${rid}" != "linux-x64" ]; then
+    fail "ghul-cli is not built for ${rid}; install the .NET SDK and run 'dotnet tool install -g ghul.cli' instead"
+fi
+
 # --- how we fetch ------------------------------------------------------------
 
 if command -v curl >/dev/null 2>&1; then
