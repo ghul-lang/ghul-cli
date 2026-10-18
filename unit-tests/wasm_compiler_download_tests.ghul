@@ -56,7 +56,11 @@ namespace Ghul.Cli.Tests is
         // A flat gzip-tar of `ghul.wasm` and `ghul.mjs`, the shape the
         // release packs: no wrapping directory, unlike the AOT archive.
         _archive(wasm: string, loader: string) -> ubyte[] static is
-            let scratch = Path.combine(Path.get_temp_path(), "ghul-wasm-archive-{System.Guid.new_guid().to_string("N")}")
+            let name = "ghul-wasm-archive-{System.Guid.new_guid().to_string("N")}"
+            let scratch = Path.combine(Path.get_temp_path(), name)
+            // Outside `scratch`, so taring the directory never tries to
+            // read the archive it is itself still being written into.
+            let archive = Path.combine(Path.get_temp_path(), "{name}.tar.gz")
 
             Directory.create_directory(scratch)
 
@@ -64,7 +68,6 @@ namespace Ghul.Cli.Tests is
                 File.write_all_text(Path.combine(scratch, "ghul.wasm"), wasm)
                 File.write_all_text(Path.combine(scratch, "ghul.mjs"), loader)
 
-                let archive = Path.combine(scratch, "ghul-compiler-wasm.tar.gz")
                 let output = IO.FileStream(archive, IO.FileMode.CREATE)
 
                 try
@@ -82,6 +85,9 @@ namespace Ghul.Cli.Tests is
                 return File.read_all_bytes(archive)
             finally
                 Directory.delete(scratch, true)
+                if File.exists(archive) then
+                    File.delete(archive)
+                fi
             yrt
         si
 
