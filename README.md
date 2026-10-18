@@ -167,7 +167,9 @@ installs exactly that version, older or newer, and does nothing if that
 version is already installed. `GHUL_COMPILER_FEED` names a different feed to
 download from, for a mirror or an offline network.
 
-`ghul install llvm` does the same as `--llvm` did. `ghul install wasmtime`
+`ghul install llvm` installs the ghul-llvm tool the llvm target links with: the
+release the installed compiler needs, or the newest compatible one. It is
+released for Linux on x64 and arm64. `ghul install wasmtime`
 installs the wasmtime host that runs wasm programs where there is no Node.js;
 a run that needs it and finds it missing downloads the latest release first.
 `ghul install node` brings a Node.js distribution into the cache from
@@ -183,8 +185,8 @@ targets only, into a store of its own. A project chooses it with
 the ordinary compiler. It is published for Linux on x64 only.
 
 `ghul install-compiler` and `ghul install-compiler --llvm` still work, with a
-note pointing at the new spellings; they are aliases of `ghul install
-compiler` and `ghul install llvm`.
+note pointing at the new spellings: `ghul install compiler` and `ghul install
+compiler --llvm`.
 
 `ghul update` updates a `ghul` installed without .NET to the latest release,
 or to the release `--version` names, older or newer. It runs that release's

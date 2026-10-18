@@ -32,28 +32,53 @@ namespace Ghul.Project is
         /// - url: its repository
         /// - floor: the oldest release the compiler works with, as `x.y.z`
         /// - compiler_version: the compiler the build uses
-        resolve(name: string, url: string, floor: string, compiler_version: string) -> Result[string, string] is
-            let record = Path.join([cache.root, LIBRARY_CACHE.repository_directory_name(url), "chosen", "{compiler_version}-{floor}"])
-            let kept = _kept(record)
+        resolve(name: string, url: string, floor: string, compiler_version: string) -> Result[string, string] =>
+            kept_or_chosen(
+                Path.join([cache.root, LIBRARY_CACHE.repository_directory_name(url), "chosen", "{compiler_version}-{floor}"]),
+                () -> Result[Collections.List[(tag: string, version: System.Version)], string] is
+                    let listed = GIT.run(LIST[string](["ls-remote", "--tags", "--refs", url]), null)
+
+                    if !listed.succeeded then
+                        return ERROR("cannot list the releases of {url}: {listed.error.trim()}")
+                    fi
+
+                    return OK(release_tags(listed.output))
+                si,
+                tags => choose(name, url, floor, compiler_version, tags))
+
+        /// The choice recorded at `record` where it was made within the last
+        /// day; otherwise what `choose` makes of the tags `list` answers,
+        /// recorded for next time. Where the tags cannot be listed, the
+        /// recorded choice is used however old it is.
+        ///
+        /// - record: where the choice is kept
+        /// - list: the release tags, newest first, or why they cannot be had
+        /// - choose: the tag to use from those
+        kept_or_chosen(
+            record: string,
+            list: () -> Result[Collections.List[(tag: string, version: System.Version)], string],
+            choose: (Collections.List[(tag: string, version: System.Version)]) -> Result[string, string]
+        ) -> Result[string, string] static is
+            let kept = kept_choice(record)
 
             if let tag = kept /\ File.get_last_write_time_utc(record) > System.DateTime.utc_now.subtract(_kept_for) then
                 return OK(tag)
             fi
 
-            let listed = GIT.run(LIST[string](["ls-remote", "--tags", "--refs", url]), null)
+            let listed = list()
 
-            if !listed.succeeded then
+            if let (problem): Result.ERROR = listed then
                 if let tag = kept then
                     return OK(tag)
                 fi
 
-                return ERROR("cannot list the releases of {url}: {listed.error.trim()}")
+                return ERROR(problem)
             fi
 
-            let chosen = choose(name, url, floor, compiler_version, release_tags(listed.output))
+            let chosen = choose(listed!)
 
             if chosen? then
-                _keep(record, chosen!)
+                keep_choice(record, chosen!)
             fi
 
             return chosen
@@ -73,11 +98,38 @@ namespace Ghul.Project is
             floor: string,
             compiler_version: string,
             tags: Collections.List[(tag: string, version: System.Version)]
-        ) -> Result[string, string] is
-            let lowest = System.Version.parse(floor)
+        ) -> Result[string, string] =>
+            newest_meeting(name, url, floor, compiler_version, tags, (tag: string) -> Result[System.Version?, string] is
+                let fetched = cache.fetch_tag(url, tag)
 
-            // A compiler that is not a release, such as a local build, is
-            // taken to be newer than any release's floor.
+                if let (problem): Result.ERROR = fetched then
+                    return ERROR(problem)
+                fi
+
+                return OK(minimum_compiler(fetched!.directory))
+            si)
+
+        /// The tag to use from `tags`, newest first: the first at or above
+        /// `floor` whose oldest compiler, as `needs` answers it, is no newer
+        /// than `compiler_version`. A compiler that is not a release, such as
+        /// a local build, is taken to be newer than any release's floor.
+        ///
+        /// - name: what is being chosen, for messages
+        /// - source: where the releases come from, for messages
+        /// - floor: the oldest release the compiler works with
+        /// - compiler_version: the compiler the build uses
+        /// - tags: the release tags, newest first
+        /// - needs: the oldest compiler a tag's release declares, null where
+        ///   it declares none, or why that could not be read
+        newest_meeting(
+            name: string,
+            source: string,
+            floor: string,
+            compiler_version: string,
+            tags: Collections.List[(tag: string, version: System.Version)],
+            needs: (string) -> Result[System.Version?, string]
+        ) -> Result[string, string] static is
+            let lowest = System.Version.parse(floor)
             let compiler = _version(compiler_version)
             let oldest_needed: System.Version? mut = null
 
@@ -86,20 +138,20 @@ namespace Ghul.Project is
                     break
                 fi
 
-                let fetched = cache.fetch_tag(url, candidate.tag)
+                let declared = needs(candidate.tag)
 
-                if let (problem): Result.ERROR = fetched then
+                if let (problem): Result.ERROR = declared then
                     return ERROR(problem)
                 fi
 
-                let needs = minimum_compiler(fetched!.directory)
+                let needed = declared!
 
-                if !compiler? \/ !needs? \/ needs <= compiler then
+                if !compiler? \/ !needed? \/ needed <= compiler then
                     return OK(candidate.tag)
                 fi
 
-                if !oldest_needed? \/ needs < oldest_needed! then
-                    oldest_needed = needs
+                if !oldest_needed? \/ needed < oldest_needed! then
+                    oldest_needed = needed
                 fi
             od
 
@@ -107,7 +159,7 @@ namespace Ghul.Project is
                 return ERROR("{name}: ghul.compiler {compiler_version} needs v{floor} or newer, and every release from v{floor} needs ghul.compiler {needed} or newer")
             fi
 
-            return ERROR("{name}: ghul.compiler {compiler_version} needs v{floor} or newer, and {url} has no release that new")
+            return ERROR("{name}: ghul.compiler {compiler_version} needs v{floor} or newer, and {source} has no release that new")
         si
 
         /// The release tags in `ls-remote` output, as `vX.Y.Z` with their
@@ -146,8 +198,16 @@ namespace Ghul.Project is
                 return null
             fi
 
+            return minimum_compiler_in(File.read_all_text(path))
+        si
+
+        /// The oldest compiler a release's `requirements.json` declares, as
+        /// `minimum-compiler`, or null where it declares none or is not JSON.
+        ///
+        /// - text: the content of the file
+        minimum_compiler_in(text: string) -> System.Version? static is
             try
-                let root = JsonDocument.parse(File.read_all_text(path), _).root_element
+                let root = JsonDocument.parse(text, _).root_element
                 let value: System.Text.Json.JsonElement mut
 
                 if root.value_kind == JsonValueKind.OBJECT /\ root.try_get_property("minimum-compiler", value ref) /\ value.value_kind == JsonValueKind.STRING then
@@ -174,7 +234,11 @@ namespace Ghul.Project is
             return null
         si
 
-        _kept(record: string) -> string? static is
+        /// The tag a choice recorded at `record` holds, or null where there is
+        /// none.
+        ///
+        /// - record: where the choice is kept
+        kept_choice(record: string) -> string? static is
             if !File.exists(record) then
                 return null
             fi
@@ -184,9 +248,12 @@ namespace Ghul.Project is
             return if tag.length > 0 then tag else null fi
         si
 
-        // Written beside the record and renamed into place, so a reader sees
-        // the whole choice or none.
-        _keep(record: string, tag: string) static is
+        /// Records `tag` as the choice at `record`. Written beside it and
+        /// renamed into place, so a reader sees the whole choice or none.
+        ///
+        /// - record: where the choice is kept
+        /// - tag: the tag chosen
+        keep_choice(record: string, tag: string) static is
             Directory.create_directory(Path.get_directory_name(record)!)
 
             let scratch = "{record}.tmp-{System.Guid.new_guid().to_string("N").substring(0, 8)}"

@@ -106,6 +106,63 @@ namespace Ghul.Cli.Tests is
             yrt
         si
 
+        @Test()
+        a_declared_floor_gets_the_newest_release_that_admits_the_compiler() is
+            let scratch = _scratch()
+
+            try
+                let toolchain = _releases(scratch)
+
+                assert toolchain.release_tag("1.0.0", "66.0.0")! =~ "v1.1.0"
+                assert toolchain.release_tag("1.0.0", "71.0.0")! =~ "v1.2.0"
+            finally
+                Directory.delete(scratch, true)
+            yrt
+        si
+
+        @Test()
+        a_release_that_declares_no_compiler_admits_any() is
+            let scratch = _scratch()
+
+            try
+                assert _releases(scratch).release_tag("1.0.0", "60.0.0")! =~ "v1.0.0"
+            finally
+                Directory.delete(scratch, true)
+            yrt
+        si
+
+        @Test()
+        a_floor_no_release_above_admits_is_a_problem() is
+            let scratch = _scratch()
+
+            try
+                let chosen = _releases(scratch).release_tag("1.2.0", "66.0.0")
+
+                assert !chosen?
+                assert (cast Result.ERROR(chosen)).error.contains("every release from v1.2.0 needs ghul.compiler 70.0.0 or newer") else (cast Result.ERROR(chosen)).error
+            finally
+                Directory.delete(scratch, true)
+            yrt
+        si
+
+        // Three releases: v1.0.0 declaring no compiler, v1.1.0 needing
+        // 65.20.0, v1.2.0 needing 70.0.0.
+        _releases(scratch: string) -> LLVM_TOOLCHAIN is
+            let releases = Path.combine(scratch, "releases")
+
+            Directory.create_directory(Path.combine(releases, "v1.0.0"))
+
+            _declare(releases, "v1.1.0", "65.20.0")
+            _declare(releases, "v1.2.0", "70.0.0")
+
+            return LLVM_TOOLCHAIN(Path.combine(scratch, "cache"), System.Uri(releases).absolute_uri)
+        si
+
+        _declare(releases: string, tag: string, needs: string) is
+            Directory.create_directory(Path.combine(releases, tag))
+            File.write_all_text(Path.combine(releases, tag, "requirements.json"), "{{ \"abi\": 4, \"minimum-compiler\": \"{needs}\" }}")
+        si
+
         // Writes a release laid out as ghul-llvm publishes one: a gzipped
         // tar holding one directory with `bin/ghul-llvm` in it, and its
         // checksum beside it, right or wrong.
