@@ -46,23 +46,6 @@ namespace Ghul.Cli is
 
     cache_root() -> string => Path.join([cache_home(), "scripts"])
 
-    // Keyed on the source's own bytes, the compiler version that will
-    // build it and this tool's own version, so a compiler update
-    // invalidates every cached script rather than serving a binary built
-    // by a version that no longer matches, and so does a ghul update:
-    // the build is this tool's work as much as the compiler's, and a
-    // release that changes how scripts are compiled must not go on
-    // serving binaries the previous release built.
-    cache_entry_dir_for_bytes(bytes: ubyte[], compiler_version: string) -> string is
-        let digest = System.Security.Cryptography.SHA256.hash_data(bytes)
-        let hex = System.Convert.to_hex_string(digest).to_lower()
-
-        return "{cache_root()}/{hex}-{compiler_version}-{cli_version()}"
-    si
-
-    cache_entry_dir(script_path: string, compiler_version: string) -> string =>
-        cache_entry_dir_for_bytes(File.read_all_bytes(script_path), compiler_version)
-
     // The conventional stdin marker: a lone `-` names standard input rather
     // than a file, matching every other CLI that reads a script this way. A
     // real file named `-` is reached by qualifying the path (`./-`), the
@@ -216,143 +199,6 @@ namespace Ghul.Cli is
         return Host.NATIVE_COMPILER_DOWNLOAD.of(store).install(version, say)
     si
 
-    compile_script_into(compiler: Host.COMPILER_COMMAND, script_path: string, run_dir: string, store: Host.COMPILER_STORE, compiler_version: string) -> bool is
-        Directory.create_directory(run_dir)
-
-        let output = "{run_dir}/run.exe"
-
-        let start_info = System.Diagnostics.ProcessStartInfo()
-        start_info.file_name = compiler.file_name
-        start_info.use_shell_execute = false
-
-        for argument in compiler.leading_arguments() do
-            start_info.argument_list.add(argument)
-        od
-
-        start_info.argument_list.add(script_path)
-        start_info.argument_list.add("-o")
-        start_info.argument_list.add(output)
-
-        // Where the machine has no SDK ref pack for the compiler to find,
-        // it is pointed at the runtime's own assemblies, so a script
-        // compiles with only the .NET runtime installed.
-        if let references: string = Host.REFERENCE_ASSEMBLIES.directory() then
-            start_info.argument_list.add("--sdk-ref-path")
-            start_info.argument_list.add(references)
-        fi
-
-        if wants_implicit_default_use(compiler_version) then
-            start_info.argument_list.add("--implicit-default-use")
-        fi
-
-        // A script that compiles says nothing: the compiler's success line
-        // is left out, and everything else it writes is passed on.
-        start_info.redirect_standard_error = true
-
-        if let process: System.Diagnostics.Process = System.Diagnostics.Process.start(start_info) then
-            while let line = process.standard_error.read_line() do
-                if line !~ Ghul.Project.PROJECT_BUILD.SUCCESS_LINE then
-                    Std.error.write_line(line)
-                fi
-            od
-
-            process.wait_for_exit()
-
-            if process.exit_code != 0 then
-                return false
-            fi
-
-            // Every ghul.compiler package carries ghul-runtime.dll beside
-            // its own dll; a compiled script needs a copy sitting beside it too.
-            if let runtime_dll: string = store.runtime_assembly(compiler_version) then
-                File.copy(runtime_dll, "{run_dir}/ghul-runtime.dll", true)
-            fi
-
-            return true
-        fi
-
-        Std.error.write_line("ghul: failed to start the compiler")
-        return false
-    si
-
-    // Writes `bytes` (a script read from stdin) into a `.ghul` file inside
-    // `scratch_dir` so it has a real path to hand the compiler.
-    materialize_bytes(bytes: ubyte[], scratch_dir: string) -> string is
-        Directory.create_directory(scratch_dir)
-
-        let path = "{scratch_dir}/source.ghul"
-
-        File.write_all_bytes(path, bytes)
-
-        return path
-    si
-
-    // Compiles into a fresh, uniquely-named scratch directory and only
-    // then renames it onto `run_dir`. Directory.move is a single rename on
-    // the same filesystem, so a concurrent reader's `File.exists(output)`
-    // check never observes a half-written entry, and a crash mid-compile
-    // never leaves one behind either.
-    //
-    // Guarded by a per-cache-entry lock so two processes compiling the
-    // same script under the same compiler version serialise on the work
-    // rather than both compiling it, but correctness does not depend on
-    // the lock: whichever rename loses (because the other process's
-    // rename already landed) just discards its now-redundant scratch copy.
-    //
-    // `materialize` is handed the scratch directory and returns the actual
-    // `.ghul` file to compile - either the caller's own persistent path
-    // (ignoring the scratch directory), or a file freshly written into it
-    // (for a script read from stdin, which has no path of its own).
-    //
-    // `force` skips the "already compiled" fast path and, once a fresh
-    // compile has succeeded, discards whatever is already at `run_dir`
-    // before the rename - the explicit `--no-cache` escape hatch.
-    ensure_compiled(compiler: Host.COMPILER_COMMAND, materialize: (string) -> string, run_dir: string, store: Host.COMPILER_STORE, compiler_version: string, force: bool) -> bool is
-        let output = "{run_dir}/run.exe"
-
-        if !force /\ File.exists(output) then
-            return true
-        fi
-
-        Directory.create_directory(cache_root())
-
-        let lock_path = "{cache_root()}/.locks/{Path.get_file_name(run_dir)}.lock"
-        let lock_stream = acquire_lock(lock_path, null)
-
-        try
-            if !force /\ File.exists(output) then
-                return true
-            fi
-
-            let scratch_dir = "{run_dir}.tmp-{System.Environment.process_id}-{System.Guid.new_guid().to_string("N")}"
-            let script_path = materialize(scratch_dir)
-
-            if !compile_script_into(compiler, script_path, scratch_dir, store, compiler_version) then
-                if Directory.exists(scratch_dir) then
-                    Directory.delete(scratch_dir, true)
-                fi
-
-                return false
-            fi
-
-            if force /\ Directory.exists(run_dir) then
-                Directory.delete(run_dir, true)
-            fi
-
-            try
-                Directory.move(scratch_dir, run_dir)
-            catch e: IO.IOException
-                // Another process finished first and already holds run_dir;
-                // its copy is complete, ours is now redundant.
-                Directory.delete(scratch_dir, true)
-            yrt
-
-            return File.exists(output)
-        finally
-            lock_stream.close()
-        yrt
-    si
-
     read_all_stdin_bytes() -> ubyte[] is
         let stdin = Std.open_standard_input()
         let buffer = IO.MemoryStream()
@@ -362,31 +208,15 @@ namespace Ghul.Cli is
         return buffer.to_array()
     si
 
-    // Resolves a script reference - a real path, or the `-` stdin marker -
-    // into the bytes that key its cache entry and a `materialize` function
-    // that produces a real `.ghul` file to compile. Callers must already
-    // have confirmed the reference exists (or is the stdin marker).
-    //
-    // ghul.compiler's own argument parser only recognises a source file by
-    // its `.ghul` extension, so a script reached without one - the stdin
-    // marker, or an extensionless executable with a `#!` line - has its
-    // content copied into a `.ghul`-suffixed file before compiling, same as
-    // stdin. A path that already ends in `.ghul` is handed to the compiler
-    // unchanged.
-    resolve_source(script_ref: string) -> (materialize: (string) -> string, key_bytes: ubyte[]) is
+    // The bytes of a script reference - a real path, or the `-` stdin
+    // marker. Callers must already have confirmed the reference exists (or
+    // is the stdin marker).
+    script_bytes(script_ref: string) -> ubyte[] is
         if is_stdin_marker(script_ref) then
-            let bytes = read_all_stdin_bytes()
-
-            return (materialize = scratch_dir => materialize_bytes(bytes, scratch_dir), key_bytes = bytes)
+            return read_all_stdin_bytes()
         fi
 
-        let bytes = File.read_all_bytes(script_ref)
-
-        if script_ref.ends_with(".ghul") then
-            return (materialize = (_: string) => script_ref, key_bytes = bytes)
-        fi
-
-        return (materialize = scratch_dir => materialize_bytes(bytes, scratch_dir), key_bytes = bytes)
+        return File.read_all_bytes(script_ref)
     si
 
     cli_version() -> string is
@@ -1048,25 +878,31 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        let source = resolve_source(script_ref)
-        let store = Host.COMPILER_STORE.for_this_user()
+        let source = script_bytes(script_ref)
 
-        let ensured = ensure_compiler_installed(store, null, false)
+        let chosen = script_target(false)
 
-        if let (error): ERROR = ensured then
-            Std.error.write_line("ghul: {error}")
-            Std.error.write_line("ghul: could not install ghul.compiler")
+        if !chosen? then
             return 1
         fi
 
-        let compiler = store.command(ensured!)
-        let run_dir = cache_entry_dir_for_bytes(source.key_bytes, ensured!)
+        // The same build, into the same cache entry, that running the script
+        // makes; what is printed is what runs: a wasm build's loader, which
+        // Node runs, or the llvm build's executable.
+        let built = build_native_script(source, chosen.target!, chosen.reason, no_cache)
 
-        if !ensure_compiled(compiler, source.materialize, run_dir, store, ensured!, no_cache) then
-            return 1
+        if !built.project? then
+            return built.exit_code
         fi
 
-        Std.out.write_line("{run_dir}/run.exe")
+        let runnable =
+            if chosen.target! == Ghul.Project.BuildTarget.WASM then
+                IO.Path.change_extension(built.output, ".mjs")
+            else
+                built.output
+            fi
+
+        Std.out.write_line(runnable)
         return 0
     si
 
@@ -1090,14 +926,25 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        let source = resolve_source(script_ref)
+        let source = script_bytes(script_ref)
 
+        if let chosen: Ghul.Project.CHOSEN_TARGET = script_target(true) then
+            return run_native_script(source, chosen.target!, chosen.reason, script_args, no_cache)
+        fi
+
+        return 1
+    si
+
+    // The target a script is built for, as a run or a compile of it chooses
+    // it, or null with the reason reported. `will_run` says whether what is
+    // built is run as well, which a wasm build needs something to run under.
+    script_target(will_run: bool) -> Ghul.Project.CHOSEN_TARGET? is
         let host_problem: string? mut = null
         let global_host = Ghul.Project.GLOBAL_DEFAULTS.read(Ghul.Project.GLOBAL_DEFAULTS.path(), host_problem ref).host_wasm
 
         if let problem: string = host_problem then
             Std.error.write_line("ghul: {problem}")
-            return 1
+            return null
         fi
 
         let chosen =
@@ -1105,26 +952,26 @@ namespace Ghul.Cli is
                 Collections.LIST[Ghul.Project.BuildTarget](Ghul.Project.TARGET_CHOICE.ORDER),
                 Collections.LIST[Ghul.Project.BuildTarget](),
                 environment_target(),
-                MACHINE_TARGETS(true, true, global_host, null))
+                MACHINE_TARGETS(will_run, true, global_host, null))
 
         if let problem: string = chosen.problem then
             Std.error.write_line("ghul: {problem}")
-            return 1
+            return null
         fi
 
-        return run_native_script(source.key_bytes, chosen.target!, chosen.reason, script_args, no_cache)
+        return chosen
     si
 
     // Builds a script for wasm or llvm as a project of one source file,
     // cached by the script, the target, the compiler and every library and
-    // tool the build used, then runs what was built.
-    run_native_script(
+    // tool the build used: the build's exit status, and on success the
+    // project it was built as and its output.
+    build_native_script(
         script: ubyte[],
         target: Ghul.Project.BuildTarget,
         reason: string?,
-        script_args: Collections.List[string],
         force: bool
-    ) -> int is
+    ) -> (exit_code: int, project: Ghul.Project.LOADED_PROJECT?, output: string) is
         let say = (message: string) -> void => Std.error.write_line("ghul: {message}")
         let store = Host.COMPILER_STORE.for_this_user()
 
@@ -1133,7 +980,7 @@ namespace Ghul.Cli is
         if let (error): ERROR = ensured then
             say(error)
             say("could not determine the installed ghul.compiler version")
-            return 1
+            return (exit_code = 1, project = null, output = "")
         fi
 
         let compiler_version = ensured!
@@ -1155,7 +1002,7 @@ namespace Ghul.Cli is
             Ghul.Project.LOADED_PROJECT(manifest, cache_root(), target), compiler_version, requirements, cache, say)
 
         if !libraries? then
-            return 1
+            return (exit_code = 1, project = null, output = "")
         fi
 
         // Keyed on the tool the build used as well as the target and the
@@ -1176,7 +1023,7 @@ namespace Ghul.Cli is
 
             if let (error): ERROR = found then
                 say(error)
-                return 1
+                return (exit_code = 1, project = null, output = "")
             fi
 
             linker = found!
@@ -1219,7 +1066,7 @@ namespace Ghul.Cli is
 
                     if exit_code != 0 then
                         Directory.delete(scratch_dir, true)
-                        return exit_code
+                        return (exit_code = exit_code, project = null, output = "")
                     fi
 
                     if Directory.exists(run_dir) then
@@ -1233,10 +1080,29 @@ namespace Ghul.Cli is
             yrt
         fi
 
-        let problem: string? mut = null
-        let defaults = Ghul.Project.GLOBAL_DEFAULTS.read(Ghul.Project.GLOBAL_DEFAULTS.path(), problem ref)
+        return (exit_code = 0, project = project, output = output)
+    si
 
-        return Ghul.Project.PROJECT_RUN.run(project, output, script_args, defaults.host_wasm, say)
+    // Builds a script as `build_native_script` does, then runs what was
+    // built.
+    run_native_script(
+        script: ubyte[],
+        target: Ghul.Project.BuildTarget,
+        reason: string?,
+        script_args: Collections.List[string],
+        force: bool
+    ) -> int is
+        let built = build_native_script(script, target, reason, force)
+
+        if let project: Ghul.Project.LOADED_PROJECT = built.project then
+            let say = (message: string) -> void => Std.error.write_line("ghul: {message}")
+            let problem: string? mut = null
+            let defaults = Ghul.Project.GLOBAL_DEFAULTS.read(Ghul.Project.GLOBAL_DEFAULTS.path(), problem ref)
+
+            return Ghul.Project.PROJECT_RUN.run(project, built.output, script_args, defaults.host_wasm, say)
+        fi
+
+        return built.exit_code
     si
 
     // `--no-cache` is documented (and accepted) in two positions: before

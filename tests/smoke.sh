@@ -98,7 +98,7 @@ echo "smoke: 'ghul run' forces the same file to run..." >&2
 out="$(dotnet "$cli" run "$plain" forced)"
 check "$out" "shebang, forced" "'ghul run' output"
 
-echo "smoke: 'ghul compile' produces a cached binary and prints only its path..." >&2
+echo "smoke: 'ghul compile' builds the script as a run would and prints only the path to what runs..." >&2
 compile_script="$scratch/compile-me.ghul"
 cat > "$compile_script" <<'GHUL'
 entry() is
@@ -110,8 +110,8 @@ if [[ ! -f "$compiled_path" ]]; then
     echo "smoke: 'ghul compile' printed '$compiled_path', which is not a file" >&2
     exit 1
 fi
-out="$(dotnet "$compiled_path")"
-check "$out" "compiled" "output of the binary 'ghul compile' produced"
+out="$(node "$compiled_path")"
+check "$out" "compiled" "output of what 'ghul compile' built"
 
 echo "smoke: 'ghul install-compiler' with no version looks for the latest..." >&2
 out="$(dotnet "$cli" install-compiler 2>&1)"
@@ -137,8 +137,8 @@ if [[ ! -f "$compiled_from_stdin" ]]; then
     echo "smoke: 'ghul compile -' printed '$compiled_from_stdin', which is not a file" >&2
     exit 1
 fi
-out="$(dotnet "$compiled_from_stdin")"
-check "$out" "compiled from stdin" "output of the binary 'ghul compile -' produced"
+out="$(node "$compiled_from_stdin")"
+check "$out" "compiled from stdin" "output of what 'ghul compile -' built"
 
 echo "smoke: '--' lets a file literally named 'run' be run by default..." >&2
 literal_run="$scratch/run"
@@ -200,7 +200,7 @@ entry() is
 si
 GHUL
 compiled_no_cache="$(dotnet "$cli" compile --no-cache "$no_cache_script")"
-out="$(dotnet "$compiled_no_cache")"
+out="$(node "$compiled_no_cache")"
 check "$out" "fourth version" "'ghul compile --no-cache' output"
 
 echo "smoke: 'ghul cache clear' empties the whole cache..." >&2
