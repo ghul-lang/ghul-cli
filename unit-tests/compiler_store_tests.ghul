@@ -25,6 +25,28 @@ namespace Ghul.Cli.Tests is
             return (store = COMPILER_STORE(root), root = root)
         si
 
+        // A store asked to hold only the managed compiler, or only the
+        // Native AOT one, sees only that kind and runs it that way.
+        @Test()
+        a_store_of_one_kind__sees_and_runs_only_that_kind() is
+            let (any_store, root) = _store(["1.0.0"])
+
+            try
+                File.write_all_text(Path.join([root, "1.0.0", COMPILER_STORE.NATIVE_COMPILER_FILE_NAME]), "")
+
+                assert any_store.command("1.0.0").file_name !~ "dotnet";
+
+                let managed = Ghul.Repl.Host.COMPILER_STORE.managed_for_this_user()
+                let native = Ghul.Repl.Host.COMPILER_STORE.native_for_this_user()
+
+                assert managed.is_managed /\ !managed.is_native;
+                assert native.is_native /\ !native.is_managed;
+                assert managed.root !~ native.root /\ managed.root !~ any_store.root;
+            finally
+                _delete(root)
+            yrt
+        si
+
         _delete(root: string) is
             if IO.Directory.exists(root) then
                 IO.Directory.delete(root, true)

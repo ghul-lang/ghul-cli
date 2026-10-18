@@ -1,0 +1,48 @@
+namespace Ghul.Project is
+    /// How the compiler is run.
+    enum CompilerHost is
+        /// The wasm-built compiler, run by Node.
+        NODE,
+
+        /// The managed compiler, run by the .NET host.
+        DOTNET,
+
+        /// The Native AOT compiler, run as an executable of its own.
+        NATIVE
+    si
+
+    /// Reads `GHUL_COMPILER_HOST`, which picks how the compiler is run. Unset
+    /// or empty leaves the choice to ghul; a compiler given as a command, by
+    /// `--compiler` or `GHUL_COMPILER`, is run as it stands whatever this says.
+    class COMPILER_HOST is
+        /// The variable that picks the host.
+        VARIABLE: string static => "GHUL_COMPILER_HOST"
+
+        /// The host `value` names, null where it names none, or the problem
+        /// with it.
+        ///
+        /// - value: the variable's value, or null where it is not set
+        read(value: string?) -> (host: CompilerHost?, problem: string?) static is
+            if !value? \/ value.trim().length == 0 then
+                return (host = null, problem = null)
+            fi
+
+            let name = value.trim().to_lower_invariant()
+
+            if name =~ "node" then
+                return (host = CompilerHost.NODE, problem = null)
+            elif name =~ "dotnet" then
+                return (host = CompilerHost.DOTNET, problem = null)
+            elif name =~ "native" then
+                return (host = CompilerHost.NATIVE, problem = null)
+            fi
+
+            return (host = null, problem = "{VARIABLE} is '{value}', which is none of node, dotnet and native")
+        si
+
+        /// The host the environment picks, null where it picks none, or the
+        /// problem with what it says.
+        from_environment() -> (host: CompilerHost?, problem: string?) static =>
+            read(System.Environment.get_environment_variable(VARIABLE))
+    si
+si
