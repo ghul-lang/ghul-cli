@@ -759,9 +759,16 @@ namespace Ghul.Cli is
     update_components(check_only: bool) -> int is
         let status mut = 0
 
+        let host = _host_store()
+
+        if let problem: string = host.problem then
+            Std.error.write_line("ghul: {problem}")
+            return 1
+        fi
+
         // The compilers: the store builds use, and every other store that
         // holds a compiler.
-        for store in _compiler_stores() do
+        for store in _compiler_stores(host.store) do
             let kind = if store.is_llvm then "ghul-llvm toolchain" else "ghul.compiler ({Path.get_file_name(store.root)})" fi
 
             if !store.highest_version()? then
@@ -866,7 +873,14 @@ namespace Ghul.Cli is
     cmd_version() -> int is
         Std.out.write_line("ghul {cli_version()}")
 
-        let store = _host_store().store ?? Host.COMPILER_STORE.for_this_user()
+        let host = _host_store()
+
+        if let problem: string = host.problem then
+            Std.error.write_line("ghul: {problem}")
+            return 1
+        fi
+
+        let store = host.store ?? Host.COMPILER_STORE.for_this_user()
 
         if let compiler_version: string = store.highest_version() then
             Std.out.write_line("ghul.compiler {compiler_version}")
@@ -1608,10 +1622,10 @@ namespace Ghul.Cli is
 
     // The compiler stores `ghul update` refreshes: the one builds use, then
     // the others that hold a compiler, then the llvm-built compiler's.
-    _compiler_stores() -> Collections.List[Host.COMPILER_STORE] is
+    _compiler_stores(chosen: Host.COMPILER_STORE?) -> Collections.List[Host.COMPILER_STORE] is
         let stores = Collections.LIST[Host.COMPILER_STORE]()
 
-        stores.add(_host_store().store ?? Host.COMPILER_STORE.for_this_user())
+        stores.add(chosen ?? Host.COMPILER_STORE.for_this_user())
 
         for other in [
             Host.COMPILER_STORE.managed_for_this_user(),
