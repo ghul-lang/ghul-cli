@@ -33,6 +33,27 @@ namespace Ghul.Project is
         for_this_user() -> NODE_STORE static =>
             NODE_STORE(Path.join([LIBRARY_CACHE.cache_home(), "node"]))
 
+        /// The Node.js the installer brought in where the machine had none
+        /// to use: under `$XDG_DATA_HOME/ghul/node` (`~/.local/share/ghul/node`
+        /// where that is unset), laid out as this store is. It is data rather
+        /// than cache, so `ghul cache clear` leaves the Node ghul runs on.
+        installed_for_this_user() -> NODE_STORE static is
+            let data = System.Environment.get_environment_variable("XDG_DATA_HOME")
+
+            let home = System.Environment.get_environment_variable("HOME")
+
+            let base =
+                if data? /\ data.length > 0 then
+                    data
+                elif home? /\ home.length > 0 then
+                    Path.join([home, ".local", "share"])
+                else
+                    Path.join([System.Environment.get_folder_path(System.Environment_SpecialFolder.USER_PROFILE), ".local", "share"])
+                fi
+
+            return NODE_STORE(Path.join([base, "ghul", "node"]))
+        si
+
         // The directory the release `version` unpacks into, whether or not
         // it is there.
         directory(version: string) -> string => Path.join([root, version])

@@ -5,7 +5,8 @@
 #
 # Needs a POSIX shell, tar, and curl or wget. It needs nothing else: no .NET
 # SDK, no .NET runtime, and no build tooling. What it installs is the same
-# two things whether or not this machine ever had .NET on it.
+# two things whether or not this machine ever had .NET on it, plus a private
+# Node.js where the machine has no Node that ghul can run with (see --help).
 #
 #   curl -fsSL https://raw.githubusercontent.com/ghul-lang/ghul-cli/main/install.sh | sh
 #
@@ -28,12 +29,19 @@ REPOSITORY="ghul-lang/ghul-cli"
 
 usage() {
     cat <<EOF
-usage: install.sh [--version <tag>] [--dir <path>] [--dry-run] [--help]
+usage: install.sh [--version <tag>] [--dir <path>] [--no-node] [--dry-run] [--help]
 
   --version <tag>   the ghul-cli release to install, 'latest' by default
   --dir <path>      where to install it, ${DEFAULT_ROOT} by default
+  --no-node         do not fetch Node.js where no usable one is found
   --dry-run         report what would happen and install nothing
   --help            this text
+
+ghul runs its compiler and wasm programs with Node.js 22.19 or later on the
+22 line, 24.15 or later on the 24 line, or 25 or later. A node on PATH that
+is one of those is used. Otherwise the script says so and fetches the newest
+Node.js 24 from nodejs.org into ~/.local/share/ghul/node (or XDG_DATA_HOME),
+checked against the release's SHASUMS256.txt; it does not touch PATH.
 
 Installing puts a directory on PATH if it is not already on it; the script
 says which, and prints the line to add if you would rather do it yourself.
@@ -59,6 +67,7 @@ fail() {
 version="${DEFAULT_VERSION}"
 root="${DEFAULT_ROOT}"
 dry_run="false"
+want_node="true"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -82,6 +91,10 @@ while [ $# -gt 0 ]; do
             ;;
         --dry-run)
             dry_run="true"
+            shift
+            ;;
+        --no-node)
+            want_node="false"
             shift
             ;;
         --help | -h)
@@ -168,6 +181,69 @@ fi
 archive="ghul-cli-${rid}.tar.gz"
 base="${downloads}/${version}"
 
+# --- Node.js -----------------------------------------------------------------
+
+# Whether the version `node --version` answers runs ghul's wasm, as ghul-cli
+# judges it: 22.19 or later on the 22 line, 24.15 or later on 24, and every
+# release from 25.
+node_runs_wasm() {
+    v="${1#v}"
+    major="${v%%.*}"
+    rest="${v#*.}"
+    minor="${rest%%.*}"
+
+    case "${major}${minor}" in
+        "" | *[!0-9]*) return 1 ;;
+    esac
+
+    [ "${major}" -ge 25 ] && return 0
+    [ "${major}" -eq 24 ] && [ "${minor}" -ge 15 ] && return 0
+    [ "${major}" -eq 22 ] && [ "${minor}" -ge 19 ] && return 0
+
+    return 1
+}
+
+# Data rather than cache, so `ghul cache clear` cannot take the Node ghul runs
+# on. Laid out as ghul-cli's own store is, one directory per version holding
+# the unpacked distribution.
+node_root="${XDG_DATA_HOME:-${HOME}/.local/share}/ghul/node"
+node_base="${GHUL_NODE_BASE:-https://nodejs.org/dist}"
+
+case "${os_name}" in
+    osx) node_platform="darwin-${arch_name}" ;;
+    *) node_platform="linux-${arch_name}" ;;
+esac
+
+node_found=""
+node_on_path=""
+
+if command -v node >/dev/null 2>&1; then
+    node_on_path="$(node --version 2>/dev/null || true)"
+
+    if node_runs_wasm "${node_on_path}"; then
+        node_found="node ${node_on_path} on PATH"
+    fi
+fi
+
+if [ -z "${node_found}" ]; then
+    for held in "${node_root}"/*/bin/node; do
+        [ -x "${held}" ] || continue
+
+        held_version="$(basename "$(dirname "$(dirname "${held}")")")"
+
+        if node_runs_wasm "${held_version}"; then
+            node_found="Node.js ${held_version} in ${node_root}"
+        fi
+    done
+fi
+
+# Why Node.js is to be fetched, in the words the user is shown.
+if [ -n "${node_on_path}" ]; then
+    node_reason="the node on PATH is ${node_on_path}, too old for ghul, which needs 22.19 or later on the 22 line, 24.15 or later on 24, or 25 or later"
+else
+    node_reason="ghul runs its compiler and wasm programs with Node.js, and none was found"
+fi
+
 # --- what we will do ---------------------------------------------------------
 
 bin_dir="${HOME}/.local/bin"
@@ -181,6 +257,15 @@ say ""
 if [ "${dry_run}" = "true" ]; then
     say "dry run; nothing installed. The archive would come from:"
     say "  ${base}/${archive}"
+
+    if [ -n "${node_found}" ]; then
+        say "ghul would run with ${node_found}."
+    elif [ "${want_node}" = "true" ]; then
+        say "${node_reason}; Node.js 24 would be fetched from ${node_base} into ${node_root}."
+    else
+        say "${node_reason}; --no-node, so none would be fetched."
+    fi
+
     exit 0
 fi
 
@@ -289,6 +374,66 @@ for shipped in "${work}"/unpack/compilers/*; do
 
     seeded="${seeded} ${version}"
 done
+
+# --- fetch Node.js where there is none to use ---------------------------------
+
+if [ -z "${node_found}" ] && [ "${want_node}" = "true" ]; then
+    say ""
+    say "${node_reason}."
+    say "fetching Node.js 24 from nodejs.org into ${node_root}; nothing else on this machine changes."
+
+    node_sums="$(fetch_to_stdout "${node_base}/latest-v24.x/SHASUMS256.txt")" \
+        || fail "the Node.js release list could not be read from ${node_base}"
+
+    # xz is half the size of gzip, where there is an xz to unpack it with.
+    if command -v xz >/dev/null 2>&1; then
+        node_ext="tar.xz"
+        node_unpack="-xJf"
+    else
+        node_ext="tar.gz"
+        node_unpack="-xzf"
+    fi
+
+    node_line="$(printf '%s\n' "${node_sums}" | grep " node-v[0-9.]*-${node_platform}\.${node_ext}\$" | head -n 1 || true)"
+
+    [ -n "${node_line}" ] || fail "nodejs.org has no Node.js 24 for ${node_platform}"
+
+    node_sum="${node_line%% *}"
+    node_file="${node_line##* }"
+    node_version="${node_file#node-v}"
+    node_version="${node_version%%-*}"
+
+    say "downloading ${node_file}..."
+    fetch "${node_base}/latest-v24.x/${node_file}" "${work}/${node_file}" \
+        || fail "${node_file} could not be downloaded"
+
+    if [ "$(checksum_of "${work}/${node_file}")" != "${node_sum}" ]; then
+        fail "${node_file} is corrupt: it does not match the release's SHASUMS256.txt"
+    fi
+
+    say "checked it against the release's SHASUMS256.txt."
+
+    # Unpacked beside its final place and moved in, as the tool is, so a
+    # half-written Node is never one ghul finds.
+    mkdir -p "${node_root}"
+    node_staged="${node_root}/.${node_version}.$$"
+    rm -rf "${node_staged}"
+    mkdir -p "${node_staged}"
+
+    tar ${node_unpack} "${work}/${node_file}" -C "${node_staged}" --strip-components=1 \
+        || fail "${node_file} could not be unpacked"
+
+    [ -x "${node_staged}/bin/node" ] || fail "${node_file} holds no bin/node"
+
+    rm -rf "${node_root:?}/${node_version}"
+    mv "${node_staged}" "${node_root}/${node_version}" || fail "Node.js could not be installed into ${node_root}"
+
+    node_found="Node.js ${node_version} in ${node_root}"
+    say "installed ${node_found}."
+elif [ -z "${node_found}" ]; then
+    say ""
+    say "${node_reason}; --no-node, so none was fetched. 'ghul install node' brings one in later."
+fi
 
 # --- put it on PATH ----------------------------------------------------------
 
