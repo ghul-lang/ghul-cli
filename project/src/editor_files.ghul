@@ -85,6 +85,28 @@ namespace Ghul.Project is
             return string.join(" ", parts)
         si
 
+        /// How `compiler` is started, as a JSON array of the program and the
+        /// arguments before a build's own, one string each, for a client to
+        /// start without splitting a command line.
+        ///
+        /// - compiler: how the compiler is started
+        command_json(compiler: COMPILER_PROCESS) -> string static is
+            let use buffer = IO.MemoryStream()
+            let use writer = System.Text.Json.Utf8JsonWriter(buffer, _)
+
+            writer.write_start_array()
+            writer.write_string_value(compiler.file_name)
+
+            for argument in compiler.leading_arguments do
+                writer.write_string_value(argument)
+            od
+
+            writer.write_end_array()
+            writer.flush()
+
+            return System.Text.Encoding.utf8.get_string(buffer.to_array())
+        si
+
         _write(path: string, text: string) static is
             let directory = Path.get_directory_name(Path.get_full_path(path))
 
@@ -98,16 +120,18 @@ namespace Ghul.Project is
 
     /// What `ghul project response-file` or `ghul project compiler` was
     /// asked for: where to write the response file and, optionally, the
-    /// globs file, which target, and what the build overrides.
+    /// globs file, which target, what the build overrides, and whether the
+    /// compiler command is wanted as JSON.
     class RESPONSE_FILE_COMMAND_LINE(
         output: string?,
         source_globs: string?,
         target: string?,
         overrides: BUILD_OVERRIDES,
-        problem: string?
+        problem: string?,
+        json: bool
     ) is
         /// Reads `[--output <path>] [--source-globs <path>] [--target <name>]
-        /// [--compiler <command>] [--library <name>=<path>]...`, which needs
+        /// [--compiler <command>] [--library <name>=<path>]... [--json]`, which needs
         /// `--output`.
         ///
         /// - arguments: what follows `response-file` on the command line
@@ -124,20 +148,27 @@ namespace Ghul.Project is
             let source_globs: string? mut = null
             let target: string? mut = null
             let overrides mut = BUILD_OVERRIDES.none()
+            let json mut = false
             let i mut = 0
 
             while i < arguments.count do
                 let option = arguments[i]
 
+                if option =~ "--json" then
+                    json = true
+                    i = i + 1
+                    continue
+                fi
+
                 if
                     option !~ "--output" /\ option !~ "--source-globs" /\ option !~ "--target" /\
                     !BUILD_OVERRIDES.is_option(option)
                 then
-                    return RESPONSE_FILE_COMMAND_LINE(null, null, null, overrides, "unexpected argument {option}")
+                    return RESPONSE_FILE_COMMAND_LINE(null, null, null, overrides, "unexpected argument {option}", false)
                 fi
 
                 if i + 1 >= arguments.count then
-                    return RESPONSE_FILE_COMMAND_LINE(null, null, null, overrides, "{option} needs a value")
+                    return RESPONSE_FILE_COMMAND_LINE(null, null, null, overrides, "{option} needs a value", false)
                 fi
 
                 let value = arguments[i + 1]
@@ -154,7 +185,7 @@ namespace Ghul.Project is
                     if let changed = BUILD_OVERRIDES.with(overrides, option, value, problem ref) then
                         overrides = changed
                     else
-                        return RESPONSE_FILE_COMMAND_LINE(null, null, null, overrides, problem ?? "{option} is not valid")
+                        return RESPONSE_FILE_COMMAND_LINE(null, null, null, overrides, problem ?? "{option} is not valid", false)
                     fi
                 fi
 
@@ -162,10 +193,10 @@ namespace Ghul.Project is
             od
 
             if needs_output /\ !output? then
-                return RESPONSE_FILE_COMMAND_LINE(null, null, null, overrides, "--output is required")
+                return RESPONSE_FILE_COMMAND_LINE(null, null, null, overrides, "--output is required", false)
             fi
 
-            return RESPONSE_FILE_COMMAND_LINE(output, source_globs, target, overrides, null)
+            return RESPONSE_FILE_COMMAND_LINE(output, source_globs, target, overrides, null, json)
         si
     si
 si

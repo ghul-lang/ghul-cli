@@ -225,7 +225,8 @@ looks for them.
   the cache and the CLI's script cache share. `EDITOR_FILES` writes what
   `ghul project response-file` hands an editor (the build's option groups
   from `COMPILER_ARGUMENTS.option_groups`, one a line, and the manifest's
-  globs) and the one-line compiler command `ghul project compiler` prints. The lockfile and dependencies for the
+  globs) and the compiler command `ghul project compiler` prints, as one
+  line or, with `--json`, as a JSON array. The lockfile and dependencies for the
   dotnet target are the tasks under ghul-lang/ghul#3211 still to come.
 - `unit-tests/` — MSTest project covering the pure path/cache-key/
   runnable-by-default/stdin-marker/source-resolution logic.
