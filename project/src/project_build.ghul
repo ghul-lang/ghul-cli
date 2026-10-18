@@ -50,16 +50,13 @@ namespace Ghul.Project is
                     // A library build writes the module's text, and a program
                     // is a native executable.
                     if is_library then Path.join([directory, "{name}.ll"]) else Path.join([directory, name]) fi
-                when BuildTarget.DOTNET then
-                    if is_library then Path.join([directory, "{name}.dll"]) else Path.join([directory, "{name}.exe"]) fi
                 esac
         si
 
-        /// The source libraries a build of `project` compiles in: for a
-        /// target with source libraries the core library, the runtime library
-        /// and then the libraries the manifest's own dependencies name, and
-        /// nothing for `dotnet`. Null, with the problem reported to `say`,
-        /// where any of them cannot be found.
+        /// The source libraries a build of `project` compiles in: the core
+        /// library, the runtime library and then the libraries the
+        /// manifest's own dependencies name. Null, with the problem reported
+        /// to `say`, where any of them cannot be found.
         ///
         /// - project: the project being built
         /// - compiler_version: the compiler the build uses
@@ -74,10 +71,6 @@ namespace Ghul.Project is
             say: (string) -> void
         ) -> Collections.List[SOURCE_LIBRARY]? static is
             let result = LIST[SOURCE_LIBRARY]()
-
-            if !BUILD_TARGETS.has_source_libraries(project.target) then
-                return result
-            fi
 
             let found = CORE_LIBRARY.find(project.manifest, project.directory, compiler_version, requirements, cache)
 
@@ -217,15 +210,7 @@ namespace Ghul.Project is
 
                 File.write_all_text(response_file, RESPONSE_FILE.text(arguments))
 
-                let exit_code = _compile(compiler, response_file, project.directory, linker, say, quiet)
-
-                if exit_code == 0 /\ project.target == BuildTarget.DOTNET then
-                    if let runtime: string = runtime_assembly /\ File.exists(runtime) then
-                        File.copy(runtime, Path.join([Path.get_directory_name(output)!, Path.get_file_name(runtime)!]), true)
-                    fi
-                fi
-
-                return exit_code
+                return _compile(compiler, response_file, project.directory, linker, say, quiet)
             finally
                 Directory.delete(scratch, true)
             yrt

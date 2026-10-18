@@ -88,26 +88,20 @@ Native AOT compiler instead, which is published for Linux x64 only.
 
 Which machines that covers follows from the builds that exist. `ghul` is a
 .NET tool except as its Linux x64 native archive, so a machine with no .NET at
-all is Linux x64. A machine with a .NET runtime but no SDK can run `ghul` and
-build for wasm and, on Linux x64, llvm, but not for dotnet.
+all is Linux x64. `ghul` builds for wasm and, on Linux x64, llvm; it does not
+build for .NET, which is the .NET SDK's job, with a `.ghulproj` and `dotnet build`.
 
 A script, `ghul script.ghul`, a `#!/usr/bin/env ghul` script or one read from
-standard input, runs wherever a target can be built for it. A script needs
-only the .NET runtime for the dotnet target, so it takes dotnet wherever .NET
-is installed, and otherwise llvm, then wasm, as a project does.
-`GHUL_TARGET` names the target instead. A script built for llvm or wasm is
-cached, by the script, the target, the compiler and the libraries and
-`ghul-llvm` it was built with, so it compiles once. A script that compiles
-says nothing; where `ghul` built it for llvm or wasm because dotnet could not
-be, the build says so in one line.
+standard input, runs wherever a target can be built for it: wasm, or the
+target `GHUL_TARGET` names. A script is cached, by the script, the target,
+the compiler and the libraries and `ghul-llvm` it was built with, so it
+compiles once. A script that compiles says nothing.
 
 What does not work without .NET, today:
 
 - **`ghul compile`**, which writes a script's .NET assembly.
 - **The REPL and the Jupyter kernel.** Each cell is compiled to a .NET
   assembly and run inside the tool, which the native build cannot do.
-- **The dotnet target.** Building one needs the .NET reference assemblies
-  that come with .NET.
 
 The REPL on wasm is planned in
 [ghul-lang/ghul#3480](https://github.com/ghul-lang/ghul/issues/3480).
@@ -218,13 +212,14 @@ builds for and where its sources are:
 {
     "name": "greeter",
     "kind": "program",
-    "targets": ["dotnet", "llvm", "wasm"],
+    "targets": ["llvm", "wasm"],
     "sources": ["src/**/*.ghul"]
 }
 ```
 
-`targets` lists the targets the project may be built for. `ghul new` writes
-all three, `["dotnet", "llvm", "wasm"]`, unless `--target` names others.
+`targets` lists the targets the project may be built for: `wasm` and `llvm`.
+`ghul new` writes `["wasm"]` unless `--target` names others. A manifest that
+lists `dotnet` is refused, with a message pointing at the .NET SDK.
 
 `ghul build` builds the project in the current directory into
 `out/<target>/`. `ghul run` builds it and then runs it, passing the arguments
@@ -235,15 +230,13 @@ A project that lists one target builds that one. Where it lists several,
 `--target` names the one to build, or failing that `GHUL_TARGET` in the
 environment. Otherwise `ghul` takes the first target in order that the
 machine can build:
-- dotnet, where a .NET SDK is installed
 - wasm, which needs nothing at build time; the run finds something to run
   the module under, as the hosts section below describes
 
 A manifest's `prefer`, such as `"prefer": ["wasm"]`, puts the targets it
 names first, and every one it names has to be among `targets`. When `ghul`
-cannot build for dotnet, it says what it built for instead and why in one line,
-as in `ghul: building for llvm (no .NET SDK)`; choosing dotnet, or a target
-`prefer` puts first, it says nothing. Where no listed target
+passes over a target it cannot build, it says what it built for instead in one
+line; choosing the first in order, it says nothing. Where no listed target
 can be built, it says why for each and builds nothing.
 
 ## hosts and global defaults
@@ -270,8 +263,8 @@ steps, each filling only what the one before leaves unset.
    global file is honoured rather than swapped.
 
 A project that names a host itself is never overridden by the global file.
-The built-in order a build follows is dotnet first, then wasm; llvm is never
-chosen automatically.
+The built-in order a build follows is wasm; llvm is never chosen
+automatically.
 
 When a run chooses the wasmtime host and finds it missing, it downloads the
 newest release first, as the compiler is downloaded on first use.
@@ -292,8 +285,7 @@ otherwise 2, or 0 for a debug build; a level other than that default adds
 manifest's `options` may name a default level, `"optimise": 3`, which the
 command line overrides. A chosen level needs ghul.compiler 65.16.0 or newer.
 
-The `dotnet` target writes `<name>.exe` (or `<name>.dll` for a library), with
-`ghul-runtime.dll` beside it, and runs with `dotnet`. The `wasm` target writes
+The `wasm` target writes
 a WebAssembly module and the JavaScript loader the compiler puts beside it,
 and runs under Node.js 22.19 or later on the 22 line, 24.15 or later on the 24
 line, or 25 or later, which `ghul` checks before running it; Node 23 cannot
@@ -315,8 +307,7 @@ in after those two: a directory holding a `ghul-project.json` that lists
 `wasm` among its targets, declared by `path` or as a `git` repository at a
 `tag`, and fetched into the same cache. A library's own dependencies are
 compiled in too, each before the libraries that use it, and a `path` in a
-library's manifest is relative to that library. A `dotnet` build refuses a
-manifest with source library dependencies.
+library's manifest is relative to that library.
 
 A wasm build needs `ghul.compiler` 64.15.0 or newer. Where the newest
 installed is older, the build installs the newest release and uses that; a
@@ -343,14 +334,13 @@ how a test harness that drives `ghul` chooses the compiler for all of them.
 `ghul new` creates a project, then `ghul run` builds and runs it:
 
 ```sh
-ghul new hello --target dotnet,wasm
+ghul new hello
 cd hello
-ghul run --target wasm      # builds into out/wasm/ and runs it under Node.js
-ghul run --target dotnet    # builds into out/dotnet/ and runs it with dotnet
+ghul run      # builds into out/wasm/ and runs it under Node.js
 ```
 
-`ghul new`'s `--target` takes `dotnet`, `wasm` or `llvm`, or several separated by
-commas, and defaults to all three.
+`ghul new`'s `--target` takes `wasm` or `llvm`, or both separated by a comma,
+and defaults to `wasm`.
 The new directory holds the manifest, `ghul-project.json`; `src/main.ghul`,
 whose entry writes `hello`; and a `.gitignore` for `out/`. A directory that
 already exists and is not empty is refused. The program is:
@@ -403,10 +393,8 @@ parts. The project goes into a directory of that name, or the one given after it
 
 The repository's index says what the solution needs, and everything is fetched at the commit
 the index was made from: its source into `src/`, and any file it reads beside the manifest,
-which is where it is run from. The manifest lists the targets the solution passes on: `dotnet`
-where this machine has .NET, `llvm` where it builds and passes as a native executable, and `wasm`
-where it runs as WebAssembly. One that draws with ghul.raster compiles it in from source, which a
-`dotnet` build cannot do, so it builds for `llvm` and `wasm` only. `ghul rosetta` prints the
+which is where it is run from. The manifest lists the targets the solution passes on: `llvm`
+where it builds and passes as a native executable, and `wasm` where it runs as WebAssembly. `ghul rosetta` prints the
 `ghul run` that runs it, with its command-line arguments where it takes any.
 
 ```sh

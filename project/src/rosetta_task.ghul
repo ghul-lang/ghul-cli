@@ -58,8 +58,7 @@ namespace Ghul.Project is
         ///
         /// - index: the text of index.json
         /// - name: a slug, or `<slug>/<NN-name>`
-        /// - dotnet: whether this machine can build for the dotnet target
-        find(index: string, name: string, dotnet: bool) -> Result[ROSETTA_LOOKUP, string] static is
+        find(index: string, name: string) -> Result[ROSETTA_LOOKUP, string] static is
             let document = _parse(index)
 
             if !document? then
@@ -91,7 +90,7 @@ namespace Ghul.Project is
 
                 for part in parts do
                     if (name =~ slug /\ parts.count == 1) \/ (_string(part, "id") ?? "") =~ name then
-                        return OK(ROSETTA_LOOKUP(_part(part, dotnet), commit, raster_version))
+                        return OK(ROSETTA_LOOKUP(_part(part), commit, raster_version))
                     fi
                 od
 
@@ -167,16 +166,10 @@ namespace Ghul.Project is
         /// The first ghul.raster release that builds for wasm.
         RASTER_FOR_WASM: string static => "0.12.0"
 
-        // The targets a part builds for, the one to run first: .NET where
-        // the machine has it and the part draws nothing, since a dotnet
-        // build takes no source library; native where the index says the
-        // part passes there; WebAssembly last, being the slowest to run.
-        _targets(part: JsonElement, raster: bool, dotnet: bool) -> LIST[BuildTarget] static is
+        // The targets a part builds for, the one to run first: native where
+        // the index says the part passes there, then WebAssembly.
+        _targets(part: JsonElement) -> LIST[BuildTarget] static is
             let targets = LIST[BuildTarget]()
-
-            if dotnet /\ !raster then
-                targets.add(BuildTarget.DOTNET)
-            fi
 
             if _bool(part, "native") then
                 targets.add(BuildTarget.LLVM)
@@ -189,7 +182,7 @@ namespace Ghul.Project is
             return targets
         si
 
-        _part(part: JsonElement, dotnet: bool) -> ROSETTA_PART static is
+        _part(part: JsonElement) -> ROSETTA_PART static is
             let files = LIST[(name: string, path: string)]()
             let args = LIST[string]()
             let found: JsonElement mut
@@ -212,7 +205,7 @@ namespace Ghul.Project is
 
             let raster = _bool(part, "raster")
 
-            return ROSETTA_PART(_string(part, "id") ?? "", _string(part, "source") ?? "", files, args, raster, _targets(part, raster, dotnet))
+            return ROSETTA_PART(_string(part, "id") ?? "", _string(part, "source") ?? "", files, args, raster, _targets(part))
         si
 
         _parse(text: string) -> JsonDocument? static is

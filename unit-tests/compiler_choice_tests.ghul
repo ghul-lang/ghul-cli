@@ -9,7 +9,7 @@ namespace Ghul.Cli.Tests is
     use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
 
     // Which compiler a project build uses: a wasm build will not use one
-    // older than the core library's minimum, and a dotnet build takes any.
+    // older than the core library's minimum,.
     @TestClass()
     class COMPILER_CHOICE_TESTS is
         init() is si
@@ -18,16 +18,6 @@ namespace Ghul.Cli.Tests is
             assert isa CompilerChoice.REQUESTED(choice) else "expected REQUESTED"
 
             return cast CompilerChoice.REQUESTED(choice).version
-        si
-
-        @Test()
-        dotnet_build_uses_the_named_compiler_however_old() is
-            assert _requested(COMPILER_CHOICE.choose(BuildTarget.DOTNET, BUILD_MODE.release, "64.11.0", "64.11.0")) =~ "64.11.0"
-        si
-
-        @Test()
-        dotnet_build_uses_the_newest_installed_however_old() is
-            assert !_requested(COMPILER_CHOICE.choose(BuildTarget.DOTNET, BUILD_MODE.release, null, "64.11.0"))?
         si
 
         @Test()
@@ -97,11 +87,6 @@ namespace Ghul.Cli.Tests is
         llvm_debug_build_installs_the_newest_when_the_installed_has_no_debug_information() is
             assert isa CompilerChoice.NEWEST(COMPILER_CHOICE.choose(BuildTarget.LLVM, BUILD_MODE(true, null), null, "65.13.0")) else "expected NEWEST"
             assert !_requested(COMPILER_CHOICE.choose(BuildTarget.LLVM, BUILD_MODE(true, null), null, "65.14.0"))?
-        si
-
-        @Test()
-        a_debug_build_for_dotnet_takes_any_compiler() is
-            assert _requested(COMPILER_CHOICE.choose(BuildTarget.DOTNET, BUILD_MODE(true, null), "64.11.0", null)) =~ "64.11.0"
         si
 
         @Test()

@@ -353,25 +353,6 @@ namespace Ghul.Cli is
         yrt
     si
 
-    run_script(output: string, script_args: Collections.List[string]) -> int is
-        let start_info = System.Diagnostics.ProcessStartInfo()
-        start_info.file_name = "dotnet"
-        start_info.use_shell_execute = false
-        start_info.argument_list.add(output)
-
-        for a in script_args do
-            start_info.argument_list.add(a)
-        od
-
-        if let process: System.Diagnostics.Process = System.Diagnostics.Process.start(start_info) then
-            process.wait_for_exit()
-            return process.exit_code
-        fi
-
-        Std.error.write_line("ghul: failed to run the compiled script")
-        return 1
-    si
-
     read_all_stdin_bytes() -> ubyte[] is
         let stdin = Std.open_standard_input()
         let buffer = IO.MemoryStream()
@@ -513,7 +494,7 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        let found = Ghul.Project.ROSETTA_TASK.find(System.Text.Encoding.utf8.get_string(index!), rest[0], Host.HOST.has_dotnet())
+        let found = Ghul.Project.ROSETTA_TASK.find(System.Text.Encoding.utf8.get_string(index!), rest[0])
 
         if let (problem): ERROR = found then
             Std.error.write_line("ghul: {problem}")
@@ -583,10 +564,6 @@ namespace Ghul.Cli is
         let arguments = if part.args.count > 0 then " -- {string.join(" ", [_quoted(a) for a in part.args])}" else "" fi
 
         Std.error.write_line("ghul: fetched {part.id} into {directory}; cd into it and ghul run{target}{arguments}")
-
-        if part.raster /\ !(part.targets |> any(t => t == Ghul.Project.BuildTarget.DOTNET)) /\ Host.HOST.has_dotnet() then
-            Std.error.write_line("ghul: it draws with ghul.raster, which builds for wasm and llvm but not dotnet")
-        fi
 
         return 0
     si
@@ -1135,30 +1112,7 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        let target = chosen.target!
-
-        if target != Ghul.Project.BuildTarget.DOTNET then
-            return run_native_script(source.key_bytes, target, chosen.reason, script_args, no_cache)
-        fi
-
-        let store = Host.COMPILER_STORE.for_this_user()
-
-        let ensured = ensure_compiler_installed(store, null, false)
-
-        if let (error): ERROR = ensured then
-            Std.error.write_line("ghul: {error}")
-            Std.error.write_line("ghul: could not determine the installed ghul.compiler version")
-            return 1
-        fi
-
-        let compiler = store.command(ensured!)
-        let run_dir = cache_entry_dir_for_bytes(source.key_bytes, ensured!)
-
-        if !ensure_compiled(compiler, source.materialize, run_dir, store, ensured!, no_cache) then
-            return 1
-        fi
-
-        return run_script("{run_dir}/run.exe", script_args)
+        return run_native_script(source.key_bytes, chosen.target!, chosen.reason, script_args, no_cache)
     si
 
     // Builds a script for wasm or llvm as a project of one source file,
@@ -1615,11 +1569,6 @@ namespace Ghul.Cli is
         // from its own store; it compiles for wasm and llvm only.
         let wants_llvm = project.manifest.compiler_build == Ghul.Project.CompilerBuild.LLVM
 
-        if wants_llvm /\ project.target == Ghul.Project.BuildTarget.DOTNET then
-            say("the llvm-built compiler cannot build for the dotnet target")
-            return null
-        fi
-
         let chosen mut = if wants_llvm then Host.COMPILER_STORE.llvm_for_this_user() else store fi
 
         let request = Ghul.Project.COMPILER_REQUEST.from_environment(overrides.compiler_command, project.manifest.compiler_version)
@@ -1751,7 +1700,7 @@ namespace Ghul.Cli is
     // machine can start - on PATH, or cached by `ghul install node`. Null
     // where any of that does not hold.
     _wasm_store(chosen: Host.COMPILER_STORE, wants_llvm: bool, target: Ghul.Project.BuildTarget) -> Host.COMPILER_STORE? is
-        if wants_llvm \/ chosen.is_wasm \/ target == Ghul.Project.BuildTarget.DOTNET \/ Host.HOST.has_dotnet() then
+        if wants_llvm \/ chosen.is_wasm \/ Host.HOST.has_dotnet() then
             return null
         fi
 

@@ -5,10 +5,8 @@ namespace Ghul.Cli is
 
     use Result.*
 
-    /// What this machine can build for, as target selection asks it: dotnet
-    /// where a .NET SDK is installed, or for a script, which compiles
-    /// against the runtime's own assemblies, a .NET runtime; llvm where
-    /// `ghul-llvm` is cached or can be fetched; and wasm wherever, so long as
+    /// What this machine can build for, as target selection asks it: llvm
+    /// where `ghul-llvm` is cached or can be fetched; and wasm wherever, so long as
     /// something can run the module when the build is to be run - the host
     /// the manifest, the machine's global defaults or the built-in default
     /// chooses, which is the same choice a run makes.
@@ -21,14 +19,6 @@ namespace Ghul.Cli is
     class MACHINE_TARGETS(_will_run: bool, _is_script: bool, _global_host_wasm: string?, _manifest_host_wasm: string?): Ghul.Project.TargetAvailability is
         why_not(target: BuildTarget) -> Result[unit, string] =>
             case target
-            when BuildTarget.DOTNET then
-                if _is_script then
-                    if Host.HOST.has_dotnet() then OK(_) else ERROR("no .NET") fi
-                elif Host.HOST.has_dotnet_sdk() then
-                    OK(_)
-                else
-                    ERROR("no .NET SDK")
-                fi
             when BuildTarget.LLVM then _why_not_llvm()
             when BuildTarget.WASM then
                 // Building for wasm needs nothing beyond the compiler;

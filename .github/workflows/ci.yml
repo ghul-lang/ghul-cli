@@ -87,15 +87,15 @@ jobs:
     - name: Update the local ghul.compiler to the latest published
       run: dotnet tool update --local ghul.compiler
 
-    - name: Run smoke test
-      run: ./tests/smoke.sh
-
-    # A wasm program runs under Node.js, which needs WebAssembly GC: on by
-    # default from Node.js 22.
+    # A wasm program runs under Node.js: scripts and projects both build for
+    # wasm, so it is needed from the smoke test on.
     - name: Set up Node.js
       uses: actions/setup-node@v7
       with:
         node-version: '24'
+
+    - name: Run smoke test
+      run: ./tests/smoke.sh
 
     - name: Run the project test
       run: ./tests/project.sh
@@ -146,6 +146,12 @@ jobs:
 
     - name: Run unit tests
       run: dotnet test unit-tests
+
+    # Scripts build for wasm, which runs under Node.js.
+    - name: Set up Node.js
+      uses: actions/setup-node@v7
+      with:
+        node-version: '24'
 
     - name: Run the Windows smoke test
       shell: pwsh

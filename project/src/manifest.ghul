@@ -32,9 +32,9 @@ namespace Ghul.Project is
         LLVM
     si
 
-    // What a build produces, as a name a build asks for by.
+    // What a build produces, as a name a build asks for by. ghul builds for
+    // wasm and llvm; a .NET build is the .NET SDK's.
     enum BuildTarget is
-        DOTNET,
         WASM,
         LLVM
     si

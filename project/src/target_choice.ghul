@@ -25,10 +25,11 @@ namespace Ghul.Project is
     /// A target named on the command line or in `GHUL_TARGET` is taken as
     /// it is, and a project that lists one target builds that one. Otherwise
     /// the first target in order that the machine can build is chosen: those
-    /// the project's `prefer` lists, then dotnet, llvm and wasm.
+    /// the project's `prefer` lists, then wasm. llvm is built only where
+    /// `prefer`, the command line or `GHUL_TARGET` names it.
     class TARGET_CHOICE is
         /// The order targets are tried in where a project prefers none.
-        ORDER: BuildTarget[] static => [BuildTarget.DOTNET, BuildTarget.WASM]
+        ORDER: BuildTarget[] static => [BuildTarget.WASM]
 
         /// The target for a build of a project listing `listed`.
         ///
@@ -44,6 +45,10 @@ namespace Ghul.Project is
             availability: TargetAvailability
         ) -> CHOSEN_TARGET static is
             if let name: string = named then
+                if BUILD_TARGETS.is_dotnet(name) then
+                    return CHOSEN_TARGET(null, null, BUILD_TARGETS.DOTNET_UNSUPPORTED)
+                fi
+
                 for target in listed do
                     if BUILD_TARGETS.name(target) =~ name then
                         return CHOSEN_TARGET(target, null, null)
@@ -59,21 +64,18 @@ namespace Ghul.Project is
 
             let reasons = LIST[string]()
             let per_target = LIST[string]()
-            let dotnet_passed_over mut = false
 
             for target in _order(listed, prefer) do
                 if let (why): Result.ERROR = availability.why_not(target) then
                     reasons.add(why)
                     per_target.add("{BUILD_TARGETS.name(target)}: {why}")
-                    dotnet_passed_over = dotnet_passed_over \/ target == BuildTarget.DOTNET
                     continue
                 fi
 
-                // Building for dotnet is the normal case, and a target the
-                // project prefers was asked for; neither needs explaining.
-                // What is reported is a build that is not for dotnet.
+                // The first target in order needs no explaining; one taken
+                // because those before it could not be built does.
                 let reason =
-                    if dotnet_passed_over then
+                    if per_target.count > 0 then
                         "building for {BUILD_TARGETS.name(target)}"
                     else
                         null

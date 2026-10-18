@@ -26,7 +26,7 @@ namespace Ghul.Cli.Tests is
             "    \"name\": \"example-app\",\n"
             "    \"version\": \"0.1.0\",\n"
             "    \"kind\": \"program\",\n"
-            "    \"targets\": [\"wasm\", \"dotnet\"],\n"
+            "    \"targets\": [\"wasm\", \"llvm\"],\n"
             "    \"sources\": [\"src/**/*.ghul\", \"extra/*.ghul\"],\n"
             "    \"compiler\": \"64.5.38\",\n"
             "    \"options\": {{\"underscore-access\": \"private\", \"global-namespace\": true, \"default-use\": [\"Collections\", \"IO.Std.write_line\"], \"define\": [\"DEBUG\"], \"suppress\": [\"redundant-semicolon\"], \"warn-as-error\": [\"cast-may-throw\"]}},\n"
@@ -48,12 +48,12 @@ namespace Ghul.Cli.Tests is
     UNKNOWN_DEPENDENCY_KEY: string static => "{{\"name\": \"app\", \"dependencies\": {{\"lib\": {{\"git\": \"u\", \"tag\": \"v1\", \"rev\": \"abc\"}}}}}}"
     OPTIMISE: string static => "{{\"name\": \"app\", \"options\": {{\"optimise\": 3}}}}"
     BAD_OPTIMISE: string static => "{{\"name\": \"app\", \"options\": {{\"optimise\": 4}}}}"
-    PREFER: string static => "{{\"name\": \"app\", \"targets\": [\"dotnet\", \"wasm\", \"llvm\"], \"prefer\": [\"wasm\"]}}"
-    PREFER_UNLISTED: string static => "{{\"name\": \"app\", \"targets\": [\"dotnet\"], \"prefer\": [\"llvm\"]}}"
+    PREFER: string static => "{{\"name\": \"app\", \"targets\": [\"wasm\", \"llvm\"], \"prefer\": [\"wasm\"]}}"
+    PREFER_UNLISTED: string static => "{{\"name\": \"app\", \"targets\": [\"wasm\"], \"prefer\": [\"llvm\"]}}"
     LLVM_COMPILER: string static => "{{\"name\": \"app\", \"compiler-build\": \"llvm\"}}"
     UNKNOWN_COMPILER_BUILD: string static => "{{\"name\": \"app\", \"compiler-build\": \"jit\"}}"
     LLVM_TARGET: string static => "{{\"name\": \"app\", \"targets\": [\"llvm\"]}}"
-    UNKNOWN_TARGET: string static => "{{\"name\": \"app\", \"targets\": [\"dotnet\", \"js\"]}}"
+    UNKNOWN_TARGET: string static => "{{\"name\": \"app\", \"targets\": [\"wasm\", \"js\"]}}"
     UNKNOWN_KIND: string static => "{{\"name\": \"app\", \"kind\": \"script\"}}"
     OPTION_WRONG_TYPE: string static => "{{\"name\": \"app\", \"options\": {{\"global-namespace\": \"yes\"}}}}"
     OPTION_WRONG_ENTRY: string static => "{{\"name\": \"app\", \"options\": {{\"suppress\": [1]}}}}"
@@ -65,7 +65,9 @@ namespace Ghul.Cli.Tests is
     WRONG_SOURCES: string static => "{{\"name\": \"app\", \"sources\": \"src\"}}"
     WRONG_OPTIONS: string static => "{{\"name\": \"app\", \"options\": []}}"
     WRONG_DEPENDENCIES: string static => "{{\"name\": \"app\", \"dependencies\": []}}"
-    WRONG_TARGETS: string static => "{{\"name\": \"app\", \"targets\": \"dotnet\"}}"
+    WRONG_TARGETS: string static => "{{\"name\": \"app\", \"targets\": \"wasm\"}}"
+    DOTNET_TARGET: string static => "{{\"name\": \"app\", \"targets\": [\"dotnet\", \"wasm\"]}}"
+    LIBRARY_DOTNET_TARGET: string static => "{{\"name\": \"lib\", \"kind\": \"library\", \"targets\": [\"wasm\", \"dotnet\"]}}"
     TWO_PROBLEMS: string static => "{{\"name\": \"app\", \"kind\": \"script\", \"targets\": [\"js\"]}}"
     TRAILING_COMMA: string static => "{{\"name\": \"app\",}}"
     NOT_JSON: string static => "this is not json"
@@ -120,7 +122,7 @@ namespace Ghul.Cli.Tests is
             assert manifest.compiler_version =~ "64.5.38";
             assert manifest.targets.count == 2;
             assert manifest.targets[0] == BuildTarget.WASM;
-            assert manifest.targets[1] == BuildTarget.DOTNET;
+            assert manifest.targets[1] == BuildTarget.LLVM;
             assert manifest.sources.count == 2;
             assert manifest.sources[0] =~ "src/**/*.ghul";
             assert manifest.sources[1] =~ "extra/*.ghul";
@@ -236,7 +238,7 @@ namespace Ghul.Cli.Tests is
             assert manifest.kind == ManifestKind.PROGRAM;
             assert !manifest.compiler_version?;
             assert manifest.targets.count == 1;
-            assert manifest.targets[0] == BuildTarget.DOTNET;
+            assert manifest.targets[0] == BuildTarget.WASM;
             assert manifest.sources.count == 1;
             assert manifest.sources[0] =~ "src/**/*.ghul";
             assert manifest.dependencies.count == 0;
@@ -316,6 +318,26 @@ namespace Ghul.Cli.Tests is
 
             assert problems.count == 1;
             assert problems[0].contains("targets");
+        si
+
+        @Test()
+        a_manifest_naming_dotnet__is_a_problem() is
+            let problems = _problems(DOTNET_TARGET)
+
+            assert problems.count == 1;
+            assert problems[0].contains("ghul does not build for dotnet") else problems[0];
+            assert problems[0].contains("take dotnet out of this list") else problems[0];
+        si
+
+        // ghul-core lists dotnet among its targets, being built for .NET by
+        // other means; a library is compiled in from source, so the entry is
+        // skipped rather than refused.
+        @Test()
+        a_library_naming_dotnet__reads_with_its_other_targets() is
+            let manifest = _read(LIBRARY_DOTNET_TARGET)!
+
+            assert manifest.targets.count == 1;
+            assert manifest.targets[0] == BuildTarget.WASM;
         si
 
         @Test()
