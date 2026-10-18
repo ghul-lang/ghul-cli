@@ -13,7 +13,7 @@ namespace Ghul.Cli.Tests is
         init() is si
 
         _download(is_llvm: bool) -> NATIVE_COMPILER_DOWNLOAD =>
-            NATIVE_COMPILER_DOWNLOAD(COMPILER_STORE("unused", is_llvm), "https://example.test/releases")
+            NATIVE_COMPILER_DOWNLOAD(COMPILER_STORE("unused", is_llvm, false), "https://example.test/releases")
 
         @Test()
         the_llvm_triple__is_named_for_linux_x64_only() is
@@ -48,6 +48,17 @@ namespace Ghul.Cli.Tests is
 
             assert llvm.is_llvm /\ !ordinary.is_llvm
             assert llvm.root !~ ordinary.root
+        si
+
+        @Test()
+        the_wasm_store__is_separate_from_the_other_two() is
+            let wasm = COMPILER_STORE.wasm_for_this_user()
+            let llvm = COMPILER_STORE.llvm_for_this_user()
+            let ordinary = COMPILER_STORE.for_this_user()
+
+            assert wasm.is_wasm /\ !wasm.is_llvm
+            assert !llvm.is_wasm /\ !ordinary.is_wasm
+            assert wasm.root !~ llvm.root /\ wasm.root !~ ordinary.root
         si
     si
 si
