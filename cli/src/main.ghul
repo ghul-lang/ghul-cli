@@ -1723,9 +1723,10 @@ namespace Ghul.Cli is
 
     // The compiler an editor analyses a project with: the command
     // `--compiler` gave, or the one the environment or the manifest names,
-    // installed if need be.
+    // installed if need be - the wasm-built one under node where this
+    // machine has no .NET to run the managed one.
     tool_compiler(
-        store: Host.COMPILER_STORE,
+        managed_store: Host.COMPILER_STORE,
         manifest: Ghul.Project.MANIFEST,
         overrides: Ghul.Project.BUILD_OVERRIDES
     ) -> (compiler: Ghul.Project.COMPILER_PROCESS, version: string, runtime_assembly: string?)? is
@@ -1740,6 +1741,8 @@ namespace Ghul.Cli is
             return command_compiler(named.command)
         fi
 
+        let store = _editor_store(managed_store)
+
         let installed =
             if isa Ghul.Project.CompilerRequest.LATEST(request) then
                 update_compiler_to_latest(store)
@@ -1748,15 +1751,48 @@ namespace Ghul.Cli is
             fi
 
         if let (error): ERROR = installed then
+            Std.error.write_line("ghul: {error}")
+            Std.error.write_line("ghul: could not install ghul.compiler")
             return null
         fi
 
-        let command = store.command(installed!)
+        if store.is_wasm /\ Ghul.Project.COMPILER_CHOICE.is_older_than(installed!, WASM_ANALYSIS_MINIMUM) then
+            Std.error.write_line(
+                "ghul: the wasm-built ghul.compiler {installed!} cannot serve analysis, which needs {WASM_ANALYSIS_MINIMUM} or newer")
+            return null
+        fi
 
-        let compiler =
-            Ghul.Project.COMPILER_PROCESS(command.file_name, Collections.LIST[string](command.leading_arguments()))
+        let (compiler, version, runtime_assembly) = _built_compiler(store, installed!)
 
-        return (compiler, installed!, store.runtime_assembly(installed!))
+        return (_absolute(compiler), version, runtime_assembly)
+    si
+
+    // `compiler` with its program named by full path where it is found on
+    // PATH, so an editor started with a different PATH runs the same one.
+    _absolute(compiler: Ghul.Project.COMPILER_PROCESS) -> Ghul.Project.COMPILER_PROCESS is
+        if Path.is_path_rooted(compiler.file_name) then
+            return compiler
+        fi
+
+        if let found: string = Host.HOST.on_path(compiler.file_name) then
+            return Ghul.Project.COMPILER_PROCESS(found, Collections.LIST[string](compiler.leading_arguments))
+        fi
+
+        return compiler
+    si
+
+    // The oldest wasm-built compiler that serves analysis requests.
+    WASM_ANALYSIS_MINIMUM: string static => "66.1.0"
+
+    // The store an editor's compiler comes from: `managed_store` where
+    // this machine has .NET to run it, and the wasm-built compiler's where
+    // it does not and node can be started.
+    _editor_store(managed_store: Host.COMPILER_STORE) -> Host.COMPILER_STORE is
+        if !Host.HOST.has_dotnet() /\ Ghul.Project.WASM_HOST_SELECTION.resolve("node")? then
+            return Host.COMPILER_STORE.wasm_for_this_user()
+        fi
+
+        return managed_store
     si
 
     // What a compiler command prints as its version when run with no
@@ -1847,7 +1883,7 @@ namespace Ghul.Cli is
 
         if rest.count < 1 \/ (rest[0] !~ "response-file" /\ rest[0] !~ "compiler") then
             Std.error.write_line("usage: ghul project response-file --output <path> [--source-globs <path>] [--target <name>]")
-            Std.error.write_line("       ghul project compiler")
+            Std.error.write_line("       ghul project compiler [--json]")
             return 1
         fi
 
@@ -1875,7 +1911,8 @@ namespace Ghul.Cli is
 
         if let (compiler, compiler_version, runtime_assembly) = tool_compiler(store, manifest, options.overrides) then
             if !wants_response_file then
-                Std.out.write_line(Ghul.Project.EDITOR_FILES.command_line(compiler))
+                Std.out.write_line(
+                    if options.json then Ghul.Project.EDITOR_FILES.command_json(compiler) else Ghul.Project.EDITOR_FILES.command_line(compiler) fi)
                 return 0
             fi
 
@@ -1926,7 +1963,6 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        say("could not install ghul.compiler")
         return 1
     si
 
