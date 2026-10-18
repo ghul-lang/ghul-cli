@@ -1,5 +1,5 @@
 {
     // a comment and a trailing comma, both of which a manifest may carry
     "name": "greeter",
-    "targets": ["dotnet"],
+    "targets": ["wasm"],
 }

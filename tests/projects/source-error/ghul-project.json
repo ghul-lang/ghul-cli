@@ -1,1 +1,1 @@
-{ "name": "source-error" }
+{ "name": "source-error", "targets": ["wasm"] }
