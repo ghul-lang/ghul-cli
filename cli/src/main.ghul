@@ -205,6 +205,10 @@ namespace Ghul.Cli is
             return Host.NATIVE_COMPILER_DOWNLOAD.of(store).install(version, say)
         fi
 
+        if store.is_wasm then
+            return Host.WASM_COMPILER_DOWNLOAD.of(store).install(version, say)
+        fi
+
         if Host.HOST.has_dotnet() then
             return Host.COMPILER_DOWNLOAD.of(store).install(version, say)
         fi
@@ -1625,7 +1629,7 @@ namespace Ghul.Cli is
             return null
         fi
 
-        let chosen = if wants_llvm then Host.COMPILER_STORE.llvm_for_this_user() else store fi
+        let chosen mut = if wants_llvm then Host.COMPILER_STORE.llvm_for_this_user() else store fi
 
         let request = Ghul.Project.COMPILER_REQUEST.from_environment(overrides.compiler_command, project.manifest.compiler_version)
 
@@ -1661,26 +1665,74 @@ namespace Ghul.Cli is
             let latest = update_compiler_to_latest(chosen)
 
             if let (error): ERROR = latest then
-                say(error)
-                say("could not install the latest ghul.compiler")
-                return null
-            fi
+                if let wasm_store: Host.COMPILER_STORE = _wasm_fallback_store(chosen, wants_llvm, project.target) then
+                    let retried = update_compiler_to_latest(wasm_store)
 
-            wanted = latest!
+                    if let (retry_error): ERROR = retried then
+                        say(error)
+                        say(retry_error)
+                        say("could not install the latest ghul.compiler")
+                        return null
+                    fi
+
+                    chosen = wasm_store
+                    wanted = retried!
+                else
+                    say(error)
+                    say("could not install the latest ghul.compiler")
+                    return null
+                fi
+            else
+                wanted = latest!
+            fi
         else
             wanted = cast Ghul.Project.CompilerRequest.VERSION(request).version
         fi
 
         if let version: string = project_compiler(chosen, project, wanted, mode, say) then
-            let command = chosen.command(version)
+            return _built_compiler(chosen, version)
+        fi
 
-            let compiler =
-                Ghul.Project.COMPILER_PROCESS(command.file_name, Collections.LIST[string](command.leading_arguments()))
-
-            return (compiler, version, chosen.runtime_assembly(version))
+        // The version itself resolved; what failed was installing it from
+        // `chosen`. Where that was a Native AOT attempt with nothing to
+        // run it, the wasm-built compiler needs only Node, which runs
+        // everywhere a Native AOT archive could only run on the one
+        // platform it was built for.
+        if let wasm_store: Host.COMPILER_STORE = _wasm_fallback_store(chosen, wants_llvm, project.target) then
+            if let version: string = project_compiler(wasm_store, project, wanted, mode, say) then
+                return _built_compiler(wasm_store, version)
+            fi
         fi
 
         return null
+    si
+
+    // The built-compiler result `build_compiler` returns once a version
+    // is confirmed installed in `store`.
+    _built_compiler(store: Host.COMPILER_STORE, version: string) -> (compiler: Ghul.Project.COMPILER_PROCESS, version: string, runtime_assembly: string?) is
+        let command = store.command(version)
+
+        let compiler =
+            Ghul.Project.COMPILER_PROCESS(command.file_name, Collections.LIST[string](command.leading_arguments()))
+
+        return (compiler, version, store.runtime_assembly(version))
+    si
+
+    // The wasm-built compiler's store, where falling back to it from
+    // `chosen` is sound - not already itself, not the llvm-built compiler
+    // the manifest asked for by name, a target it can actually build
+    // (wasm or llvm, never dotnet), and Node to run what it builds - or
+    // null where any of that does not hold.
+    _wasm_fallback_store(chosen: Host.COMPILER_STORE, wants_llvm: bool, target: Ghul.Project.BuildTarget) -> Host.COMPILER_STORE? is
+        if wants_llvm \/ chosen.is_wasm \/ target == Ghul.Project.BuildTarget.DOTNET \/ Host.HOST.has_dotnet() then
+            return null
+        fi
+
+        if !Ghul.Project.NODE_RUNTIME.problem()? then
+            return null
+        fi
+
+        return Host.COMPILER_STORE.wasm_for_this_user()
     si
 
     // The compiler run as a command, as `--compiler` or `GHUL_COMPILER`

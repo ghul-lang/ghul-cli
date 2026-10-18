@@ -1,0 +1,133 @@
+namespace Ghul.Cli.Tests is
+    use IO.Directory
+    use IO.File
+    use IO.Path
+
+    use Ghul.Repl.Host.COMPILER_STORE
+    use Ghul.Repl.Host.WASM_COMPILER_DOWNLOAD
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // Where a wasm-built compiler download looks for its archive. Nothing
+    // is fetched.
+    @TestClass()
+    class WASM_COMPILER_DOWNLOAD_TESTS is
+        init() is si
+
+        _download() -> WASM_COMPILER_DOWNLOAD =>
+            WASM_COMPILER_DOWNLOAD(COMPILER_STORE.wasm_for_this_user(), "https://example.test/releases")
+
+        @Test()
+        archive_url__names_one_architecture_independent_archive() is
+            assert _download().archive_url("65.20.0") =~
+                "https://example.test/releases/v65.20.0/ghul-compiler-wasm.tar.gz"
+        si
+
+        @Test()
+        of__reads_the_base_from_the_environment_where_it_is_set() is
+            let previous = System.Environment.get_environment_variable("GHUL_COMPILER_WASM_BASE")
+
+            try
+                System.Environment.set_environment_variable("GHUL_COMPILER_WASM_BASE", "https://mirror.test")
+
+                assert WASM_COMPILER_DOWNLOAD.of(COMPILER_STORE.wasm_for_this_user()).base() =~ "https://mirror.test"
+            finally
+                System.Environment.set_environment_variable("GHUL_COMPILER_WASM_BASE", previous)
+            yrt
+        si
+
+        @Test()
+        of__falls_back_to_the_release_host__where_the_environment_names_none() is
+            let previous = System.Environment.get_environment_variable("GHUL_COMPILER_WASM_BASE")
+
+            try
+                System.Environment.set_environment_variable("GHUL_COMPILER_WASM_BASE", null)
+
+                assert WASM_COMPILER_DOWNLOAD.of(COMPILER_STORE.wasm_for_this_user()).base() =~
+                    "https://github.com/ghul-lang/ghul/releases/download"
+            finally
+                System.Environment.set_environment_variable("GHUL_COMPILER_WASM_BASE", previous)
+            yrt
+        si
+
+        _say_nothing(line: string) -> void static is si
+
+        // A flat gzip-tar of `ghul.wasm` and `ghul.mjs`, the shape the
+        // release packs: no wrapping directory, unlike the AOT archive.
+        _archive(wasm: string, loader: string) -> ubyte[] static is
+            let name = "ghul-wasm-archive-{System.Guid.new_guid().to_string("N")}"
+            let scratch = Path.combine(Path.get_temp_path(), name)
+            // Outside `scratch`, so taring the directory never tries to
+            // read the archive it is itself still being written into.
+            let archive = Path.combine(Path.get_temp_path(), "{name}.tar.gz")
+
+            Directory.create_directory(scratch)
+
+            try
+                File.write_all_text(Path.combine(scratch, "ghul.wasm"), wasm)
+                File.write_all_text(Path.combine(scratch, "ghul.mjs"), loader)
+
+                let output = IO.FileStream(archive, IO.FileMode.CREATE)
+
+                try
+                    let gzip = System.IO.Compression.GZipStream(output, System.IO.Compression.CompressionLevel.FASTEST)
+
+                    try
+                        System.Formats.Tar.TarFile.create_from_directory(scratch, gzip, false)
+                    finally
+                        gzip.dispose()
+                    yrt
+                finally
+                    output.dispose()
+                yrt
+
+                return File.read_all_bytes(archive)
+            finally
+                Directory.delete(scratch, true)
+                if File.exists(archive) then
+                    File.delete(archive)
+                fi
+            yrt
+        si
+
+        @Test()
+        install__unpacks_the_module_and_loader_straight_into_the_store() is
+            let body = _archive("module bytes", "loader bytes")
+
+            let handler = (path: string) -> ubyte[]? is
+                if path =~ "/v7.0.0/ghul-compiler-wasm.tar.gz" then body else null fi
+            si
+
+            let server = FEED_SERVER(handler)
+            server.start()
+
+            let root = Path.combine(Path.get_temp_path(), "ghul-wasm-store-{System.Guid.new_guid().to_string("N")}")
+
+            try
+                let store = COMPILER_STORE(root, false, true)
+                let download = WASM_COMPILER_DOWNLOAD(store, server.url())
+
+                let installed = download.install("7.0.0", _say_nothing)
+
+                assert installed?;
+                assert store.is_installed("7.0.0");
+
+                let directory = store.directory("7.0.0")
+
+                assert File.read_all_text(Path.combine(directory, "ghul.wasm")) =~ "module bytes";
+                assert File.read_all_text(Path.combine(directory, "ghul.mjs")) =~ "loader bytes";
+
+                let command = store.command("7.0.0")
+
+                assert command.file_name =~ "node";
+                assert command.leading_arguments().count == 1 /\ command.leading_arguments()[0] =~ Path.combine(directory, "ghul.mjs");
+            finally
+                server.stop()
+                if Directory.exists(root) then
+                    Directory.delete(root, true)
+                fi
+            yrt
+        si
+    si
+si

@@ -22,9 +22,11 @@ namespace Ghul.Repl.Host is
     // where that is unset), holding either what a `ghul.compiler` package
     // carries in `tools/net10.0/any` - the compiler's own dll with the
     // runtime and its dependencies beside it, run as `dotnet <dir>/ghul.dll`
-    // - or what the Native AOT archive a release carries holds, run as
-    // `<dir>/ghul-compiler` with no .NET at all. Several versions are held
-    // at once and the highest is the one used where a build names none.
+    // - what the Native AOT archive a release carries holds, run as
+    // `<dir>/ghul-compiler` with no .NET at all - or what the wasm-built
+    // archive carries, run as `node <dir>/ghul.mjs` with no .NET and no
+    // archive built for this machine's own platform. Several versions are
+    // held at once and the highest is the one used where a build names none.
     //
     // A cache rather than installed state, because nothing here is ever
     // installed: a manifest names the version a project wants and this
@@ -41,15 +43,28 @@ namespace Ghul.Repl.Host is
         /// This user's store of the llvm-built compiler a release ships,
         /// beside the other so the two builds of one version are held apart.
         llvm_for_this_user() -> COMPILER_STORE static =>
-            COMPILER_STORE(Path.join([_cache_base(), "ghul-cli", "compilers-llvm"]), true)
+            COMPILER_STORE(Path.join([_cache_base(), "ghul-cli", "compilers-llvm"]), true, false)
+
+        /// This user's store of the wasm-built compiler a release ships,
+        /// run under Node rather than as a native executable, for a
+        /// platform with no .NET and no Native AOT archive of its own.
+        wasm_for_this_user() -> COMPILER_STORE static =>
+            COMPILER_STORE(Path.join([_cache_base(), "ghul-cli", "compilers-wasm"]), false, true)
 
         /// Whether the store holds the llvm-built compiler, which compiles for
         /// wasm and llvm only, rather than the managed or Native AOT one.
         is_llvm: bool
 
+        /// Whether the store holds the wasm-built compiler, run under Node;
+        /// architecture-independent, and compiles for wasm and llvm only,
+        /// the same restriction as the llvm-built one.
+        is_wasm: bool
+
         /// - is_llvm: whether the store holds the llvm-built compiler
-        init(.., is_llvm: bool) is
+        /// - is_wasm: whether the store holds the wasm-built compiler
+        init(.., is_llvm: bool, is_wasm: bool) is
             self.is_llvm = is_llvm
+            self.is_wasm = is_wasm
         si
 
         _cache_base() -> string static is
@@ -108,6 +123,20 @@ namespace Ghul.Repl.Host is
             return null
         si
 
+        // The loader a wasm-built release ships, which Node runs with the
+        // build's arguments, or null where this version is not held as one.
+        WASM_LOADER_FILE_NAME: string static => "ghul.mjs"
+
+        wasm_loader(version: string) -> string? is
+            let loader = Path.join([directory(version), WASM_LOADER_FILE_NAME])
+
+            if File.exists(loader) then
+                return loader
+            fi
+
+            return null
+        si
+
         // The runtime a version carries beside its compiler, which a
         // program the version compiled needs beside it too.
         runtime_assembly(version: string) -> string? is
@@ -120,18 +149,23 @@ namespace Ghul.Repl.Host is
             return null
         si
 
-        // How a version is run: itself where it is a native compiler, the
+        // How a version is run: itself where it is a native compiler,
+        // `node` and the version's loader where it is a wasm-built one, the
         // .NET host and the version's dll where it is a managed one.
         command(version: string) -> COMPILER_COMMAND is
             if let native: string = native_compiler(version) then
                 return COMPILER_COMMAND(native, null)
             fi
 
+            if let loader: string = wasm_loader(version) then
+                return COMPILER_COMMAND("node", loader)
+            fi
+
             return COMPILER_COMMAND("dotnet", compiler_assembly(version))
         si
 
         is_installed(version: string) -> bool =>
-            native_compiler(version)? \/ compiler_assembly(version)?
+            native_compiler(version)? \/ wasm_loader(version)? \/ compiler_assembly(version)?
 
         // Every version held, lowest first. A directory counts as a version
         // when it holds a compiler, so a scratch directory an interrupted
@@ -152,7 +186,9 @@ namespace Ghul.Repl.Host is
                     let name = Path.get_file_name(entry) ?? entry
 
                     if !name.starts_with(".") /\ !name.contains(".tmp-") /\ !found.contains(name) then
-                        if File.exists(Path.join([entry, NATIVE_COMPILER_FILE_NAME])) \/ File.exists(Path.join([entry, "ghul.dll"])) then
+                        if File.exists(Path.join([entry, NATIVE_COMPILER_FILE_NAME])) \/
+                            File.exists(Path.join([entry, WASM_LOADER_FILE_NAME])) \/
+                            File.exists(Path.join([entry, "ghul.dll"])) then
                             found.add(name)
                         fi
                     fi

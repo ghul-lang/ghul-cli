@@ -1,0 +1,157 @@
+namespace Ghul.Repl.Host is
+    use IO.Directory
+    use IO.File
+    use IO.FileMode
+    use IO.FileAccess
+    use IO.FileShare
+    use IO.FileStream
+    use IO.Path
+    use System.Formats.Tar.TarFile
+    use System.IO.Compression.GZipStream
+    use System.IO.Compression.CompressionMode
+
+    // Installs a compiler version from the wasm-built archive a
+    // ghul.compiler release carries, for a machine with no .NET and no
+    // Native AOT archive for its own platform - Node runs the same module
+    // and loader everywhere a Native AOT archive could only run on the one
+    // platform it was built for, which is what makes this the fallback for
+    // the platforms a release has no native archive for.
+    //
+    // Shaped as NATIVE_COMPILER_DOWNLOAD is, except the archive names
+    // nothing about the platform: there is one archive for every machine.
+    use Result.*
+
+    class WASM_COMPILER_DOWNLOAD(_store: COMPILER_STORE, _base: string?) is
+        DEFAULT_BASE: string static => "https://github.com/ghul-lang/ghul/releases/download"
+
+        // A download into `store`, with the release base named by
+        // GHUL_COMPILER_WASM_BASE where that is set, so a mirror or a test
+        // can serve the archive from elsewhere.
+        of(store: COMPILER_STORE) -> WASM_COMPILER_DOWNLOAD static =>
+            WASM_COMPILER_DOWNLOAD(
+                store, System.Environment.get_environment_variable("GHUL_COMPILER_WASM_BASE"))
+
+        base() -> string => _base ?? DEFAULT_BASE
+
+        // The name of the archive a release publishes - one for every
+        // platform, since the module and loader are architecture-independent.
+        ARCHIVE_NAME: string static => "ghul-compiler-wasm.tar.gz"
+
+        // The release tag a version is published under, which the compiler
+        // repository tags every version `v<version>`.
+        ARCHIVE_TAG_PREFIX: string static => "v"
+
+        archive_url(version: string) -> string =>
+            "{base()}/{ARCHIVE_TAG_PREFIX}{version}/{ARCHIVE_NAME}"
+
+        // Installs `version` from its wasm-built archive. Null on success, or
+        // the failure to report, which names the version and, where the
+        // release answered, the HTTP status.
+        install(version: string, say: (string) -> void) -> Result[unit, string] is
+            // The version names a directory and a URL, so anything that
+            // could reach outside a single name is refused outright.
+            if version.length == 0 \/ version.contains("/") \/ version.contains("\\") \/ version.contains("..") then
+                return ERROR("ghul.compiler {version} is not a version")
+            fi
+
+            Directory.create_directory(_store.root)
+
+            let archive_scratch =
+                Path.join([_store.root, ".download-{System.Environment.process_id}-{System.Guid.new_guid().to_string("N")}.tar.gz"])
+
+            try
+                say("downloading the wasm-built compiler ghul.compiler {version}...")
+
+                let downloaded = _download(version, archive_scratch)
+
+                if let (error): ERROR = downloaded then
+                    return ERROR(error)
+                fi
+
+                let scratch_directory =
+                    Path.join([_store.root, "{version}.tmp-{System.Environment.process_id}-{System.Guid.new_guid().to_string("N")}"])
+
+                try
+                    let unpacked_archive = _unpack(archive_scratch, scratch_directory)
+
+                    if let (error): ERROR = unpacked_archive then
+                        return ERROR(error)
+                    fi
+
+                    if !File.exists(Path.join([scratch_directory, COMPILER_STORE.WASM_LOADER_FILE_NAME])) then
+                        return ERROR("the wasm-built archive for ghul.compiler {version} carries no compiler")
+                    fi
+
+                    try
+                        Directory.move(scratch_directory, _store.directory(version))
+                    catch e: IO.IOException
+                        // Another process installed the same version first;
+                        // its copy is complete, ours is redundant.
+                        _delete_directory(scratch_directory)
+                    yrt
+
+                    return OK(_)
+                finally
+                    _delete_directory(scratch_directory)
+                yrt
+            finally
+                if File.exists(archive_scratch) then
+                    File.delete(archive_scratch)
+                fi
+            yrt
+        si
+
+        _download(version: string, destination: string) -> Result[unit, string] is
+            let url = archive_url(version)
+            let client = System.Net.Http.HttpClient()
+
+            try
+                let response = client.get_async(url).result
+
+                if !response.is_success_status_code then
+                    return ERROR("ghul.compiler {version} has no wasm-built compiler (HTTP {cast int(response.status_code)})")
+                fi
+
+                let bytes = response.content.read_as_byte_array_async().result
+
+                File.write_all_bytes(destination, bytes)
+
+                return OK(_)
+            catch e: System.Exception
+                return ERROR("the wasm-built compiler for ghul.compiler {version} could not be downloaded ({e.get_type().name})")
+            finally
+                client.dispose()
+            yrt
+        si
+
+        // The archive holds the module and loader at its top level, with
+        // no wrapping directory, unlike the AOT archive.
+        _unpack(archive: string, destination: string) -> Result[unit, string] is
+            Directory.create_directory(destination)
+
+            let input = FileStream(archive, FileMode.OPEN, FileAccess.READ, FileShare.READ)
+
+            try
+                let gzip = GZipStream(input, CompressionMode.DECOMPRESS)
+
+                try
+                    TarFile.extract_to_directory(gzip, destination, true)
+
+                    return OK(_)
+                finally
+                    gzip.dispose()
+                yrt
+            catch e: System.Exception
+                return ERROR("the wasm-built compiler archive could not be read ({e.get_type().name})")
+            finally
+                input.dispose()
+            yrt
+        si
+
+        _delete_directory(path: string) is
+            if Directory.exists(path) then
+                Directory.delete(path, true)
+            fi
+        si
+    si
+si
