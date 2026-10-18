@@ -11,11 +11,8 @@ namespace Ghul.Repl.Host is
     use System.IO.Compression.CompressionMode
 
     // Installs a compiler version from the wasm-built archive a
-    // ghul.compiler release carries, for a machine with no .NET and no
-    // Native AOT archive for its own platform - Node runs the same module
-    // and loader everywhere a Native AOT archive could only run on the one
-    // platform it was built for, which is what makes this the fallback for
-    // the platforms a release has no native archive for.
+    // ghul.compiler release carries: the compiler for a machine with no
+    // .NET, since Node runs the same module and loader on every platform.
     //
     // Shaped as NATIVE_COMPILER_DOWNLOAD is, except the archive names
     // nothing about the platform: there is one archive for every machine.

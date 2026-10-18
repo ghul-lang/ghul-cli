@@ -28,11 +28,14 @@ namespace Ghul.Project is
                 else
                     let home = System.Environment.get_environment_variable("HOME")
 
-                    if home? /\ home.length > 0 then
-                        home
-                    else
-                        System.Environment.get_folder_path(System.Environment_SpecialFolder.USER_PROFILE)
-                    fi
+                    let directory =
+                        if home? /\ home.length > 0 then
+                            home
+                        else
+                            System.Environment.get_folder_path(System.Environment_SpecialFolder.USER_PROFILE)
+                        fi
+
+                    Path.join([directory, ".cache"])
                 fi
 
             Directory.create_directory(base)

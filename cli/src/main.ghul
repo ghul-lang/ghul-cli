@@ -1659,14 +1659,24 @@ namespace Ghul.Cli is
             return given
         fi
 
+        // With no .NET, the wasm-built compiler under Node is the compiler
+        // to use: one archive for every platform. The Native AOT compiler
+        // stays as the fallback for a machine with no Node to run it.
+        let fallback: Host.COMPILER_STORE? mut = null
+
+        if let wasm_store: Host.COMPILER_STORE = _wasm_store(chosen, wants_llvm, project.target) then
+            fallback = chosen
+            chosen = wasm_store
+        fi
+
         let wanted: string? mut = null
 
         if isa Ghul.Project.CompilerRequest.LATEST(request) then
             let latest = update_compiler_to_latest(chosen)
 
             if let (error): ERROR = latest then
-                if let wasm_store: Host.COMPILER_STORE = _wasm_fallback_store(chosen, wants_llvm, project.target) then
-                    let retried = update_compiler_to_latest(wasm_store)
+                if let other: Host.COMPILER_STORE = fallback then
+                    let retried = update_compiler_to_latest(other)
 
                     if let (retry_error): ERROR = retried then
                         say(error)
@@ -1675,7 +1685,8 @@ namespace Ghul.Cli is
                         return null
                     fi
 
-                    chosen = wasm_store
+                    chosen = other
+                    fallback = null
                     wanted = retried!
                 else
                     say(error)
@@ -1689,46 +1700,71 @@ namespace Ghul.Cli is
             wanted = cast Ghul.Project.CompilerRequest.VERSION(request).version
         fi
 
-        if let version: string = project_compiler(chosen, project, wanted, mode, say) then
+        // The first attempt's complaints are held back until it is known
+        // whether the fallback rescues the build, so a build that succeeds
+        // does not first report a failure.
+        if !fallback? then
+            if let version: string = project_compiler(chosen, project, wanted, mode, say) then
+                return _built_compiler(chosen, version)
+            fi
+
+            return null
+        fi
+
+        let held = Collections.LIST[string]()
+
+        if let version: string = project_compiler(chosen, project, wanted, mode, message => held.add(message)) then
+            for message in held do
+                say(message)
+            od
+
             return _built_compiler(chosen, version)
         fi
 
-        // The version itself resolved; what failed was installing it from
-        // `chosen`. Where that was a Native AOT attempt with nothing to
-        // run it, the wasm-built compiler needs only Node, which runs
-        // everywhere a Native AOT archive could only run on the one
-        // platform it was built for.
-        if let wasm_store: Host.COMPILER_STORE = _wasm_fallback_store(chosen, wants_llvm, project.target) then
-            if let version: string = project_compiler(wasm_store, project, wanted, mode, say) then
-                return _built_compiler(wasm_store, version)
-            fi
+        if let version: string = project_compiler(fallback, project, wanted, mode, say) then
+            return _built_compiler(fallback, version)
         fi
+
+        for message in held do
+            say(message)
+        od
 
         return null
     si
 
     // The built-compiler result `build_compiler` returns once a version
-    // is confirmed installed in `store`.
+    // is confirmed installed in `store`. A wasm-built compiler is run by
+    // whichever `node` this machine actually has - the one on PATH, or the
+    // one `ghul install node` cached - rather than the bare name `store`
+    // hands back, which only resolves when `node` happens to be on PATH.
     _built_compiler(store: Host.COMPILER_STORE, version: string) -> (compiler: Ghul.Project.COMPILER_PROCESS, version: string, runtime_assembly: string?) is
         let command = store.command(version)
 
+        let file_name =
+            if store.is_wasm then
+                Ghul.Project.WASM_HOST_SELECTION.resolve("node") ?? command.file_name
+            else
+                command.file_name
+            fi
+
         let compiler =
-            Ghul.Project.COMPILER_PROCESS(command.file_name, Collections.LIST[string](command.leading_arguments()))
+            Ghul.Project.COMPILER_PROCESS(file_name, Collections.LIST[string](command.leading_arguments()))
 
         return (compiler, version, store.runtime_assembly(version))
     si
 
-    // The wasm-built compiler's store, where falling back to it from
-    // `chosen` is sound - not already itself, not the llvm-built compiler
-    // the manifest asked for by name, a target it can actually build
-    // (wasm or llvm, never dotnet), and Node to run what it builds - or
-    // null where any of that does not hold.
-    _wasm_fallback_store(chosen: Host.COMPILER_STORE, wants_llvm: bool, target: Ghul.Project.BuildTarget) -> Host.COMPILER_STORE? is
+    // The wasm-built compiler's store, where it should build in place of
+    // `chosen`: not already itself, not the llvm-built compiler the
+    // manifest asked for by name, a target it can build (wasm or llvm,
+    // never dotnet), no .NET to run the managed compiler, and a node this
+    // machine can start - on PATH, or cached by `ghul install node`. Null
+    // where any of that does not hold.
+    _wasm_store(chosen: Host.COMPILER_STORE, wants_llvm: bool, target: Ghul.Project.BuildTarget) -> Host.COMPILER_STORE? is
         if wants_llvm \/ chosen.is_wasm \/ target == Ghul.Project.BuildTarget.DOTNET \/ Host.HOST.has_dotnet() then
             return null
         fi
 
-        if !Ghul.Project.NODE_RUNTIME.problem()? then
+        if !Ghul.Project.WASM_HOST_SELECTION.resolve("node")? then
             return null
         fi
 
