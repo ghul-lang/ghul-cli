@@ -521,14 +521,20 @@ namespace Ghul.Cli is
         let positional = [argument for argument in rest if argument !~ "--llvm"]
 
         let version: string? = if positional.count > 0 then positional[0] else null fi
-        let host = _host_store()
+        let store mut = Host.COMPILER_STORE.llvm_for_this_user()
 
-        if let problem: string = host.problem then
-            Std.error.write_line("ghul: {problem}")
-            return 1
+        // The llvm-built compiler has a store of its own, whatever host the
+        // environment picks for the others.
+        if !llvm then
+            let host = _host_store()
+
+            if let problem: string = host.problem then
+                Std.error.write_line("ghul: {problem}")
+                return 1
+            fi
+
+            store = host.store ?? Host.COMPILER_STORE.for_this_user()
         fi
-
-        let store = if llvm then Host.COMPILER_STORE.llvm_for_this_user() else host.store ?? Host.COMPILER_STORE.for_this_user() fi
 
         if let wanted: string = version /\ store.is_installed(wanted) then
             Std.error.write_line("ghul: ghul.compiler {wanted} is already installed")
