@@ -76,8 +76,9 @@ Without .NET, `ghul` builds projects for the llvm and wasm targets. An llvm
 build links a native executable with `ghul-llvm`, which `ghul` fetches the
 first time it is needed. A wasm build runs with Node.js 22.19 or later on the
 22 line, 24.15 or later on the 24 line, or 25 or later; where the machine has
-none, `ghul` runs the module under the wasmtime host instead, which it fetches
-the first time it is needed. Both fetch ghul-core and ghul-runtime with `git`.
+none, `ghul` says so and that `ghul install node` brings one in, and on Linux
+x64 that the llvm target builds a native executable without it. Both fetch
+ghul-core and ghul-runtime with `git`.
 
 Without .NET, the compiler itself is the wasm-built one, run by Node: a
 single archive every release publishes for every platform, fetched the first
@@ -263,10 +264,10 @@ steps, each filling only what the one before leaves unset.
 
 3. Nothing said anywhere, the built-in default is node, which runs these
    builds faster than the wasmtime host; where the machine has no node that
-   runs the wasm target, a run falls back to the wasmtime host, which it
-   fetches where it is missing. A host named by the manifest or the global
-   file is honoured rather than swapped: where it cannot be started, the
-   run says so and names `ghul install`.
+   runs the wasm target, a run says so and names `ghul install node`. The
+   wasmtime host runs only where the manifest or the global file names it,
+   and is fetched where it is missing. A host named by the manifest or the
+   global file is honoured rather than swapped.
 
 A project that names a host itself is never overridden by the global file.
 The built-in order a build follows is dotnet first, then wasm; llvm is never
