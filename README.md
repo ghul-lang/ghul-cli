@@ -79,12 +79,16 @@ first time it is needed. A wasm build runs with Node.js 22.19 or later on the
 none, `ghul` runs the module under the wasmtime host instead, which it fetches
 the first time it is needed. Both fetch ghul-core and ghul-runtime with `git`.
 
+Without .NET, the compiler itself is the wasm-built one, run by Node: a
+single archive every release publishes for every platform, fetched the first
+time it is needed. The Node it runs under is the one on `PATH`, or the one
+`ghul install node` brought in. On a machine with no Node, `ghul` uses the
+Native AOT compiler instead, which is published for Linux x64 only.
+
 Which machines that covers follows from the builds that exist. `ghul` is a
-.NET tool except as its Linux x64 native archive, and the compilers that build
-without a .NET SDK, the Native AOT compiler and the llvm-built one, are
-published for Linux x64 only. So a machine with no .NET at all is Linux x64,
-and there `ghul` builds for llvm. A machine with a .NET runtime but no SDK can
-run `ghul` and build for wasm and, on Linux x64, llvm, but not for dotnet.
+.NET tool except as its Linux x64 native archive, so a machine with no .NET at
+all is Linux x64. A machine with a .NET runtime but no SDK can run `ghul` and
+build for wasm and, on Linux x64, llvm, but not for dotnet.
 
 A script, `ghul script.ghul`, a `#!/usr/bin/env ghul` script or one read from
 standard input, runs wherever a target can be built for it. A script needs
