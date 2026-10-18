@@ -24,6 +24,11 @@ fail() {
     exit 1
 }
 
+case "$(uname -m)" in
+    aarch64 | arm64) rid="linux-arm64" ;;
+    *) rid="linux-x64" ;;
+esac
+
 running="$("$aot" version | head -n 1 | cut -d' ' -f2)"
 running="${running%%+*}"
 newer="99.0.0"
@@ -42,22 +47,21 @@ export GHUL_COMPILER_FEED="file://$mirror/feed"
 printf '{"versions": ["0.0.0"]}\n' > "$mirror/feed/ghul.compiler/index.json"
 mkdir -p "$HOME"
 
-# A release directory holding `ghul` and a compiler, packed and checksummed
+# A release directory holding `ghul`, packed and checksummed
 # the way the release job packs them.
 release() {
     local tag="$1" executable="$2" release_dir="$mirror/download/$1" payload="$scratch/payload-$1"
 
-    mkdir -p "$release_dir" "$payload/compilers/0.0.0"
+    mkdir -p "$release_dir" "$payload"
     cp "$executable" "$payload/ghul"
     chmod +x "$payload/ghul"
-    echo "a compiler" > "$payload/compilers/0.0.0/ghul-compiler"
 
-    tar -czf "$release_dir/ghul-cli-linux-x64.tar.gz" -C "$payload" ghul compilers
+    tar -czf "$release_dir/ghul-cli-$rid.tar.gz" -C "$payload" ghul
     cp "$repo_root/install.sh" "$release_dir/ghul-cli-install.sh"
 
     (
         cd "$release_dir"
-        sha256sum ghul-cli-linux-x64.tar.gz > ghul-cli-linux-x64.tar.gz.sha256
+        sha256sum "ghul-cli-$rid.tar.gz" > "ghul-cli-$rid.tar.gz.sha256"
         sha256sum ghul-cli-install.sh > ghul-cli-install.sh.sha256
     )
 }

@@ -1,11 +1,11 @@
 #!/bin/sh
 #
-# Installs ghul-cli, compiled with Native AOT, together with the compiler it
-# ships beside it.
+# Installs ghul-cli, compiled with Native AOT. The compiler is not part of it:
+# the first build fetches one.
 #
 # Needs a POSIX shell, tar, and curl or wget. It needs nothing else: no .NET
 # SDK, no .NET runtime, and no build tooling. What it installs is the same
-# two things whether or not this machine ever had .NET on it, plus a private
+# whether or not this machine ever had .NET on it: the tool, plus a private
 # Node.js where the machine has no Node that ghul can run with (see --help).
 #
 #   curl -fsSL https://raw.githubusercontent.com/ghul-lang/ghul-cli/main/install.sh | sh
@@ -46,10 +46,10 @@ checked against the release's SHASUMS256.txt; it does not touch PATH.
 Installing puts a directory on PATH if it is not already on it; the script
 says which, and prints the line to add if you would rather do it yourself.
 
-The tool goes to ~/.local/opt/ghul and the compiler it ships goes into the
-ghul-cli cache (~/.cache/ghul-cli, or XDG_CACHE_HOME where that is set),
-since that is where ghul-cli looks for it and where 'ghul cache clear'
-clears it.
+The tool goes to ~/.local/opt/ghul. It ships no compiler: the first build
+fetches one into the ghul-cli cache (~/.cache/ghul-cli, or XDG_CACHE_HOME
+where that is set), where 'ghul cache clear' clears it, and 'ghul update'
+keeps it current.
 EOF
 }
 
@@ -131,10 +131,12 @@ esac
 
 rid="${os_name}-${arch_name}"
 
-# Linux x64 is the only platform an archive is published for.
-if [ "${rid}" != "linux-x64" ]; then
-    fail "ghul-cli is not built for ${rid}; install the .NET SDK and run 'dotnet tool install -g ghul.cli' instead"
-fi
+# An archive is published for Linux on x64 and on arm64. The arm64 one carries
+# the tool alone: ghul runs its compiler under Node there, and fetches it.
+case "${rid}" in
+    linux-x64 | linux-arm64) ;;
+    *) fail "ghul-cli is not built for ${rid}; install the .NET SDK and run 'dotnet tool install -g ghul.cli' instead" ;;
+esac
 
 # --- how we fetch ------------------------------------------------------------
 
@@ -296,13 +298,6 @@ else
     say "no published sha256 for this asset; continuing without checking it."
 fi
 
-# The tool goes where a program goes; the compiler goes where the tool
-# looks for it. It is not installed beside the executable because nothing
-# here is installed - a manifest names the compiler a project wants and the
-# tool fetches it into its cache - so the cache is where it belongs, and
-# `ghul cache clear` clears it with everything else.
-cache_home="${XDG_CACHE_HOME:-${HOME}/.cache}/ghul-cli"
-
 # --- unpack ------------------------------------------------------------------
 
 mkdir -p "${work}/unpack"
@@ -310,21 +305,6 @@ tar -xzf "${work}/${archive}" -C "${work}/unpack" || fail "the archive could not
 
 if [ ! -x "${work}/unpack/ghul" ]; then
     fail "the archive holds no ghul executable at its root"
-fi
-
-if [ ! -d "${work}/unpack/compilers" ]; then
-    fail "the archive holds no compilers directory beside ghul"
-fi
-
-# Checked before anything is replaced, so an archive with no compiler in it
-# leaves the installed tool as it was.
-shipped_any=""
-for shipped in "${work}"/unpack/compilers/*; do
-    [ -d "${shipped}" ] && shipped_any="true"
-done
-
-if [ -z "${shipped_any}" ]; then
-    fail "the archive ships no compiler"
 fi
 
 # --- install -----------------------------------------------------------------
@@ -353,27 +333,6 @@ if ! mv "${staged}" "${root}"; then
 fi
 
 rm -rf "${previous}"
-
-# --- put the compiler where the tool looks for it ----------------------------
-
-seeded=""
-
-for shipped in "${work}"/unpack/compilers/*; do
-    [ -d "${shipped}" ] || continue
-
-    version="$(basename "${shipped}")"
-    target="${cache_home}/compilers/native/${version}"
-
-    if [ -e "${target}" ]; then
-        say "ghul.compiler ${version} is already in the cache; leaving it."
-        continue
-    fi
-
-    mkdir -p "${target}"
-    cp -R "${shipped}/." "${target}/" || fail "ghul.compiler ${version} could not be put in the cache"
-
-    seeded="${seeded} ${version}"
-done
 
 # --- fetch Node.js where there is none to use ---------------------------------
 
@@ -456,8 +415,6 @@ else
     esac
 fi
 
-say ""
-say "installed${seeded:+ ghul.compiler${seeded} into ${cache_home}/compilers/native}."
 say ""
 say "Try:"
 say ""

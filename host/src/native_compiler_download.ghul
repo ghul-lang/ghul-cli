@@ -58,7 +58,7 @@ namespace Ghul.Repl.Host is
                 fi
             fi
 
-            return ERROR("there is no {kind()} compiler for this platform")
+            return ERROR("there is no {kind()} compiler for this platform, which is not linux-x64; the wasm-built compiler under Node runs on any")
         si
 
         /// Whether a release builds a Native AOT compiler for the .NET

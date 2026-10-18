@@ -1014,7 +1014,7 @@ namespace Ghul.Cli is
 
         let store = host.store ?? Host.COMPILER_STORE.for_this_user()
 
-        let ensured = ensure_compiler_installed(store, null, false)
+        let ensured = ensure_compiler_installed(store, null, true)
 
         if let (error): ERROR = ensured then
             say(error)
@@ -1271,7 +1271,7 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        let ensured = ensure_compiler_installed(store, null, false)
+        let ensured = ensure_compiler_installed(store, null, true)
 
         if let (error): ERROR = ensured then
             Std.error.write_line("ghul: {error}")
@@ -1854,7 +1854,7 @@ namespace Ghul.Cli is
 
         let requested = cast Ghul.Project.CompilerChoice.REQUESTED(choice)
 
-        let version = ensure_compiler_installed(store, requested.version, false)
+        let version = ensure_compiler_installed(store, requested.version, true)
 
         if let (error): ERROR = version then
             say(error)

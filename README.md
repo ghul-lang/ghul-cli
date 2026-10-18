@@ -66,12 +66,14 @@ highest installed is the one used.
 curl -fsSL https://raw.githubusercontent.com/ghul-lang/ghul-cli/main/install.sh | sh
 ```
 
-This installs `ghul` and the compiler as native executables, built with .NET
-Native AOT, which need nothing installed but the C library: no .NET runtime
-and no SDK. It is built for Linux on x64 only. The tool goes into
-`~/.local/opt/ghul`, linked from `~/.local/bin/ghul`, and the compiler it
-ships goes into the compiler cache above. `sh install.sh --help` lists the
-options, and `--dry-run` reports what it would do.
+This installs `ghul` as a native executable, built with .NET Native AOT, which
+needs nothing installed but the C library: no .NET runtime and no SDK. It is
+built for Linux on x64 and on arm64, a Raspberry Pi 4 or 5 among them. The
+archive holds the tool alone, so the compiler is never out of date with it:
+the first build fetches one into the compiler cache above, the wasm-built
+compiler under Node by default. The tool goes into `~/.local/opt/ghul`, linked
+from `~/.local/bin/ghul`. `sh install.sh --help` lists the options, and
+`--dry-run` reports what it would do.
 
 `ghul update` updates it in place.
 
@@ -86,12 +88,14 @@ ghul-core and ghul-runtime with `git`.
 Without .NET, the compiler itself is the wasm-built one, run by Node: a
 single archive every release publishes for every platform, fetched the first
 time it is needed. The Node it runs under is the one on `PATH`, or the one
-`ghul install node` brought in. On a machine with no Node, `ghul` uses the
-Native AOT compiler instead, which is published for Linux x64 only.
+`ghul install node` brought in. On a machine with no Node, `ghul` fetches the
+Native AOT compiler instead, which is published for Linux x64 only; on arm64
+there is none, so the machine needs Node, and `ghul install node` brings one in.
 
 Which machines that covers follows from the builds that exist. `ghul` is a
 .NET tool except as its Linux x64 native archive, so a machine with no .NET at
-all is Linux x64. `ghul` builds for wasm and, on Linux x64, llvm; it does not
+all is Linux x64 or arm64. `ghul` builds for wasm and, on Linux x64, llvm
+(`ghul-llvm` is not released for arm64); it does not
 build for .NET, which is the .NET SDK's job, with a `.ghulproj` and `dotnet build`.
 
 A script, `ghul script.ghul`, a `#!/usr/bin/env ghul` script or one read from
