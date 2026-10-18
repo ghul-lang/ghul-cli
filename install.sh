@@ -362,7 +362,7 @@ for shipped in "${work}"/unpack/compilers/*; do
     [ -d "${shipped}" ] || continue
 
     version="$(basename "${shipped}")"
-    target="${cache_home}/compilers/${version}"
+    target="${cache_home}/compilers/native/${version}"
 
     if [ -e "${target}" ]; then
         say "ghul.compiler ${version} is already in the cache; leaving it."
@@ -457,7 +457,7 @@ else
 fi
 
 say ""
-say "installed${seeded:+ ghul.compiler${seeded} into ${cache_home}/compilers}."
+say "installed${seeded:+ ghul.compiler${seeded} into ${cache_home}/compilers/native}."
 say ""
 say "Try:"
 say ""

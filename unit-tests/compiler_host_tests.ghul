@@ -18,7 +18,7 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         each_host__is_read_whatever_its_case() is
-            assert COMPILER_HOST.read("node").host =~ CompilerHost.NODE;
+            assert COMPILER_HOST.read("wasm").host =~ CompilerHost.WASM;
             assert COMPILER_HOST.read("DotNet").host =~ CompilerHost.DOTNET;
             assert COMPILER_HOST.read(" native ").host =~ CompilerHost.NATIVE;
         si

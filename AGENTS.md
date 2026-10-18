@@ -89,8 +89,9 @@ looks for them.
 - `host/` — the `ghul.repl.host` package: hosting a session in this
   process with an installed compiler, shared with the Jupyter kernel.
   `COMPILER_STORE` owns where compilers are held
-  (`$XDG_CACHE_HOME/ghul-cli/compilers/<version>/`, `~/.cache/ghul-cli/compilers`
-  where that is unset, several versions at once, highest winning where a
+  (`$XDG_CACHE_HOME/ghul-cli/compilers/<host>/<version>/`,
+  `~/.cache/ghul-cli/compilers` where that is unset, `<host>` one of `dotnet`,
+  `native`, `wasm` and `llvm`, several versions at once, highest winning where a
   build names none). Nothing is installed: a manifest names the version a
   project wants and the store makes it available, so a store sits in the
   cache beside the compiled-script and library caches rather than in

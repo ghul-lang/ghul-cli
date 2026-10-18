@@ -274,9 +274,10 @@ if (( fail )); then
     exit 1
 fi
 # The compilers live in the cache beside the script cache, since nothing is
-# installed - a manifest names the version and the tool fetches it.
+# installed - a manifest names the version and the tool fetches it - one
+# directory per host, holding one directory per version.
 compilers="$fresh_home/.cache/ghul-cli/compilers"
-installed_versions="$(ls "$compilers" 2>/dev/null | wc -l)"
+installed_versions="$(ls -d "$compilers"/*/*/ 2>/dev/null | wc -l)"
 if [[ "$installed_versions" != "1" ]]; then
     echo "smoke: expected exactly one compiler version after concurrent installs, found $installed_versions under $compilers" >&2
     exit 1
