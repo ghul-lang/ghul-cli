@@ -6,8 +6,9 @@ namespace Ghul.Project is
     /// global defaults, falling back to the built-in default, which is
     /// node: it runs these builds several times faster than the wasmtime
     /// host. The default states a preference, not a fact about the machine
-    /// - `resolve` answers whether a named host is there, and `effective`
-    /// is where a machine with no node falls back to the wasmtime host.
+    /// - `resolve` answers whether a named host is there. A machine with
+    /// no node is not given the wasmtime host in its place: that host runs
+    /// only where it is named.
     /// The global default is read once by the command that starts a build
     /// or run and carried in, so a run's choices all come from one read.
     class WASM_HOST_SELECTION is
@@ -30,12 +31,6 @@ namespace Ghul.Project is
             return BUILTIN
         si
 
-        /// Whether the host was named by the manifest or the global default,
-        /// rather than left to the built-in. A named host is honoured as it
-        /// was said; only the built-in default may be swapped for another.
-        explicit(project: LOADED_PROJECT, global_host_wasm: string?) -> bool static =>
-            project.manifest.host_wasm? \/ global_host_wasm?
-
         /// The executable that starts the host `name` on this machine: for
         /// node, the `node` on PATH where it runs the wasm target, else the
         /// newest release `ghul install node` brought into the cache; for
@@ -55,22 +50,16 @@ namespace Ghul.Project is
 
         /// The host a wasm run of `project` uses and the executable that
         /// starts it: the chosen name wherever this machine resolves it.
-        /// The wasmtime host, named or reached by the built-in default, is
-        /// fetched when it is missing and reported through `say` - a run
-        /// fetches the wasmtime host the way it always has. Where the built-in
-        /// default prefers node and this machine has none, the run falls to
-        /// the wasmtime host; a node named by the manifest or the global
-        /// defaults is honoured rather than swapped, and where it cannot be
-        /// resolved the failure to report names `ghul install`.
+        /// The wasmtime host, where the manifest or the global defaults
+        /// name it, is fetched when it is missing and reported through
+        /// `say`. Node, named or the built-in default, is never swapped for
+        /// another host: where it cannot be resolved the failure to report
+        /// names `ghul install node`.
         effective(project: LOADED_PROJECT, global_host_wasm: string?, say: (string) -> void)
             -> Result[(host: string, executable: string), string] static is
             if chosen(project, global_host_wasm) =~ "node" then
                 if let executable: string = resolve("node") then
                     return OK((host = "node", executable = executable))
-                fi
-
-                if !explicit(project, global_host_wasm) then
-                    return wasmtime_host(say)
                 fi
 
                 return ERROR(cannot_start("node"))
@@ -107,9 +96,8 @@ namespace Ghul.Project is
 
         /// Whether the wasm run the ladder chooses can go ahead here. A
         /// chosen wasmtime can, because a run fetches it where it is
-        /// missing; a chosen node needs the machine to hold one, resolved
-        /// or installable; and the built-in default reaches either - node
-        /// where there is one, the wasmtime host where there is not.
+        /// missing; node, chosen or the built-in default, needs the machine
+        /// to hold one that runs the target.
         ///
         /// The manifest's own choice is honoured here as `chosen` honours
         /// it, so availability is decided by the host the run would
@@ -121,7 +109,7 @@ namespace Ghul.Project is
                 return true
             fi
 
-            return resolve("node")? \/ !(manifest_host_wasm? \/ global_host_wasm?)
+            return resolve("node")?
         si
 
         /// The host the ladder chooses for a wasm run, as `resolve` and the

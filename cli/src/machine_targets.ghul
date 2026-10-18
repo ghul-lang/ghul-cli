@@ -32,16 +32,36 @@ namespace Ghul.Cli is
             when BuildTarget.LLVM then _why_not_llvm()
             when BuildTarget.WASM then
                 // Building for wasm needs nothing beyond the compiler;
-                // running needs something to run the module: the wasmtime
-                // host, which can be fetched, or Node.
+                // running needs Node, or the wasmtime host where that is
+                // named.
                 if !_will_run then
                     OK(_)
                 elif Ghul.Project.WASM_HOST_SELECTION.chosen_for_wasm(_manifest_host_wasm, _global_host_wasm) then
                     OK(_)
                 else
-                    Ghul.Project.NODE_RUNTIME.problem()
+                    ERROR(no_node())
                 fi
             esac
+
+        /// What a run that needs Node.js and has none is told: why, that
+        /// `ghul install node` brings one in, and, where ghul-llvm runs,
+        /// that the llvm target builds a native executable instead.
+        no_node() -> string static is
+            let why =
+                if let (problem): Result.ERROR = Ghul.Project.NODE_RUNTIME.problem() then
+                    if problem =~ "no Node.js" then "running a wasm build needs Node.js, and none was found" else problem fi
+                else
+                    "running a wasm build needs Node.js"
+                fi
+
+            let offer = "{why}; ghul install node brings one in"
+
+            if LLVM_TOOLCHAIN.triple()? then
+                return "{offer}, or the llvm target builds a native executable without it"
+            fi
+
+            return offer
+        si
 
         _why_not_llvm() -> Result[unit, string] is
             let named = System.Environment.get_environment_variable("GHUL_LLVM")

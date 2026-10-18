@@ -479,19 +479,14 @@ namespace Ghul.Cli is
         // A project for wasm alone builds wherever the compiler does; running
         // it needs a host, and saying so here is the difference between a
         // project that will not run and one whose host was never installed.
-        // The ladder's built-in default fetches the wasmtime host where
-        // there is no node, so only a machine whose chosen host is node and
-        // which holds no node that runs the target is warned about.
+        // Only a machine whose chosen host is node, named or the built-in
+        // default, and which holds no node that runs the target is warned.
         if command_line.targets.count == 1 /\ command_line.targets[0] == Ghul.Project.BuildTarget.WASM then
             let host_problem: string? mut = null
             let global_host = Ghul.Project.GLOBAL_DEFAULTS.read(Ghul.Project.GLOBAL_DEFAULTS.path(), host_problem ref).host_wasm
 
             if !Ghul.Project.WASM_HOST_SELECTION.chosen_for_wasm(null, global_host) then
-                if let (problem): ERROR = Ghul.Project.NODE_RUNTIME.run_problem() then
-                    Std.error.write_line("ghul: {problem}")
-                fi
-
-                Std.error.write_line("ghul: ghul install node brings one in")
+                Std.error.write_line("ghul: {MACHINE_TARGETS.no_node()}")
             fi
         fi
 
@@ -1526,15 +1521,11 @@ namespace Ghul.Cli is
 
         // Said before building rather than after, so a run that cannot
         // happen does not wait for a build first. Only a run whose chosen
-        // host is node needs node: the ladder's built-in default falls back
-        // to the wasmtime host, which fetches itself where it is missing.
+        // host is node needs node; a named wasmtime host fetches itself
+        // where it is missing.
         if wants_run /\ project.target == Ghul.Project.BuildTarget.WASM /\ project.manifest.kind == Ghul.Project.ManifestKind.PROGRAM then
             if !Ghul.Project.WASM_HOST_SELECTION.chosen_for_wasm(project.manifest.host_wasm, global_defaults.host_wasm) then
-                if let (problem): ERROR = Ghul.Project.NODE_RUNTIME.run_problem() then
-                    say(problem)
-                fi
-
-                say("ghul install node brings one in")
+                say(MACHINE_TARGETS.no_node())
                 return 1
             fi
         fi
