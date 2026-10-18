@@ -110,5 +110,22 @@ namespace Ghul.Cli.Tests is
             assert !parsed.problem?
             assert parsed.overrides.compiler_command =~ "ghul-compiler"
         si
+
+        @Test()
+        project_compiler_reads_json_alongside_other_options() is
+            let parsed = RESPONSE_FILE_COMMAND_LINE.parse(LIST[string](["--json", "--compiler", "ghul-compiler"]), false)
+
+            assert !parsed.problem?
+            assert parsed.json
+            assert parsed.overrides.compiler_command =~ "ghul-compiler"
+            assert !RESPONSE_FILE_COMMAND_LINE.parse(LIST[string](), false).json
+        si
+
+        @Test()
+        the_compiler_command_as_json_is_one_string_per_argument() is
+            let compiler = Ghul.Project.COMPILER_PROCESS("/opt/node bin/node", LIST[string](["C:\\ghul\\ghul.mjs", "a \"quoted\" word"]))
+
+            assert Ghul.Project.EDITOR_FILES.command_json(compiler) =~ "[\"/opt/node bin/node\",\"C:\\\\ghul\\\\ghul.mjs\",\"a \\u0022quoted\\u0022 word\"]"
+        si
     si
 si

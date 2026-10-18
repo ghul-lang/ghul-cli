@@ -422,7 +422,7 @@ way its build compiles it, rather than for building it:
 
 ```sh
 ghul project response-file --output <path> [--source-globs <path>] [--target <name>]
-ghul project compiler
+ghul project compiler [--json]
 ```
 
 `ghul project response-file` writes the options a build passes the compiler,
@@ -439,7 +439,12 @@ Node.js, since an editor analyses the project rather than running it.
 `ghul project compiler` prints the command that runs the compiler the
 project builds with, installing it first if need be, as the only line on
 standard output. With no `compiler` in the manifest that is the newest
-installed, so it can change after a compiler is installed.
+installed, so it can change after a compiler is installed. On a machine with
+no .NET it is the wasm-built compiler run by Node.js, which serves analysis
+from 66.1.0. The program is named by its full path where `PATH` finds it, so
+a client started with a different `PATH` runs the same one. `--json` prints
+the command as a JSON array of strings, the program first, for a client to
+start as it stands rather than splitting a command line.
 
 Both report a manifest's problems on standard error and exit non-zero.
 
