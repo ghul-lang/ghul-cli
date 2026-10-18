@@ -75,12 +75,21 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        a_library_is_built_with_the_library_flag() is
+        a_wasm_library_is_built_with_the_library_flag_and_only_type_checked() is
             _same(
-                "--library --target wasm",
+                "--library --type-check --target wasm",
                 _joined(
                     COMPILER_ARGUMENTS.options(
                         _manifest(ManifestKind.LIBRARY, _plain_options()), BuildTarget.WASM, _no_libraries())))
+        si
+
+        @Test()
+        an_llvm_library_is_built_with_the_library_flag_and_generates_code() is
+            _same(
+                "--library --target llvm",
+                _joined(
+                    COMPILER_ARGUMENTS.options(
+                        _manifest(ManifestKind.LIBRARY, _plain_options()), BuildTarget.LLVM, _no_libraries())))
         si
 
         @Test()
@@ -161,7 +170,7 @@ namespace Ghul.Cli.Tests is
             od
 
             _same(
-                "--underscore-access private|--global-namespace|--default-use Collections|--define X|--library|--target wasm|--library-source ghul-core@0.3.0=/core|/core/a.ghul",
+                "--underscore-access private|--global-namespace|--default-use Collections|--define X|--library|--type-check|--target wasm|--library-source ghul-core@0.3.0=/core|/core/a.ghul",
                 string.join("|", lines))
 
             _same(_joined(COMPILER_ARGUMENTS.options(manifest, BuildTarget.WASM, libraries)), _joined(flattened))

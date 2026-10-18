@@ -82,8 +82,9 @@ namespace Shapes is
     area(width: int, height: int) -> int => width * height
 si
 GHUL
+# A wasm library is compiled into a program from source; built on its own
+# it is only checked, and writes nothing.
 (cd "$library" && dotnet "$cli" build) >&2 || fail "ghul build of a library failed"
-[[ -f "$library/out/wasm/shapes.wasm" ]] || fail "expected out/wasm/shapes.wasm"
 
 echo "project: a library is not run..." >&2
 if err="$(cd "$library" && dotnet "$cli" run 2>&1 >/dev/null)"; then

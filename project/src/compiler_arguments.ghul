@@ -121,6 +121,12 @@ namespace Ghul.Project is
 
             if manifest.kind == ManifestKind.LIBRARY then
                 add(["--library"])
+
+                // wasm has no compiled library: a program compiles the
+                // library in from source. Building one on its own checks it.
+                if target == BuildTarget.WASM then
+                    add(["--type-check"])
+                fi
             fi
 
             add(["--target", target_name(target)])
