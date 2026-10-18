@@ -1670,6 +1670,7 @@ namespace Ghul.Cli is
 
                     if let (retry_error): ERROR = retried then
                         say(error)
+                        say(retry_error)
                         say("could not install the latest ghul.compiler")
                         return null
                     fi
