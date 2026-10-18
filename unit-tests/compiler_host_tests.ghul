@@ -1,0 +1,36 @@
+namespace Ghul.Cli.Tests is
+    use Ghul.Project.COMPILER_HOST
+    use Ghul.Project.CompilerHost
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // What GHUL_COMPILER_HOST reads as: a host, none, or a problem.
+    @TestClass()
+    class COMPILER_HOST_TESTS is
+        init() is si
+
+        @Test()
+        unset_or_empty__picks_no_host() is
+            assert !COMPILER_HOST.read(null).host? /\ !COMPILER_HOST.read(null).problem?;
+            assert !COMPILER_HOST.read("  ").host? /\ !COMPILER_HOST.read("  ").problem?;
+        si
+
+        @Test()
+        each_host__is_read_whatever_its_case() is
+            assert COMPILER_HOST.read("node").host =~ CompilerHost.NODE;
+            assert COMPILER_HOST.read("DotNet").host =~ CompilerHost.DOTNET;
+            assert COMPILER_HOST.read(" native ").host =~ CompilerHost.NATIVE;
+        si
+
+        @Test()
+        anything_else__is_a_problem_naming_the_value() is
+            let read = COMPILER_HOST.read("jvm")
+
+            assert !read.host?;
+            assert read.problem?;
+            assert read.problem!.contains("'jvm'") else read.problem!;
+            assert read.problem!.contains("GHUL_COMPILER_HOST") else read.problem!;
+        si
+    si
+si

@@ -51,6 +51,32 @@ namespace Ghul.Repl.Host is
         wasm_for_this_user() -> COMPILER_STORE static =>
             COMPILER_STORE(Path.join([_cache_base(), "ghul-cli", "compilers-wasm"]), false, true)
 
+        /// This user's store of the managed compiler alone, run by the .NET
+        /// host, for a build that `GHUL_COMPILER_HOST=dotnet` asks to run it.
+        managed_for_this_user() -> COMPILER_STORE static is
+            let store = COMPILER_STORE(Path.join([_cache_base(), "ghul-cli", "compilers-dotnet"]))
+
+            store.is_managed = true
+
+            return store
+        si
+
+        /// This user's store of the Native AOT compiler alone, for a build
+        /// that `GHUL_COMPILER_HOST=native` asks to run it.
+        native_for_this_user() -> COMPILER_STORE static is
+            let store = COMPILER_STORE(Path.join([_cache_base(), "ghul-cli", "compilers-native"]))
+
+            store.is_native = true
+
+            return store
+        si
+
+        /// Whether the store holds only the managed compiler.
+        is_managed: bool
+
+        /// Whether the store holds only the Native AOT compiler.
+        is_native: bool
+
         /// Whether the store holds the llvm-built compiler, which compiles for
         /// wasm and llvm only, rather than the managed or Native AOT one.
         is_llvm: bool
@@ -153,6 +179,10 @@ namespace Ghul.Repl.Host is
         // `node` and the version's loader where it is a wasm-built one, the
         // .NET host and the version's dll where it is a managed one.
         command(version: string) -> COMPILER_COMMAND is
+            if is_managed then
+                return COMPILER_COMMAND("dotnet", compiler_assembly(version))
+            fi
+
             if let native: string = native_compiler(version) then
                 return COMPILER_COMMAND(native, null)
             fi
@@ -165,7 +195,13 @@ namespace Ghul.Repl.Host is
         si
 
         is_installed(version: string) -> bool =>
-            native_compiler(version)? \/ wasm_loader(version)? \/ compiler_assembly(version)?
+            if is_managed then
+                compiler_assembly(version)?
+            elif is_native then
+                native_compiler(version)?
+            else
+                native_compiler(version)? \/ wasm_loader(version)? \/ compiler_assembly(version)?
+            fi
 
         // Every version held, lowest first. A directory counts as a version
         // when it holds a compiler, so a scratch directory an interrupted

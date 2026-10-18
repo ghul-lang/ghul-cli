@@ -328,6 +328,22 @@ how a test harness that drives `ghul` chooses the compiler for all of them.
 `GHUL_COMPILER_VERSION` a `ghul.compiler` version to install and use, or
 `latest`. `--compiler` overrides both, and setting both is an error.
 
+`GHUL_COMPILER_HOST` picks how the compiler is run, for every build and for
+`ghul project compiler`, so an editor follows it too. Unset, `ghul` chooses:
+the managed compiler where there is .NET, and otherwise the wasm-built one
+under Node.
+
+- `node`: the wasm-built compiler, run by Node; `ghul` fetches a Node where
+  there is none it can run.
+- `dotnet`: the managed compiler, run by the .NET host.
+- `native`: the Native AOT compiler, built for Linux x64 only.
+
+Each is installed into a store of its own under the compiler cache, as it is
+needed. Any other value, or a host this machine cannot have, is an error
+naming the value. A compiler given as a command, by `--compiler` or
+`GHUL_COMPILER`, runs as given whatever the variable says, and a manifest
+naming the llvm-built compiler with `compiler-build` keeps it.
+
 ### hello world on WebAssembly
 
 `ghul new` creates a project, then `ghul run` builds and runs it:

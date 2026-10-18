@@ -192,7 +192,11 @@ namespace Ghul.Cli is
             return Host.WASM_COMPILER_DOWNLOAD.of(store).install(version, say)
         fi
 
-        if Host.HOST.has_dotnet() then
+        if store.is_native then
+            return Host.NATIVE_COMPILER_DOWNLOAD.of(store).install(version, say)
+        fi
+
+        if store.is_managed \/ Host.HOST.has_dotnet() then
             return Host.COMPILER_DOWNLOAD.of(store).install(version, say)
         fi
 
@@ -973,7 +977,14 @@ namespace Ghul.Cli is
         force: bool
     ) -> (exit_code: int, project: Ghul.Project.LOADED_PROJECT?, output: string) is
         let say = (message: string) -> void => Std.error.write_line("ghul: {message}")
-        let store = Host.COMPILER_STORE.for_this_user()
+        let host = _host_store()
+
+        if let problem: string = host.problem then
+            say(problem)
+            return (exit_code = 1, project = null, output = "")
+        fi
+
+        let store = host.store ?? Host.COMPILER_STORE.for_this_user()
 
         let ensured = ensure_compiler_installed(store, null, false)
 
@@ -984,8 +995,7 @@ namespace Ghul.Cli is
         fi
 
         let compiler_version = ensured!
-        let command = store.command(compiler_version)
-        let compiler = Ghul.Project.COMPILER_PROCESS(command.file_name, Collections.LIST[string](command.leading_arguments()))
+        let compiler = _built_compiler(store, compiler_version).compiler
         let requirements = Ghul.Project.COMPILER_REQUIREMENTS.read(compiler.directory)
         let cache = Ghul.Project.LIBRARY_CACHE.for_this_user()
         let mode = Ghul.Project.BUILD_MODE(false, null)
@@ -1465,12 +1475,23 @@ namespace Ghul.Cli is
             return given
         fi
 
+        // GHUL_COMPILER_HOST picks the compiler's host outright, unless the
+        // manifest names the llvm-built compiler.
+        let host = _host_store()
+
+        if let problem: string = host.problem then
+            say(problem)
+            return null
+        fi
+
         // With no .NET, the wasm-built compiler under Node is the compiler
         // to use: one archive for every platform. The Native AOT compiler
         // stays as the fallback for a machine with no Node to run it.
         let fallback: Host.COMPILER_STORE? mut = null
 
-        if let wasm_store: Host.COMPILER_STORE = _wasm_store(chosen, wants_llvm, project.target) then
+        if let forced: Host.COMPILER_STORE = host.store /\ !wants_llvm then
+            chosen = forced
+        elif let wasm_store: Host.COMPILER_STORE = _wasm_store(chosen, wants_llvm, project.target) then
             fallback = chosen
             chosen = wasm_store
         fi
@@ -1577,6 +1598,51 @@ namespace Ghul.Cli is
         return Host.COMPILER_STORE.wasm_for_this_user()
     si
 
+    // The store `GHUL_COMPILER_HOST` picks, null where it picks none, or the
+    // reason the host it picks cannot be had. Asking for node fetches a Node
+    // where this machine has none ghul can run.
+    _host_store() -> (store: Host.COMPILER_STORE?, problem: string?) is
+        let (host, problem) = Ghul.Project.COMPILER_HOST.from_environment()
+        let variable = Ghul.Project.COMPILER_HOST.VARIABLE
+
+        if let message: string = problem then
+            return (store = null, problem = message)
+        fi
+
+        if !host? then
+            return (store = null, problem = null)
+        fi
+
+        case host!
+        when Ghul.Project.CompilerHost.NODE then
+            if !Ghul.Project.WASM_HOST_SELECTION.resolve("node")? then
+                let download = Ghul.Project.NODE_DOWNLOAD.of(Ghul.Project.NODE_STORE.for_this_user())
+
+                if let (error): Ghul.Result.ERROR = download.install(line => Std.error.write_line(line)) then
+                    return (store = null, problem = "{variable} is node, but no Node.js ghul can run was found and one could not be fetched: {error}")
+                fi
+            fi
+
+            return (store = Host.COMPILER_STORE.wasm_for_this_user(), problem = null)
+
+        when Ghul.Project.CompilerHost.DOTNET then
+            if !Host.HOST.has_dotnet() then
+                return (store = null, problem = "{variable} is dotnet, but no .NET host was found")
+            fi
+
+            return (store = Host.COMPILER_STORE.managed_for_this_user(), problem = null)
+
+        when Ghul.Project.CompilerHost.NATIVE then
+            let rid = Host.HOST.rid()
+
+            if !rid? \/ !Host.NATIVE_COMPILER_DOWNLOAD.is_built_for(rid) then
+                return (store = null, problem = "{variable} is native, but there is no Native AOT compiler for {rid ?? "this platform"}")
+            fi
+
+            return (store = Host.COMPILER_STORE.native_for_this_user(), problem = null)
+        esac
+    si
+
     // The compiler run as a command, as `--compiler` or `GHUL_COMPILER`
     // gives one: its version is what it prints, and its runtime assembly
     // the one beside it.
@@ -1607,7 +1673,14 @@ namespace Ghul.Cli is
             return command_compiler(named.command)
         fi
 
-        let store = _editor_store(managed_store)
+        let host = _host_store()
+
+        if let problem: string = host.problem then
+            Std.error.write_line("ghul: {problem}")
+            return null
+        fi
+
+        let store = host.store ?? _editor_store(managed_store)
 
         let installed =
             if isa Ghul.Project.CompilerRequest.LATEST(request) then
@@ -1858,6 +1931,13 @@ namespace Ghul.Cli is
         if is_help(items[0]) \/ (items.count > 1 /\ is_help(items[1]) /\ is_verb(items[0])) then
             print_usage(Std.out)
             return 0
+        fi
+
+        // Reported before anything runs, so a misspelt host is not hidden by
+        // a build that is already up to date and never asks for a compiler.
+        if let problem: string = Ghul.Project.COMPILER_HOST.from_environment().problem then
+            Std.error.write_line("ghul: {problem}")
+            return 1
         fi
 
         // `--` ends verb parsing, the same convention every other CLI uses,
