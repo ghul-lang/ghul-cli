@@ -2,7 +2,7 @@ namespace Ghul.Project is
     /// How the compiler is run.
     enum CompilerHost is
         /// The wasm-built compiler, run by Node.
-        NODE,
+        WASM,
 
         /// The managed compiler, run by the .NET host.
         DOTNET,
@@ -29,15 +29,15 @@ namespace Ghul.Project is
 
             let name = value.trim().to_lower_invariant()
 
-            if name =~ "node" then
-                return (host = CompilerHost.NODE, problem = null)
+            if name =~ "wasm" then
+                return (host = CompilerHost.WASM, problem = null)
             elif name =~ "dotnet" then
                 return (host = CompilerHost.DOTNET, problem = null)
             elif name =~ "native" then
                 return (host = CompilerHost.NATIVE, problem = null)
             fi
 
-            return (host = null, problem = "{VARIABLE} is '{value}', which is none of node, dotnet and native")
+            return (host = null, problem = "{VARIABLE} is '{value}', which is none of wasm, dotnet and native")
         si
 
         /// The host the environment picks, null where it picks none, or the

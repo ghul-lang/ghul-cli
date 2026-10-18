@@ -17,16 +17,18 @@ namespace Ghul.Repl.Host is
             if let dll: string = assembly then [dll] else [] fi
     si
 
-    // Where the compilers ghul-cli has live: one directory per version
-    // under `$XDG_CACHE_HOME/ghul-cli/compilers` (`~/.cache/ghul-cli/compilers`
-    // where that is unset), holding either what a `ghul.compiler` package
-    // carries in `tools/net10.0/any` - the compiler's own dll with the
-    // runtime and its dependencies beside it, run as `dotnet <dir>/ghul.dll`
-    // - what the Native AOT archive a release carries holds, run as
-    // `<dir>/ghul-compiler` with no .NET at all - or what the wasm-built
-    // archive carries, run as `node <dir>/ghul.mjs` with no .NET on any
-    // platform. Several versions are held at once and the highest is the
-    // one used where a build names none.
+    // Where the compilers ghul-cli has live: under
+    // `$XDG_CACHE_HOME/ghul-cli/compilers` (`~/.cache/ghul-cli/compilers`
+    // where that is unset), one directory for each way a compiler is run,
+    // named as `GHUL_COMPILER_HOST` names it, and one directory per version
+    // in each. `dotnet` holds what a `ghul.compiler` package carries in
+    // `tools/net10.0/any` - the compiler's own dll with the runtime and its
+    // dependencies beside it, run as `dotnet <dir>/ghul.dll`; `native` what
+    // the Native AOT archive a release carries holds, run as
+    // `<dir>/ghul-compiler` with no .NET at all; `wasm` what the wasm-built
+    // archive carries, run as `node <dir>/ghul.mjs` on any platform; and
+    // `llvm` the compiler built natively for llvm. Several versions are held
+    // at once and the highest is the one used where a build names none.
     //
     // A cache rather than installed state, because nothing here is ever
     // installed: a manifest names the version a project wants and this
@@ -34,37 +36,40 @@ namespace Ghul.Repl.Host is
     // release that published it. So it sits beside the compiled-script and
     // library caches, and `ghul cache clear` takes it with them.
     class COMPILER_STORE(root: string) is
-        // This user's store, under `XDG_CACHE_HOME` where that is set and
-        // under `~/.cache` where it is not, as the library and script
-        // caches beside it are.
+        // The directory every store is under: `compilers` in the cache under
+        // `XDG_CACHE_HOME` where that is set and under `~/.cache` where it
+        // is not, as the library and script caches beside it are.
+        _compilers() -> string static => Path.join([_cache_base(), "ghul-cli", "compilers"])
+
+        /// This user's store of the compiler ghul runs where nothing says
+        /// how: the managed one where there is .NET to run it, and the
+        /// Native AOT one where there is none.
         for_this_user() -> COMPILER_STORE static =>
-            COMPILER_STORE(Path.join([_cache_base(), "ghul-cli", "compilers"]))
+            if HOST.has_dotnet() then managed_for_this_user() else native_for_this_user() fi
 
         /// This user's store of the llvm-built compiler a release ships,
-        /// beside the other so the two builds of one version are held apart.
+        /// beside the others so the builds of one version are held apart.
         llvm_for_this_user() -> COMPILER_STORE static =>
-            COMPILER_STORE(Path.join([_cache_base(), "ghul-cli", "compilers-llvm"]), true, false)
+            COMPILER_STORE(Path.join([_compilers(), "llvm"]), true, false)
 
         /// This user's store of the wasm-built compiler a release ships,
         /// run under Node rather than as a native executable: the compiler
         /// a machine with no .NET builds with, where it has Node.
         wasm_for_this_user() -> COMPILER_STORE static =>
-            COMPILER_STORE(Path.join([_cache_base(), "ghul-cli", "compilers-wasm"]), false, true)
+            COMPILER_STORE(Path.join([_compilers(), "wasm"]), false, true)
 
-        /// This user's store of the managed compiler alone, run by the .NET
-        /// host, for a build that `GHUL_COMPILER_HOST=dotnet` asks to run it.
+        /// This user's store of the managed compiler, run by the .NET host.
         managed_for_this_user() -> COMPILER_STORE static is
-            let store = COMPILER_STORE(Path.join([_cache_base(), "ghul-cli", "compilers-dotnet"]))
+            let store = COMPILER_STORE(Path.join([_compilers(), "dotnet"]))
 
             store.is_managed = true
 
             return store
         si
 
-        /// This user's store of the Native AOT compiler alone, for a build
-        /// that `GHUL_COMPILER_HOST=native` asks to run it.
+        /// This user's store of the Native AOT compiler.
         native_for_this_user() -> COMPILER_STORE static is
-            let store = COMPILER_STORE(Path.join([_cache_base(), "ghul-cli", "compilers-native"]))
+            let store = COMPILER_STORE(Path.join([_compilers(), "native"]))
 
             store.is_native = true
 

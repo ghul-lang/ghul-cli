@@ -50,8 +50,11 @@ the REPL and the Jupyter kernel. `dotnet tool` comes with the .NET 10 SDK;
 once installed, `ghul` runs on the .NET runtime alone.
 
 The first time it runs, `ghul` downloads its own copy of `ghul.compiler` into
-`~/.cache/ghul-cli/compilers` (`$XDG_CACHE_HOME/ghul-cli/compilers` where that
-is set), straight from the NuGet feed. There is nothing else to set up.
+`~/.cache/ghul-cli/compilers/dotnet` (under `$XDG_CACHE_HOME/ghul-cli` where that
+is set), straight from the NuGet feed. Each way of running the compiler has a
+directory of its own under `compilers`, named as `GHUL_COMPILER_HOST` names it:
+`dotnet`, `native` and `wasm`, with `llvm` for the compiler built for llvm.
+There is nothing else to set up.
 Several compiler versions can be installed at once; where none is named, the
 highest installed is the one used.
 
@@ -333,14 +336,14 @@ how a test harness that drives `ghul` chooses the compiler for all of them.
 the managed compiler where there is .NET, and otherwise the wasm-built one
 under Node.
 
-- `node`: the wasm-built compiler, run by Node; `ghul` fetches a Node where
+- `wasm`: the wasm-built compiler, run by Node; `ghul` fetches a Node where
   there is none it can run.
 - `dotnet`: the managed compiler, run by the .NET host.
 - `native`: the Native AOT compiler, built for Linux x64 only.
 
-Each is installed into a store of its own under the compiler cache, as it is
-needed. Any other value, or a host this machine cannot have, is an error
-naming the value. A compiler given as a command, by `--compiler` or
+Each is installed as it is needed into a directory of its own under the
+compiler cache, `compilers/<host>`. Any other value, or a host this machine
+cannot have, is an error naming the value. A compiler given as a command, by `--compiler` or
 `GHUL_COMPILER`, runs as given whatever the variable says, and a manifest
 naming the llvm-built compiler with `compiler-build` keeps it.
 
