@@ -203,16 +203,16 @@ if (cd "$wasm" && dotnet "$cli" build --compiler /bin/false >/dev/null 2>&1); th
     fail "expected a build with --compiler /bin/false to fail"
 fi
 
-echo "project: GHUL_COMPILER and GHUL_COMPILER_VERSION choose the compiler, below --compiler..." >&2
+echo "project: GHUL_COMPILER chooses the compiler, below --compiler, and GHUL_COMPILER_VERSION is refused..." >&2
 if (cd "$wasm" && GHUL_COMPILER=/bin/false dotnet "$cli" build >/dev/null 2>&1); then
     fail "expected a build with GHUL_COMPILER=/bin/false to fail"
 fi
 out="$(cd "$wasm" && GHUL_COMPILER=/bin/false dotnet "$cli" run --compiler "$compiler" 2>/dev/null)" || fail "--compiler did not override GHUL_COMPILER"
 check "$out" "hello with use default" "wasm run output with --compiler over GHUL_COMPILER"
 if err="$(cd "$wasm" && GHUL_COMPILER=/bin/false GHUL_COMPILER_VERSION=latest dotnet "$cli" build 2>&1)"; then
-    fail "expected a build with both compiler variables set to fail"
+    fail "expected a build with GHUL_COMPILER_VERSION set to fail"
 fi
-[[ "$err" == *"GHUL_COMPILER and GHUL_COMPILER_VERSION are both set"* ]] || fail "unexpected message for both compiler variables: $err"
+[[ "$err" == *"GHUL_COMPILER_VERSION is not supported"* ]] || fail "unexpected message for GHUL_COMPILER_VERSION: $err"
 
 echo "project: ghul new creates a project that builds and runs on wasm..." >&2
 (cd "$scratch" && dotnet "$cli" new scaffolded --target wasm,llvm 2>/dev/null) || fail "ghul new failed"
@@ -226,7 +226,7 @@ if err="$(cd "$scratch" && dotnet "$cli" new scaffolded 2>&1)"; then
 fi
 [[ "$err" == *"ghul: scaffolded already exists and is not empty"* ]] || fail "unexpected message from ghul new: $err"
 
-echo "project: a wasm build refuses a manifest naming a compiler below the minimum..." >&2
+echo "project: a manifest naming a compiler version is refused..." >&2
 old_wasm="$scratch/old-wasm"
 mkdir -p "$old_wasm/src"
 cat > "$old_wasm/ghul-project.json" <<'JSON'
@@ -236,9 +236,9 @@ cat > "$old_wasm/src/main.ghul" <<'GHUL'
 IO.Std.write_line("hello")
 GHUL
 if err="$(cd "$old_wasm" && dotnet "$cli" build --target wasm 2>&1)"; then
-    fail "expected a wasm build naming an old compiler to fail"
+    fail "expected a manifest naming a compiler version to fail"
 fi
-[[ "$err" == *"ghul.compiler 64.11.0 is asked for, but the wasm target needs"* ]] || fail "unexpected message for an old compiler: $err"
+[[ "$err" == *"the compiler version cannot be pinned"* ]] || fail "unexpected message for a compiler version: $err"
 
 echo "project: an llvm build fetches the ghul-llvm release chosen for its compiler..." >&2
 (cd "$scratch" && dotnet "$cli" new native --target llvm 2>/dev/null) || fail "ghul new --target llvm failed"
