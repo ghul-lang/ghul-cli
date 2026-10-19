@@ -130,6 +130,10 @@ namespace Ghul.Cli.Tests is
             assert (managed.directory ?? "") =~ Path.get_directory_name(assembly)
             assert (native.directory ?? "") =~ Path.get_directory_name(executable)
             assert !named.directory?
+            let loader = Path.get_full_path(Path.combine(Path.get_temp_path(), "w", "ghul.mjs"))
+            let wasm = Ghul.Project.COMPILER_PROCESS(Path.combine(Path.get_temp_path(), "node", "bin", "node"), LIST[string]([loader]))
+
+            assert (wasm.directory ?? "") =~ Path.get_directory_name(loader)
         si
 
         @Test()
