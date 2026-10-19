@@ -24,11 +24,16 @@ namespace Ghul.Project is
                 return null
             fi
 
+            let kind = _kind(root)
+
+            if kind == ManifestKind.WORKSPACE \/ kind == ManifestKind.COLLECTION then
+                return _container(root, kind)
+            fi
+
             _check_keys(root, _top_level_keys())
 
             // Each of these reports what it can and moves on, so one
             // malformed key does not hide the next one.
-            let kind = _kind(root)
             let name = _name(root, kind)
             let version = _string_member(root, "version")
             let targets = _targets(root, kind)
@@ -54,6 +59,92 @@ namespace Ghul.Project is
 
             return manifest
         si
+
+        // A workspace or a collection: a directory that owns no sources and
+        // builds nothing. Its name is optional, it carries no targets,
+        // sources or dependencies, and a workspace lists the projects under
+        // it as `members`.
+        _container(root: JsonElement, kind: ManifestKind) -> MANIFEST? is
+            let keys = LIST[string](["kind", "name", "version"])
+
+            if kind == ManifestKind.WORKSPACE then
+                keys.add("members")
+            fi
+
+            _check_keys(root, keys)
+
+            let name = _string_member(root, "name") ?? ""
+            let version = _string_member(root, "version")
+            let members = _members(root, kind)
+
+            if _problems.count > 0 then
+                return null
+            fi
+
+            let manifest = MANIFEST(
+                name,
+                version,
+                kind,
+                LIST[BuildTarget](),
+                LIST[string](),
+                _options(root),
+                _dependencies(root),
+                CompilerBuild.DEFAULT,
+                LIST[BuildTarget](),
+                null,
+                _tools(root)
+            )
+
+            manifest.members.add_range(members)
+
+            return manifest
+        si
+
+        // The projects a workspace lists, as paths or globs relative to its
+        // own directory: at least one, none of them absolute or leaving the
+        // directory.
+        _members(root: JsonElement, kind: ManifestKind) -> LIST[string] is
+            let members = LIST[string]()
+            let value: JsonElement mut
+
+            if kind != ManifestKind.WORKSPACE then
+                return members
+            fi
+
+            if !root.try_get_property("members", value ref) then
+                _report("members", "a workspace lists its members")
+                return members
+            fi
+
+            if value.value_kind != JsonValueKind.ARRAY then
+                _report("members", "the value is not a list")
+                return members
+            fi
+
+            for entry in value.enumerate_array() do
+                if entry.value_kind != JsonValueKind.STRING then
+                    _report("members", "an entry is not a string")
+                    continue
+                fi
+
+                let text = entry.get_string()!
+
+                if _leaves_directory(text) then
+                    _report("members", "an entry is not a path under the workspace's directory: {text}")
+                else
+                    members.add(text)
+                fi
+            od
+
+            if members.count == 0 /\ _problems.count == 0 then
+                _report("members", "a workspace lists at least one member")
+            fi
+
+            return members
+        si
+
+        _leaves_directory(text: string) -> bool =>
+            text.length == 0 \/ text.starts_with("/") \/ text.starts_with("\\") \/ text.contains(":") \/ Ghul.Pipes.any(text.split(['/', '\\']), part => part =~ "..")
 
         // A member read as a string, or nothing when the key is absent.
         // A value of another shape is a problem naming the key, and the
@@ -177,6 +268,14 @@ namespace Ghul.Project is
 
             if text =~ "program" then
                 return ManifestKind.PROGRAM
+            fi
+
+            if text =~ "workspace" then
+                return ManifestKind.WORKSPACE
+            fi
+
+            if text =~ "collection" then
+                return ManifestKind.COLLECTION
             fi
 
             _report("kind", "unknown kind '{text}'")

@@ -8,6 +8,7 @@ namespace Ghul.Cli.Tests is
     use Ghul.Project.MANIFEST
     use Ghul.Project.MANIFEST_PROBLEM
     use Ghul.Project.MANIFEST_READER
+    use Ghul.Project.PROJECT_LOADER
     use Ghul.Project.ManifestKind
     use Ghul.Project.ReadOutcome
 
@@ -57,7 +58,17 @@ namespace Ghul.Cli.Tests is
     OPTION_WRONG_TYPE: string static => "{{\"name\": \"app\", \"options\": {{\"global-namespace\": \"yes\"}}}}"
     OPTION_WRONG_ENTRY: string static => "{{\"name\": \"app\", \"options\": {{\"suppress\": [1]}}}}"
     BOTH_GIT_AND_PATH: string static => "{{\"name\": \"app\", \"dependencies\": {{\"lib\": {{\"git\": \"u\", \"path\": \"../lib\"}}}}}}"
-    NEITHER_GIT_NOR_PATH: string static => "{{\"name\": \"app\", \"dependencies\": {{\"lib\": {{}}}}}}"
+    COLLECTION: string static => "{{\"kind\": \"collection\"}}"
+    NAMED_COLLECTION: string static => "{{\"kind\": \"collection\", \"name\": \"tests\"}}"
+    COLLECTION_WITH_SOURCES: string static => "{{\"kind\": \"collection\", \"sources\": [\"src/**/*.ghul\"]}}"
+    COLLECTION_WITH_MEMBERS: string static => "{{\"kind\": \"collection\", \"members\": [\"a\"]}}"
+    WORKSPACE: string static => "{{\"kind\": \"workspace\", \"members\": [\"cli\", \"tools/*\"]}}"
+    WORKSPACE_NO_MEMBERS: string static => "{{\"kind\": \"workspace\"}}"
+    WORKSPACE_EMPTY_MEMBERS: string static => "{{\"kind\": \"workspace\", \"members\": []}}"
+    WORKSPACE_WITH_TARGETS: string static => "{{\"kind\": \"workspace\", \"members\": [\"a\"], \"targets\": [\"wasm\"]}}"
+    WORKSPACE_MEMBER_ESCAPES: string static => "{{\"kind\": \"workspace\", \"members\": [\"../other\"]}}"
+    WORKSPACE_MEMBER_ABSOLUTE: string static => "{{\"kind\": \"workspace\", \"members\": [\"/etc\"]}}"
+    NEITHER_GIT_NOR_PATH: string static =>"{{\"name\": \"app\", \"dependencies\": {{\"lib\": {{}}}}}}"
     GIT_NO_TAG_NO_BRANCH: string static => "{{\"name\": \"app\", \"dependencies\": {{\"lib\": {{\"git\": \"u\"}}}}}}"
     GIT_TAG_AND_BRANCH: string static => "{{\"name\": \"app\", \"dependencies\": {{\"lib\": {{\"git\": \"u\", \"tag\": \"v1\", \"branch\": \"main\"}}}}}}"
     WRONG_VERSION: string static => "{{\"name\": \"app\", \"version\": 1}}"
@@ -521,6 +532,56 @@ namespace Ghul.Cli.Tests is
         json_that_is_not_an_object__is_one_problem() is
             assert _problems(NOT_AN_OBJECT_ARRAY).count == 1;
             assert _problems(NOT_AN_OBJECT_STRING).count == 1;
+        si
+
+        @Test()
+        a_collection_needs_only_its_kind() is
+            let manifest = _read(COLLECTION)!
+
+            assert manifest.kind == ManifestKind.COLLECTION;
+            assert manifest.name =~ "";
+            assert manifest.sources.count == 0;
+            assert manifest.targets.count == 0;
+            assert manifest.members.count == 0;
+            assert (_read(NAMED_COLLECTION)!).name =~ "tests";
+        si
+
+        @Test()
+        a_workspace_lists_its_members() is
+            let manifest = _read(WORKSPACE)!
+
+            assert manifest.kind == ManifestKind.WORKSPACE;
+            assert manifest.members.count == 2;
+            assert manifest.members[0] =~ "cli";
+            assert manifest.members[1] =~ "tools/*";
+            assert manifest.sources.count == 0;
+        si
+
+        @Test()
+        a_workspace_without_members__is_a_problem() is
+            assert _problems(WORKSPACE_NO_MEMBERS).count == 1;
+            assert _problems(WORKSPACE_NO_MEMBERS)[0].contains("members");
+            assert _problems(WORKSPACE_EMPTY_MEMBERS).count == 1;
+        si
+
+        @Test()
+        a_workspace_or_collection_with_keys_it_cannot_have__is_a_problem() is
+            assert _problems(COLLECTION_WITH_SOURCES).count == 1;
+            assert _problems(COLLECTION_WITH_MEMBERS).count == 1;
+            assert _problems(WORKSPACE_WITH_TARGETS).count == 1;
+        si
+
+        @Test()
+        a_workspace_member_that_leaves_the_directory__is_a_problem() is
+            assert _problems(WORKSPACE_MEMBER_ESCAPES).count == 1;
+            assert _problems(WORKSPACE_MEMBER_ABSOLUTE).count == 1;
+        si
+
+        @Test()
+        a_workspace_or_collection_is_not_something_to_build() is
+            assert PROJECT_LOADER.not_a_project(_read(WORKSPACE)!, "/repo")!.contains("workspace");
+            assert PROJECT_LOADER.not_a_project(_read(COLLECTION)!, "/repo")!.contains("collection");
+            assert !PROJECT_LOADER.not_a_project(_read(DEFAULT)!, "/repo")?;
         si
 
         @Test()

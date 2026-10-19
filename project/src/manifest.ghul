@@ -19,12 +19,24 @@ namespace Ghul.Project is
         /// Whether a program's manifest lists dotnet beside the targets ghul
         /// builds for, which ghul leaves out of its targets.
         ignores_dotnet: bool public
+
+        /// The members a `workspace` manifest lists, as paths or globs
+        /// relative to its directory; empty for every other kind.
+        members: Collections.LIST[string] public
+
+        init(..) is
+            members = Collections.LIST[string]()
+        si
     si
 
-    // Whether the project is something to run or something to depend on.
+    // Whether the project is something to run or something to depend on, or
+    // a directory that owns no sources: a workspace lists the projects under
+    // it, a collection holds independent projects that are not one.
     enum ManifestKind is
         PROGRAM,
-        LIBRARY
+        LIBRARY,
+        WORKSPACE,
+        COLLECTION
     si
 
     // Which build of the compiler a project is compiled with: the one that

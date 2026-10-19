@@ -278,6 +278,36 @@ passes over a target it cannot build, it says what it built for instead in one
 line; choosing the first in order, it says nothing. Where no listed target
 can be built, it says why for each and builds nothing.
 
+### workspaces and collections
+
+Two other kinds describe a directory that owns no sources and builds nothing.
+`ghul build` and `ghul run` refuse them, naming the kind.
+
+A `workspace` lists the projects under it in `members`, as paths or globs
+relative to its own directory, so an editor that opens the directory can start
+one analyser for each:
+
+```json
+{
+    "kind": "workspace",
+    "members": ["cli", "project", "tools/*"]
+}
+```
+
+A `collection` holds projects that are independent programs rather than parts
+of one, such as a directory of examples or test cases:
+
+```json
+{
+    "kind": "collection"
+}
+```
+
+Neither carries `targets`, `sources` or `dependencies`, and `name` is optional.
+An editor does not analyse the contents of a collection as one project, and a
+project nested inside any other manifest's directory belongs to the nearest
+manifest above it.
+
 ## engines and global defaults
 
 A wasm program needs an engine to run the module: wasmtime, or Node.js
