@@ -505,7 +505,7 @@ jobs:
         fi
 
         # The native build's debug symbols, which nothing a user runs reads.
-        rm -f build/ghul-cli.dbg build/ghul-cli.pdb build/ghul.pdb build/ghul-cli.dSYM
+        rm -f build/ghul-cli.dbg build/ghul-cli.pdb build/ghul.pdb
         rm -rf build/ghul-cli.dSYM
 
     - name: Check the tool reports this release's version

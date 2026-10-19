@@ -77,7 +77,7 @@ namespace Ghul.Cli.Tests is
             let root = _scratch()
 
             try
-                let executable = Path.join([root, "ghul"])
+                let executable = Path.join([root, SELF_UPDATE.EXECUTABLE])
                 File.write_all_text(executable, "")
 
                 let found = SELF_UPDATE.install_root(executable)
@@ -97,7 +97,7 @@ namespace Ghul.Cli.Tests is
                 let root = Path.join([scratch, "opt"])
                 Directory.create_directory(root)
 
-                let executable = Path.join([root, "ghul"])
+                let executable = Path.join([root, SELF_UPDATE.EXECUTABLE])
                 File.write_all_text(executable, "")
 
                 let link = Path.join([scratch, "ghul-link"])
@@ -117,7 +117,7 @@ namespace Ghul.Cli.Tests is
             let root = _scratch()
 
             try
-                let executable = Path.join([root, "ghul"])
+                let executable = Path.join([root, SELF_UPDATE.EXECUTABLE])
                 File.write_all_text(executable, "")
                 File.write_all_text(Path.join([root, "notes.txt"]), "")
 
@@ -172,9 +172,9 @@ namespace Ghul.Cli.Tests is
             let server = FEED_SERVER(path is
                 if path =~ "/api/releases/latest" then
                     return _bytes("{{\"tag_name\": \"v1.2.3\"}}")
-                elif path =~ "/download/v1.2.3/ghul-cli-install.sh" then
+                elif path =~ "/download/v1.2.3/{SELF_UPDATE.INSTALL_SCRIPT}" then
                     return script
-                elif path =~ "/download/v1.2.3/ghul-cli-install.sh.sha256" /\ checksum? then
+                elif path =~ "/download/v1.2.3/{SELF_UPDATE.INSTALL_SCRIPT}.sha256" /\ checksum? then
                     return _bytes(checksum)
                 fi
 
