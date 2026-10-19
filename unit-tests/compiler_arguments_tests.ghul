@@ -47,7 +47,6 @@ namespace Ghul.Cli.Tests is
                 kind,
                 LIST[BuildTarget]([BuildTarget.WASM, BuildTarget.LLVM]),
                 LIST[string](["src/**/*.ghul"]),
-                null,
                 options,
                 MAP[string, DEPENDENCY](),
                 CompilerBuild.DEFAULT, LIST[BuildTarget](), null)

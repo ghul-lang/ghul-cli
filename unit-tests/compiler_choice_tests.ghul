@@ -8,104 +8,42 @@ namespace Ghul.Cli.Tests is
     use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
     use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
 
-    // Which compiler a project build uses: a wasm build will not use one
-    // older than the core library's minimum,.
+    // Which compiler a project build uses: the newest installed, unless a
+    // target needs a newer one than that.
     @TestClass()
     class COMPILER_CHOICE_TESTS is
         init() is si
 
-        _requested(choice: CompilerChoice) -> string? is
-            assert isa CompilerChoice.REQUESTED(choice) else "expected REQUESTED"
-
-            return cast CompilerChoice.REQUESTED(choice).version
+        @Test()
+        a_wasm_build_takes_an_installed_compiler_that_is_new_enough() is
+            assert isa CompilerChoice.INSTALLED(COMPILER_CHOICE.choose(BuildTarget.WASM, BUILD_MODE.release, CORE_LIBRARY.MINIMUM_COMPILER))
+            assert isa CompilerChoice.INSTALLED(COMPILER_CHOICE.choose(BuildTarget.WASM, BUILD_MODE.release, "99.0.0"))
         si
 
         @Test()
-        llvm_build_rejects_a_named_compiler_below_its_minimum() is
-            let choice = COMPILER_CHOICE.choose(BuildTarget.LLVM, BUILD_MODE.release, "65.4.0", "70.0.0")
-
-            assert isa CompilerChoice.PROBLEM(choice) else "expected PROBLEM"
-
-            let message = cast CompilerChoice.PROBLEM(choice).message
-
-            assert message.contains("65.4.0") /\ message.contains("llvm target") /\ message.contains("65.5.0") else message
+        a_wasm_build_with_none_installed_takes_the_newest_release() is
+            assert isa CompilerChoice.INSTALLED(COMPILER_CHOICE.choose(BuildTarget.WASM, BUILD_MODE.release, null))
         si
 
         @Test()
-        llvm_build_uses_a_named_compiler_at_its_minimum() is
-            assert _requested(COMPILER_CHOICE.choose(BuildTarget.LLVM, BUILD_MODE.release, "65.5.0", null)) =~ "65.5.0"
+        an_installed_compiler_older_than_the_minimum_is_replaced_by_the_newest() is
+            let choice = COMPILER_CHOICE.choose(BuildTarget.WASM, BUILD_MODE.release, "64.11.0")
+
+            assert isa CompilerChoice.NEWEST(choice)
+            assert (cast CompilerChoice.NEWEST(choice)).installed =~ "64.11.0"
         si
 
         @Test()
-        wasm_build_rejects_a_named_compiler_below_the_minimum() is
-            let choice = COMPILER_CHOICE.choose(BuildTarget.WASM, BUILD_MODE.release, "64.11.0", "70.0.0")
-
-            assert isa CompilerChoice.PROBLEM(choice) else "expected PROBLEM"
-
-            let message = cast CompilerChoice.PROBLEM(choice).message
-
-            assert message.contains("64.11.0") /\ message.contains(CORE_LIBRARY.MINIMUM_COMPILER)
+        a_compiler_that_is_not_a_release_is_taken_as_current() is
+            assert isa CompilerChoice.INSTALLED(COMPILER_CHOICE.choose(BuildTarget.WASM, BUILD_MODE.release, "0.0.0-local"))
         si
 
         @Test()
-        wasm_build_uses_a_named_compiler_at_the_minimum() is
-            let minimum = CORE_LIBRARY.MINIMUM_COMPILER
-
-            assert _requested(COMPILER_CHOICE.choose(BuildTarget.WASM, BUILD_MODE.release, minimum, null)) =~ minimum
-        si
-
-        @Test()
-        wasm_build_installs_the_newest_when_the_installed_is_below_the_minimum() is
-            let choice = COMPILER_CHOICE.choose(BuildTarget.WASM, BUILD_MODE.release, null, "64.11.0")
-
-            assert isa CompilerChoice.NEWEST(choice) else "expected NEWEST"
-            assert cast CompilerChoice.NEWEST(choice).installed =~ "64.11.0"
-        si
-
-        @Test()
-        wasm_build_uses_the_newest_installed_at_or_above_the_minimum() is
-            assert !_requested(COMPILER_CHOICE.choose(BuildTarget.WASM, BUILD_MODE.release, null, CORE_LIBRARY.MINIMUM_COMPILER))?
-        si
-
-        @Test()
-        wasm_build_with_nothing_installed_asks_for_the_newest() is
-            assert !_requested(COMPILER_CHOICE.choose(BuildTarget.WASM, BUILD_MODE.release, null, null))?
-        si
-
-        @Test()
-        llvm_debug_build_rejects_a_named_compiler_without_debug_information() is
-            let choice = COMPILER_CHOICE.choose(BuildTarget.LLVM, BUILD_MODE(true, null), "65.13.0", null)
-
-            assert isa CompilerChoice.PROBLEM(choice) else "expected PROBLEM"
-
-            let message = cast CompilerChoice.PROBLEM(choice).message
-
-            assert message.contains("a debug build for the llvm target") /\ message.contains("65.14.0") else message
-        si
-
-        @Test()
-        llvm_debug_build_installs_the_newest_when_the_installed_has_no_debug_information() is
-            assert isa CompilerChoice.NEWEST(COMPILER_CHOICE.choose(BuildTarget.LLVM, BUILD_MODE(true, null), null, "65.13.0")) else "expected NEWEST"
-            assert !_requested(COMPILER_CHOICE.choose(BuildTarget.LLVM, BUILD_MODE(true, null), null, "65.14.0"))?
-        si
-
-        @Test()
-        llvm_build_at_a_level_needs_a_compiler_that_takes_optimise() is
-            let choice = COMPILER_CHOICE.choose(BuildTarget.LLVM, BUILD_MODE(false, 3), "65.15.0", null)
-
-            assert isa CompilerChoice.PROBLEM(choice) else "expected PROBLEM"
-
-            let message = cast CompilerChoice.PROBLEM(choice).message
-
-            assert message.contains("a build at a chosen optimisation level for the llvm target") /\ message.contains("65.16.0") else message
-            assert _requested(COMPILER_CHOICE.choose(BuildTarget.WASM, BUILD_MODE(false, 3), CORE_LIBRARY.MINIMUM_COMPILER, null)) =~ CORE_LIBRARY.MINIMUM_COMPILER
-        si
-
-        @Test()
-        a_local_build_of_the_compiler_is_taken_to_be_current() is
-            assert !COMPILER_CHOICE.is_older_than("0.0.0-local-x.1", "64.15.0")
-            assert COMPILER_CHOICE.is_older_than("64.14.9", "64.15.0")
+        a_release_is_older_than_a_minimum_by_version_order() is
+            assert COMPILER_CHOICE.is_older_than("64.9.0", "64.15.0")
             assert !COMPILER_CHOICE.is_older_than("64.15.0", "64.15.0")
+            assert !COMPILER_CHOICE.is_older_than("64.15.1", "64.15.0")
+            assert !COMPILER_CHOICE.is_older_than("local", "64.15.0")
         si
     si
 si

@@ -135,7 +135,7 @@ ghul build [--target <name>] [--debug] [--optimise <0-3>] [overrides]  # build t
 ghul run [--target <name>] [--debug] [--optimise <0-3>] [overrides] [-- args...]  # build, then run it
 ghul project response-file|compiler         # what editors read (see below)
 ghul install <compiler|wasmtime|node|llvm>  # install or update a component
-ghul update [--version <tag>] [--check]     # update ghul and every installed component
+ghul update [--check]                     # update ghul and every installed tool to the newest release
 ghul cache clear                            # empty the compiled-script cache
 ghul repl [--no-server] [--no-default-use]  # start an interactive session
 ghul version                                # print the versions of ghul and ghul.compiler
@@ -166,13 +166,15 @@ run it, and the wasm-built compiler, run by Node.js, everywhere else, with a
 Node.js fetched first where there is none. A Native AOT compiler is installed
 only by an earlier release's install, and kept up to date while it is there.
 `GHUL_COMPILER_HOST` (`wasm`, `dotnet` or `native`) names the one to use
-instead. With no version, `install compiler` installs the latest release; with
-a version, exactly that version, older or newer, and nothing if it is already
-installed. `GHUL_COMPILER_FEED` names a different feed to download from, for a
+instead. `install compiler` installs the latest release, and nothing if it is
+already installed. A version cannot be chosen: the compiler, ghul-llvm,
+Node.js, wasmtime and the compiler's libraries ghul-core and ghul-runtime are
+tools, and always the newest release. What a project depends on is pinned in its
+manifest's `dependencies`. `GHUL_COMPILER_FEED` names a different feed to download from, for a
 mirror or an offline network.
 
 `ghul install llvm` installs the ghul-llvm tool the llvm target links with. It
-needs no compiler: it takes the newest release. `--version` names one. It
+needs no compiler: it takes the newest release. It
 is released for Linux on x64 and arm64. `ghul install wasmtime`
 installs the wasmtime host that runs wasm programs where there is no Node.js;
 a run that needs it and finds it missing downloads the latest release first.
@@ -192,8 +194,7 @@ the ordinary compiler. It is published for Linux on x64 only.
 note pointing at the new spellings: `ghul install compiler` and `ghul install
 compiler --llvm`.
 
-`ghul update` updates a `ghul` installed without .NET to the latest release,
-or to the release `--version` names, older or newer. It runs that release's
+`ghul update` updates a `ghul` installed without .NET to the latest release. It runs that release's
 own install script, after checking it against the published sha256, so the
 tool is replaced the same way a fresh install puts it in place. A `ghul`
 installed as a .NET tool is updated by `dotnet tool update -g ghul.cli`
@@ -288,10 +289,9 @@ newest release first, as the compiler is downloaded on first use.
 refreshes ghul itself and every component already installed.
 
 The compiler's messages go to standard error, and a failed build exits
-with the compiler's status. `compiler` in the manifest names the
-`ghul.compiler` version to build with, which is installed if need be, or
-`latest` for the newest published release; without it, the newest installed is
-used.
+with the compiler's status. The build uses the newest installed
+`ghul.compiler`, which a manifest cannot pin: a manifest with a `compiler` is
+refused.
 
 `--debug` builds with debug information into `out/<target>-debug/`, beside
 the ordinary build rather than over it, and `ghul run --debug` runs that build.
@@ -309,7 +309,7 @@ run it. A wasm build compiles in two libraries,
 fetched from Git into `~/.cache/ghul-cli/libraries`: ghul-core, which gives
 the built-in types their members, and then ghul-runtime, which supplies the
 pipes and the rest of `Ghul`. Declaring `ghul-core` or `ghul-runtime` in the
-manifest's `dependencies`, at a `tag` or a `path`, uses that instead.
+manifest's `dependencies` at a `path` uses that instead; a `tag` is refused.
 
 A build uses the newest release of each library. The releases are listed on
 every build; where GitHub cannot be reached, the release used last is used
@@ -325,9 +325,7 @@ compiled in too, each before the libraries that use it, and a `path` in a
 library's manifest is relative to that library.
 
 A wasm build needs `ghul.compiler` 64.15.0 or newer. Where the newest
-installed is older, the build installs the newest release and uses that; a
-manifest whose `compiler` names an older version is an error, as is an older
-version named by `GHUL_COMPILER_VERSION`.
+installed is older, the build installs the newest release and uses that.
 
 Two options override the manifest for one build, which is how a repository
 tests its own checkout. `--compiler <command>` builds with the command given,
@@ -339,9 +337,8 @@ response-file`, and `--compiler` with `ghul project compiler`.
 
 Two environment variables override the manifest for every build, which is
 how a test harness that drives `ghul` chooses the compiler for all of them.
-`GHUL_COMPILER` is a compiler command, as `--compiler` takes one, and
-`GHUL_COMPILER_VERSION` a `ghul.compiler` version to install and use, or
-`latest`. `--compiler` overrides both, and setting both is an error.
+`GHUL_COMPILER` is a compiler command, as `--compiler` takes one, which
+overrides it. `GHUL_COMPILER_VERSION` is refused.
 
 `GHUL_COMPILER_HOST` picks how the compiler is run, for every build and for
 `ghul project compiler`, so an editor follows it too. Unset, `ghul` chooses:
@@ -456,7 +453,7 @@ Node.js, since an editor analyses the project rather than running it.
 
 `ghul project compiler` prints the command that runs the compiler the
 project builds with, installing it first if need be, as the only line on
-standard output. With no `compiler` in the manifest that is the newest
+standard output. That is the newest
 installed, so it can change after a compiler is installed. On a machine with
 no .NET it is the wasm-built compiler run by Node.js, which serves analysis
 from 66.1.0. The program is named by its full path where `PATH` finds it, so
