@@ -40,6 +40,7 @@ cat > "$program/ghul-project.json" <<'JSON'
     // a comment and a trailing comma, both of which a manifest may carry
     "name": "greeter",
     "targets": ["wasm"],
+    "dependencies": { "ghul-core": { "version": ">=0.0.0" }, "ghul-runtime": { "version": ">=0.0.0" } },
 }
 JSON
 cat > "$program/src/main.ghul" <<'GHUL'
@@ -75,7 +76,7 @@ echo "project: a library builds..." >&2
 library="$scratch/shapes"
 mkdir -p "$library/src"
 cat > "$library/ghul-project.json" <<'JSON'
-{ "name": "shapes", "kind": "library" }
+{ "name": "shapes", "kind": "library", "dependencies": { "ghul-core": { "version": ">=0.0.0" }, "ghul-runtime": { "version": ">=0.0.0" } } }
 JSON
 cat > "$library/src/shapes.ghul" <<'GHUL'
 namespace Shapes is
@@ -168,7 +169,7 @@ fi
 wasm="$scratch/wasm-greeter"
 mkdir -p "$wasm/src"
 cat > "$wasm/ghul-project.json" <<'JSON'
-{ "name": "wasm-greeter", "targets": ["wasm"] }
+{ "name": "wasm-greeter", "targets": ["wasm"], "dependencies": { "ghul-core": { "version": ">=0.0.0" }, "ghul-runtime": { "version": ">=0.0.0" } } }
 JSON
 cat > "$wasm/src/main.ghul" <<'GHUL'
 use default
@@ -218,6 +219,8 @@ echo "project: ghul new creates a project that builds and runs on wasm..." >&2
 (cd "$scratch" && dotnet "$cli" new scaffolded --target wasm,llvm 2>/dev/null) || fail "ghul new failed"
 [[ -f "$scratch/scaffolded/.gitignore" ]] || fail "ghul new wrote no .gitignore"
 grep -q '"compiler": ">=' "$scratch/scaffolded/ghul-project.json" || fail "ghul new wrote no compiler floor"
+grep -q '"ghul-core": { "version": ">=' "$scratch/scaffolded/ghul-project.json" || fail "ghul new wrote no ghul-core floor"
+grep -q '"ghul-runtime": { "version": ">=' "$scratch/scaffolded/ghul-project.json" || fail "ghul new wrote no ghul-runtime floor"
 grep -q '"ghul-llvm": ">=' "$scratch/scaffolded/ghul-project.json" || fail "ghul new wrote no ghul-llvm floor for a project with an llvm target"
 out="$(cd "$scratch/scaffolded" && dotnet "$cli" run --target wasm 2>/dev/null)" || fail "ghul run of a new project failed on wasm"
 check "$out" "hello" "new project output on wasm"
@@ -253,6 +256,18 @@ if err="$(cd "$old_host" && dotnet "$cli" build --target wasm 2>&1)"; then
     fail "expected a manifest with a host key to fail"
 fi
 [[ "$err" == *"host is now engine"* ]] || fail "unexpected message for a host key: $err"
+
+echo "project: a manifest that declares neither library is told the lines to add..." >&2
+undeclared="$scratch/undeclared"
+mkdir -p "$undeclared/src"
+cat > "$undeclared/ghul-project.json" <<'JSON'
+{ "name": "undeclared", "targets": ["wasm"] }
+JSON
+cp "$old_wasm/src/main.ghul" "$undeclared/src/main.ghul"
+if err="$(cd "$undeclared" && dotnet "$cli" build --target wasm 2>&1)"; then
+    fail "expected a manifest with no libraries declared to fail"
+fi
+[[ "$err" == *'"ghul-core": { "version": ">='* && "$err" == *'"ghul-runtime": { "version": ">='* ]] || fail "unexpected message for undeclared libraries: $err"
 
 echo "project: an llvm build fetches the ghul-llvm release chosen for its compiler..." >&2
 (cd "$scratch" && dotnet "$cli" new native --target llvm 2>/dev/null) || fail "ghul new --target llvm failed"

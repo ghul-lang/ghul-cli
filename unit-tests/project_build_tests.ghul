@@ -56,6 +56,16 @@ namespace Ghul.Cli.Tests is
 
         _targets(targets: BuildTarget[]) -> Collections.List[BuildTarget] => LIST[BuildTarget](targets)
 
+
+        @Test()
+        a_manifest_that_declares_neither_library_is_told_the_two_lines_to_add() is
+            let project = _project(ManifestKind.PROGRAM, BuildTarget.WASM)
+            let cache = LIBRARY_CACHE(IO.Path.combine(IO.Path.get_temp_path(), "ghul-unused-cache-{System.Guid.new_guid().to_string("N").substring(0, 8)}"))
+            let message = PROJECT_BUILD.undeclared_libraries(project.manifest, cache) ?? ""
+
+            assert message.contains("\"ghul-core\": {{ \"version\": \">=") else message
+            assert message.contains("\"ghul-runtime\": {{ \"version\": \">=") else message
+        si
         @Test()
         the_only_target_is_taken_when_none_is_named() is
             let chosen = PROJECT_LOADER.choose_target(_targets([BuildTarget.WASM]), null)

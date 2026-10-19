@@ -332,6 +332,14 @@ namespace Ghul.Project is
             let has_git = value.try_get_property("git", git_value ref)
             let has_path = value.try_get_property("path", path_value ref)
 
+            // The compiler's two libraries have a repository of their own, so
+            // a declaration of one may be only a version.
+            if !has_git /\ !has_path /\ _default_repository(name)? then
+                _check_keys(value, _git_keys())
+
+                return _git_dependency(name, value, _default_repository(name)!)
+            fi
+
             if has_git /\ has_path then
                 _report("dependencies.{name}", "a dependency has both git and path")
                 return null
@@ -353,7 +361,12 @@ namespace Ghul.Project is
 
             _check_keys(value, _git_keys())
 
-            return _git_dependency(name, value, git_value)
+            if git_value.value_kind != JsonValueKind.STRING then
+                _report("dependencies.{name}.git", "the value is not a string")
+                return null
+            fi
+
+            return _git_dependency(name, value, git_value.get_string()!)
         si
 
         _path_keys() -> Collections.LIST[string] static is
@@ -378,19 +391,9 @@ namespace Ghul.Project is
 
         // A git dependency is a repository to read, and either a tag or a
         // branch to read it at. With neither there is nothing to fetch.
-        _git_dependency(name: string, entry: JsonElement, git_value: JsonElement) -> DEPENDENCY? is
-            if git_value.value_kind != JsonValueKind.STRING then
-                _report("dependencies.{name}.git", "the value is not a string")
-                return null
-            fi
-
+        _git_dependency(name: string, entry: JsonElement, url: string) -> DEPENDENCY? is
             let tag = _dependency_string(name, entry, "tag")
             let version_text = _dependency_string(name, entry, "version")
-
-            if (name =~ "ghul-core" \/ name =~ "ghul-runtime") /\ (tag? \/ version_text?) then
-                _report("dependencies.{name}", "{name} is the compiler's library and always the newest release: it cannot be pinned")
-                return null
-            fi
 
             let version: VERSION_RANGE? mut = null
 
@@ -418,7 +421,21 @@ namespace Ghul.Project is
                 return null
             fi
 
-            return DEPENDENCY.GIT(git_value.get_string()!, tag, branch, directory, version)
+            return DEPENDENCY.GIT(url, tag, branch, directory, version)
+        si
+
+        // Where one of the compiler's two libraries is fetched from, or null
+        // for any other name.
+        _default_repository(name: string) -> string? is
+            if name =~ CORE_LIBRARY.NAME then
+                return CORE_LIBRARY.repository()
+            fi
+
+            if name =~ RUNTIME_LIBRARY.NAME then
+                return RUNTIME_LIBRARY.repository()
+            fi
+
+            return null
         si
 
         _dependency_string(name: string, entry: JsonElement, key: string) -> string? is

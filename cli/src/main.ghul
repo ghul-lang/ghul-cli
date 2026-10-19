@@ -330,6 +330,29 @@ namespace Ghul.Cli is
         return floors
     si
 
+    // The oldest release of ghul-core and ghul-runtime a new project is
+    // written with, which is the newest release. One that cannot be found out
+    // is left out, and the build then says what to add.
+    new_project_libraries() -> Collections.List[(tool: string, version: string)] is
+        let libraries = Collections.LIST[(tool: string, version: string)]()
+        let cache = Ghul.Project.LIBRARY_CACHE.for_this_user()
+        let resolver = Ghul.Project.LIBRARY_RESOLVER(cache)
+
+        let core = resolver.latest(Ghul.Project.CORE_LIBRARY.NAME, Ghul.Project.CORE_LIBRARY.repository())
+
+        if core? then
+            libraries.add((tool = Ghul.Project.CORE_LIBRARY.NAME, version = core!.substring(1)))
+        fi
+
+        let runtime = resolver.latest(Ghul.Project.RUNTIME_LIBRARY.NAME, Ghul.Project.RUNTIME_LIBRARY.repository())
+
+        if runtime? then
+            libraries.add((tool = Ghul.Project.RUNTIME_LIBRARY.NAME, version = runtime!.substring(1)))
+        fi
+
+        return libraries
+    si
+
     // Creates a project to build and run: `ghul new <name> [--target ...]`.
     cmd_new(rest: Collections.List[string]) -> int is
         let parsed = Ghul.Project.PROJECT_SCAFFOLD.parse(rest, Ghul.Project.TARGET_CHOICE.ORDER)
@@ -341,7 +364,7 @@ namespace Ghul.Cli is
         fi
 
         let command_line = parsed!
-        let created = Ghul.Project.PROJECT_SCAFFOLD.create(command_line, new_project_floors(command_line.targets))
+        let created = Ghul.Project.PROJECT_SCAFFOLD.create(command_line, new_project_floors(command_line.targets), new_project_libraries())
 
         if let (problem): ERROR = created then
             LOG.say("{problem}")
@@ -838,6 +861,18 @@ namespace Ghul.Cli is
         return chosen
     si
 
+    // The libraries a script is built with, which it does not declare: the
+    // newest release of each.
+    script_dependencies() -> Collections.Map[string, Ghul.Project.DEPENDENCY] is
+        let newest = Ghul.Project.VERSION_RANGE.parse(">=0.0.0")!
+        let dependencies = Collections.MAP[string, Ghul.Project.DEPENDENCY]()
+
+        dependencies.add(Ghul.Project.CORE_LIBRARY.NAME, Ghul.Project.DEPENDENCY.GIT(Ghul.Project.CORE_LIBRARY.repository(), null, null, null, newest))
+        dependencies.add(Ghul.Project.RUNTIME_LIBRARY.NAME, Ghul.Project.DEPENDENCY.GIT(Ghul.Project.RUNTIME_LIBRARY.repository(), null, null, null, newest))
+
+        return dependencies
+    si
+
     // Builds a script for wasm or llvm as a project of one source file,
     // cached by the script, the target, the compiler and every library and
     // tool the build used: the build's exit status, and on success the
@@ -883,7 +918,7 @@ namespace Ghul.Cli is
                 "script", null, Ghul.Project.ManifestKind.PROGRAM,
                 Collections.LIST[Ghul.Project.BuildTarget]([target]), Collections.LIST[string](["script.ghul"]),
                 Ghul.Project.MANIFEST_OPTIONS(null, false, Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), null),
-                Collections.MAP[string, Ghul.Project.DEPENDENCY](), Ghul.Project.CompilerBuild.DEFAULT,
+                script_dependencies(), Ghul.Project.CompilerBuild.DEFAULT,
                 Collections.LIST[Ghul.Project.BuildTarget](), null, Collections.MAP[string, Ghul.Project.VERSION_RANGE]())
 
         let libraries = Ghul.Project.PROJECT_BUILD.libraries(

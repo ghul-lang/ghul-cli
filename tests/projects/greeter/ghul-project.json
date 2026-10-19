@@ -2,4 +2,5 @@
     // a comment and a trailing comma, both of which a manifest may carry
     "name": "greeter",
     "targets": ["wasm"],
+    "dependencies": { "ghul-core": { "version": ">=0.0.0" }, "ghul-runtime": { "version": ">=0.0.0" } },
 }

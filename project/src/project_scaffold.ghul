@@ -81,10 +81,11 @@ namespace Ghul.Project is
         /// - name: the project's name, as its manifest records it
         /// - targets: the targets the project builds for
         /// - floors: the oldest release of each tool the project is written with
-        files(name: string, targets: Collections.List[BuildTarget], floors: Collections.List[(tool: string, version: string)]) -> Collections.List[(path: string, text: string)] static is
+        /// - libraries: the oldest release of ghul-core and ghul-runtime it is written with
+        files(name: string, targets: Collections.List[BuildTarget], floors: Collections.List[(tool: string, version: string)], libraries: Collections.List[(tool: string, version: string)]) -> Collections.List[(path: string, text: string)] static is
             let result = LIST[(path: string, text: string)]()
 
-            result.add((path = MANIFEST_LOCATION.FILE_NAME, text = manifest_text(name, targets, floors)))
+            result.add((path = MANIFEST_LOCATION.FILE_NAME, text = manifest_text(name, targets, floors, libraries)))
             result.add((path = Path.join(["src", "main.ghul"]), text = "use IO.Std.write_line\n\nentry() is\n    write_line(\"hello\")\nsi\n"))
             result.add((path = ".gitignore", text = "out/\n"))
 
@@ -97,7 +98,8 @@ namespace Ghul.Project is
         /// - name: the project's name
         /// - targets: the targets the project builds for
         /// - floors: the oldest release of each tool the project is written with, as `>=` ranges
-        manifest_text(name: string, targets: Collections.List[BuildTarget], floors: Collections.List[(tool: string, version: string)]) -> string static is
+        /// - libraries: the oldest release of each library the compiler compiles in, as `>=` ranges
+        manifest_text(name: string, targets: Collections.List[BuildTarget], floors: Collections.List[(tool: string, version: string)], libraries: Collections.List[(tool: string, version: string)]) -> string static is
             let quoted = LIST[string]()
 
             for target in targets do
@@ -112,12 +114,20 @@ namespace Ghul.Project is
 
             let tools_text = if tools.count > 0 then ",\n    \"tools\": {{ {string.join(", ", tools)} }}" else "" fi
 
+            let dependencies = LIST[string]()
+
+            for library in libraries do
+                dependencies.add("\"{library.tool}\": {{ \"version\": \">={library.version}\" }}")
+            od
+
+            let dependencies_text = if dependencies.count > 0 then ",\n    \"dependencies\": {{ {string.join(", ", dependencies)} }}" else "" fi
+
             return
                 "{{\n"
                 "    \"name\": \"{name}\",\n"
                 "    \"kind\": \"program\",\n"
                 "    \"targets\": [{string.join(", ", quoted)}],\n"
-                "    \"sources\": [\"src/**/*.ghul\"]{tools_text}\n"
+                "    \"sources\": [\"src/**/*.ghul\"]{tools_text}{dependencies_text}\n"
                 "}}\n"
         si
 
@@ -128,7 +138,8 @@ namespace Ghul.Project is
         ///
         /// - command_line: the parsed arguments, with no problem
         /// - floors: the oldest release of each tool the project is written with
-        create(command_line: NEW_COMMAND_LINE, floors: Collections.List[(tool: string, version: string)]) -> Result[unit, string] static is
+        /// - libraries: the oldest release of ghul-core and ghul-runtime it is written with
+        create(command_line: NEW_COMMAND_LINE, floors: Collections.List[(tool: string, version: string)], libraries: Collections.List[(tool: string, version: string)]) -> Result[unit, string] static is
             let directory = Path.get_full_path(command_line.directory!)
             let name = Path.get_file_name(Path.trim_ending_directory_separator(directory)) ?? ""
 
@@ -136,7 +147,7 @@ namespace Ghul.Project is
                 return ERROR("{command_line.directory} already exists and is not empty")
             fi
 
-            let written = files(name, command_line.targets, floors)
+            let written = files(name, command_line.targets, floors, libraries)
             let manifest = written[0]
             let read = MANIFEST_READER.read(manifest.text, Path.join([directory, manifest.path]))
 
