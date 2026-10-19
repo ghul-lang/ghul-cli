@@ -131,10 +131,11 @@ esac
 
 rid="${os_name}-${arch_name}"
 
-# An archive is published for Linux on x64 and on arm64. The arm64 one carries
-# the tool alone: ghul runs its compiler under Node there, and fetches it.
+# An archive is published for Linux on x64 and arm64 and for macOS on arm64.
+# Each carries the tool alone: ghul runs its compiler under Node where there
+# is no Native AOT compiler, and fetches it.
 case "${rid}" in
-    linux-x64 | linux-arm64) ;;
+    linux-x64 | linux-arm64 | osx-arm64) ;;
     *) fail "ghul-cli is not built for ${rid}; install the .NET SDK and run 'dotnet tool install -g ghul.cli' instead" ;;
 esac
 
