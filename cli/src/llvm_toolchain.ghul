@@ -201,14 +201,25 @@ namespace Ghul.Cli is
                 return ERROR("the llvm target builds only on Linux x64 and arm64")
             fi
 
+            let tag = chosen_tag(compiler_version, requirements)
+
+            if let (problem): ERROR = tag then
+                return ERROR(problem)
+            fi
+
+            return executable(tag!, platform!)
+        si
+
+        /// The release of `ghul-llvm` `compiler_version` links with: the
+        /// newest release at or above the one the compiler declares that
+        /// admits the compiler, or this tool's pin for a compiler that
+        /// declares none. Nothing is fetched.
+        ///
+        /// - compiler_version: the compiler the build uses
+        /// - requirements: what the compiler declares it needs, or null
+        chosen_tag(compiler_version: string, requirements: Ghul.Project.COMPILER_REQUIREMENTS?) -> Result[string, string] is
             if let declared = requirements?.llvm then
-                let chosen = release_tag(declared, compiler_version)
-
-                if let (problem): ERROR = chosen then
-                    return ERROR(problem)
-                fi
-
-                return executable(chosen!, platform)
+                return release_tag(declared, compiler_version)
             fi
 
             let tag = pinned_tag(compiler_version)
@@ -217,8 +228,15 @@ namespace Ghul.Cli is
                 return ERROR("no ghul-llvm release is pinned for ghul.compiler {compiler_version}, which the llvm target needs {Ghul.Project.BUILD_TARGETS.minimum_compiler(Ghul.Project.BuildTarget.LLVM)} or newer for")
             fi
 
-            return executable(tag, platform)
+            return OK(tag!)
         si
+
+        /// Whether release `tag` for `triple` is in the cache.
+        ///
+        /// - tag: the release
+        /// - triple: the platform
+        is_kept(tag: string, triple: string) -> bool =>
+            File.exists(Path.join([root, tag, triple, "bin", "ghul-llvm"]))
 
         /// The release of `ghul-llvm` to link with for `compiler_version`:
         /// the newest at or above `floor` whose `requirements.json` admits

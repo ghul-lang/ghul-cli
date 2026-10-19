@@ -510,6 +510,50 @@ namespace Ghul.Cli is
         return 0
     si
 
+    // Refreshes the ghul-llvm tool to the newest release the installed
+    // compiler admits, or with `check_only` says whether there is one.
+    // Nothing is said of a tool that was never installed beyond how to
+    // install it.
+    _update_llvm(check_only: bool) -> int is
+        let platform = LLVM_TOOLCHAIN.triple()
+        let toolchain = LLVM_TOOLCHAIN.for_this_user()
+
+        if !platform? \/ !toolchain.has_any(platform!) then
+            Std.error.write_line("ghul: ghul-llvm is not installed (ghul install llvm brings it in)")
+            return 0
+        fi
+
+        let host = _host_store()
+        let store = host.store ?? Host.COMPILER_STORE.for_this_user()
+        let compiler = store.highest_version()
+
+        if !compiler? then
+            return 0
+        fi
+
+        let requirements = Ghul.Project.COMPILER_REQUIREMENTS.read(store.directory(compiler!))
+        let tag = toolchain.chosen_tag(compiler!, requirements)
+
+        if let (error): ERROR = tag then
+            Std.error.write_line("ghul: ghul-llvm: {error}")
+            return 1
+        fi
+
+        if toolchain.is_kept(tag!, platform!) then
+            Std.error.write_line("ghul: ghul-llvm {tag!} is the latest")
+            return 0
+        fi
+
+        if check_only then
+            Std.error.write_line("ghul: ghul-llvm has {tag!} available")
+            return 0
+        fi
+
+        Std.error.write_line("ghul: updating ghul-llvm to {tag!}...")
+
+        return _report_llvm(toolchain.executable(compiler!, requirements))
+    si
+
     // Installs the newest LTS Node.js release that runs the wasm target,
     // or the release `version` names, into the cache. Unlike the wasmtime
     // host a run fetches for itself, a node is installed only when asked:
@@ -861,16 +905,9 @@ namespace Ghul.Cli is
             fi
         od
 
-        // The ghul-llvm tool: refreshed to the newest release the installed
-        // compiler admits, where one is in the cache already.
-        if let platform: string = LLVM_TOOLCHAIN.triple() /\ LLVM_TOOLCHAIN.for_this_user().has_any(platform) then
-            if !check_only then
-                if cmd_install_llvm(null) != 0 then
-                    status = 1
-                fi
-            fi
-        else
-            Std.error.write_line("ghul: ghul-llvm is not installed (ghul install llvm brings it in)")
+        // The ghul-llvm tool, where one is in the cache already.
+        if _update_llvm(check_only) != 0 then
+            status = 1
         fi
 
         // The wasmtime host: the refresh and its tag handling are the
