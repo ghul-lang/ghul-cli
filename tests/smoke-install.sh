@@ -64,6 +64,14 @@ cd "$scratch/work"
 run ghul new hello > "$scratch/new.out" 2>&1 || { cat "$scratch/new.out" >&2; fail "ghul new failed"; }
 cd hello
 
+if ! run ghul build > "$scratch/build.out" 2>&1; then
+    cat "$scratch/build.out" >&2
+    fail "ghul build failed"
+fi
+
+cat "$scratch/build.out" >&2
+find . -maxdepth 4 -not -path "./.git/*" >&2
+
 out="$(run ghul run 2>"$scratch/run.err")" || { cat "$scratch/run.err" >&2; fail "ghul run failed"; }
 cat "$scratch/run.err" >&2
 echo "$out" >&2
