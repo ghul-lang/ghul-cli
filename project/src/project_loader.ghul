@@ -73,6 +73,10 @@ namespace Ghul.Project is
 
             let manifest = read.manifest!
 
+            if let problem = not_a_project(manifest, full_directory) then
+                return _failed(problem)
+            fi
+
             let chosen = choose_target(manifest.targets, target_name)
 
             if let message: string = chosen.problem then
@@ -94,6 +98,10 @@ namespace Ghul.Project is
             let read = read_manifest(Path.get_full_path(directory))
 
             if let manifest: MANIFEST = read.manifest then
+                if not_a_project(manifest, directory)? then
+                    return CHOSEN_TARGET(null, null, null)
+                fi
+
                 // The manifest's own preference stands; the machine's
                 // global defaults fill the gap a manifest leaves.
                 let prefer =
@@ -151,6 +159,23 @@ namespace Ghul.Project is
             fi
 
             return (target = BuildTarget.WASM, problem = "the manifest lists more than one target; name one with --target: {listed}")
+        si
+
+        /// Why the manifest is not something to build, or null for a program or
+        /// a library: a workspace and a collection own no sources.
+        ///
+        /// - manifest: the manifest read
+        /// - directory: the directory holding it
+        not_a_project(manifest: MANIFEST, directory: string) -> string? static is
+            if manifest.kind == ManifestKind.WORKSPACE then
+                return "{directory} is a workspace, which owns no sources; build one of its members"
+            fi
+
+            if manifest.kind == ManifestKind.COLLECTION then
+                return "{directory} is a collection of independent projects, which owns no sources; build one of them"
+            fi
+
+            return null
         si
 
         _failed(message: string) -> LoadOutcome static =>
