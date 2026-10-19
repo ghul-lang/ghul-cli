@@ -25,6 +25,9 @@ namespace Ghul.Cli.Tests is
             _same(expected, (cast Result.ERROR(found)).error)
         si
 
+        _libraries() -> Collections.List[(tool: string, version: string)] =>
+            LIST[(tool: string, version: string)]([(tool = "ghul-core", version = "1.2.0"), (tool = "ghul-runtime", version = "3.4.0")])
+
         _targets(targets: Collections.List[BuildTarget]) -> string =>
             string.join(",", [BUILD_TARGETS.name(t) for t in targets])
 
@@ -115,7 +118,7 @@ namespace Ghul.Cli.Tests is
         @Test()
         the_manifest_of_a_part_that_draws_compiles_in_ghul_raster() is
             let found = ROSETTA_TASK.find(_index, "fern")
-            let text = ROSETTA_TASK.manifest_text("fern", found!.part, found!.part.targets, found!.raster_version)
+            let text = ROSETTA_TASK.manifest_text("fern", found!.part, found!.part.targets, found!.raster_version, _libraries())
 
             let read = MANIFEST_READER.read(text, "/tmp/fern/ghul-project.json")
 
@@ -124,6 +127,8 @@ namespace Ghul.Cli.Tests is
             fi
 
             assert text.contains("\"tag\": \"v0.13.0\"") else text
+            assert text.contains("\"ghul-core\": {{ \"version\": \">=1.2.0\" }}") else text
+            assert text.contains("\"ghul-runtime\": {{ \"version\": \">=3.4.0\" }}") else text
         si
 
         @Test()
@@ -138,11 +143,13 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        the_manifest_of_a_part_that_draws_nothing_has_no_dependencies() is
+        the_manifest_of_a_part_that_draws_nothing_declares_only_the_libraries() is
             let found = ROSETTA_TASK.find(_index, "abc-words")
-            let text = ROSETTA_TASK.manifest_text("abc-words", found!.part, found!.part.targets, found!.raster_version)
+            let text = ROSETTA_TASK.manifest_text("abc-words", found!.part, found!.part.targets, found!.raster_version, _libraries())
 
-            assert !text.contains("dependencies") else text
+            assert !text.contains("ghul-raster") else text
+            assert text.contains("\"ghul-core\": {{ \"version\": \">=1.2.0\" }}") else text
+            assert text.contains("\"ghul-runtime\": {{ \"version\": \">=3.4.0\" }}") else text
             assert text.contains("\"targets\": [\"llvm\", \"wasm\"]") else text
         si
     si
