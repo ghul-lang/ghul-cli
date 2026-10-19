@@ -28,9 +28,8 @@ namespace Ghul.Cli.Tests is
             "    \"kind\": \"program\",\n"
             "    \"targets\": [\"wasm\", \"llvm\"],\n"
             "    \"sources\": [\"src/**/*.ghul\", \"extra/*.ghul\"],\n"
-            "    \"compiler\": \"64.5.38\",\n"
             "    \"options\": {{\"underscore-access\": \"private\", \"global-namespace\": true, \"default-use\": [\"Collections\", \"IO.Std.write_line\"], \"define\": [\"DEBUG\"], \"suppress\": [\"redundant-semicolon\"], \"warn-as-error\": [\"cast-may-throw\"]}},\n"
-            "    \"dependencies\": {{\"ghul-core\": {{\"git\": \"https://github.com/ghul-lang/ghul-core\", \"tag\": \"v1.2.0\"}}, \"parsing\": {{\"git\": \"https://example.com/libs.git\", \"branch\": \"main\", \"directory\": \"parsing\"}}, \"scratch\": {{\"path\": \"../scratch\"}}}}\n"
+            "    \"dependencies\": {{\"tagged\": {{\"git\": \"https://github.com/ghul-lang/tagged\", \"tag\": \"v1.2.0\"}}, \"parsing\": {{\"git\": \"https://example.com/libs.git\", \"branch\": \"main\", \"directory\": \"parsing\"}}, \"scratch\": {{\"path\": \"../scratch\"}}}}\n"
             "}}"
 
     EXPLICIT_FALSE: string static => "{{\"name\": \"app\", \"options\": {{\"global-namespace\": false}}}}"
@@ -99,6 +98,29 @@ namespace Ghul.Cli.Tests is
             return null
         si
 
+
+        @Test()
+        a_compiler_version_is_refused() is
+            let problems = _problems("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"compiler\": \"64.5.38\" }}")
+
+            assert problems.count == 1;
+            assert problems[0].contains("compiler version cannot be pinned");
+        si
+
+        @Test()
+        a_tag_for_the_compilers_libraries_is_refused() is
+            let problems = _problems("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"dependencies\": {{\"ghul-core\": {{\"git\": \"https://example.com/core\", \"tag\": \"v1.0.0\"}}, \"ghul-runtime\": {{\"git\": \"https://example.com/rt\", \"tag\": \"v1.0.0\"}}}} }}")
+
+            assert problems.count == 2;
+            assert problems[0].contains("always the newest release");
+        si
+
+        @Test()
+        a_path_for_the_compilers_library_is_accepted() is
+            let outcome = MANIFEST_READER.read("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"dependencies\": {{\"ghul-core\": {{\"path\": \"../core\"}}}} }}", "ghul-project.json")
+
+            assert isa ReadOutcome.OK(outcome);
+        si
         // What reading a manifest that should not have read produced, as
         // the messages a caller would report.
         _problems(text: string) -> Collections.List[string] is
@@ -120,7 +142,6 @@ namespace Ghul.Cli.Tests is
             assert manifest.name =~ "example-app";
             assert manifest.version =~ "0.1.0";
             assert manifest.kind == ManifestKind.PROGRAM;
-            assert manifest.compiler_version =~ "64.5.38";
             assert manifest.targets.count == 2;
             assert manifest.targets[0] == BuildTarget.WASM;
             assert manifest.targets[1] == BuildTarget.LLVM;
@@ -192,13 +213,13 @@ namespace Ghul.Cli.Tests is
 
             assert dependencies.count == 3;
 
-            if let core: DEPENDENCY.GIT = dependencies["ghul-core"] then
-                assert core.url =~ "https://github.com/ghul-lang/ghul-core";
+            if let core: DEPENDENCY.GIT = dependencies["tagged"] then
+                assert core.url =~ "https://github.com/ghul-lang/tagged";
                 assert core.tag =~ "v1.2.0";
                 assert !core.branch?;
                 assert !core.directory?;
             else
-                Assert.fail("ghul-core is not a git dependency");
+                Assert.fail("tagged is not a git dependency");
             fi
 
             if let parsing: DEPENDENCY.GIT = dependencies["parsing"] then
@@ -237,7 +258,6 @@ namespace Ghul.Cli.Tests is
             assert manifest.name =~ "small";
             assert !manifest.version?;
             assert manifest.kind == ManifestKind.PROGRAM;
-            assert !manifest.compiler_version?;
             assert manifest.targets.count == 1;
             assert manifest.targets[0] == BuildTarget.WASM;
             assert manifest.sources.count == 1;

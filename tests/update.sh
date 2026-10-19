@@ -97,8 +97,10 @@ grep -q "is the latest release" <<< "$out" || fail "expected --check to report t
 out="$("$installed" update 2>&1)" || fail "'ghul update' failed: $out"
 grep -q "is the latest release" <<< "$out" || fail "expected update to report the latest, got: $out"
 
-out="$("$installed" update --version "v$running" 2>&1)" || fail "'ghul update --version' failed: $out"
-grep -q "which is v$running" <<< "$out" || fail "expected --version of the running release to say so, got: $out"
+if out="$("$installed" update --version "v$running" 2>&1)"; then
+    fail "expected 'ghul update --version' to be refused"
+fi
+grep -q "a version cannot be chosen" <<< "$out" || fail "expected --version to be refused with a message, got: $out"
 
 latest "v$newer"
 

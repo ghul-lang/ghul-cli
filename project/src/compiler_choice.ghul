@@ -1,49 +1,31 @@
 namespace Ghul.Project is
     /// Which compiler a project build uses.
     union CompilerChoice is
-        /// The version named, installing it if need be, or the newest
-        /// installed where `version` is null.
-        REQUESTED(version: string?);
+        /// The newest installed, or the newest release where none is.
+        INSTALLED;
 
         /// The newest release, installed if need be, because the newest
         /// installed is too old for the build.
         NEWEST(installed: string);
-
-        /// No compiler will do: the one asked for is one the build cannot use.
-        PROBLEM(message: string);
     si
 
-    /// Chooses the compiler for a build from the version asked for and
-    /// what is installed. A build for a target with a minimum compiler
-    /// needs at least that one; a dotnet build takes any.
+    /// Chooses the compiler for a build from what is installed. A build for
+    /// a target with a minimum compiler needs at least that one; a dotnet
+    /// build takes any.
     class COMPILER_CHOICE is
         /// The compiler a build of `target` uses.
         ///
         /// - target: the target being built
         /// - mode: how the build is made
-        /// - named: the version asked for, by the environment or the manifest, or null
         /// - installed: the newest installed version, or null when none is
-        choose(target: BuildTarget, mode: BUILD_MODE, named: string?, installed: string?) -> CompilerChoice static is
+        choose(target: BuildTarget, mode: BUILD_MODE, installed: string?) -> CompilerChoice static is
             let minimum = BUILD_TARGETS.minimum_compiler(target, mode)
 
-            if !minimum? then
-                return CompilerChoice.REQUESTED(named)
+            if minimum? /\ installed? /\ is_older_than(installed!, minimum) then
+                return CompilerChoice.NEWEST(installed!)
             fi
 
-            if let version: string = named then
-                if is_older_than(version, minimum) then
-                    return CompilerChoice.PROBLEM(
-                        "ghul.compiler {version} is asked for, but {BUILD_TARGETS.build_kind(target, mode)}the {BUILD_TARGETS.name(target)} target needs {minimum} or newer")
-                fi
-
-                return CompilerChoice.REQUESTED(version)
-            fi
-
-            if let version: string = installed /\ is_older_than(version, minimum) then
-                return CompilerChoice.NEWEST(version)
-            fi
-
-            return CompilerChoice.REQUESTED(null)
+            return CompilerChoice.INSTALLED
         si
 
         /// Whether `version` is a release older than `minimum`. A version

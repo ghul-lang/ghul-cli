@@ -33,7 +33,7 @@ namespace Ghul.Project is
             let version = _string_member(root, "version")
             let targets = _targets(root, kind)
             let sources = _sources(root)
-            let compiler = _string_member(root, "compiler")
+            _reject_tool_pins(root)
             let compiler_build = _compiler_build(root)
             let prefer = _prefer(root, targets, kind)
             let host_wasm = _host_wasm(root)
@@ -47,7 +47,7 @@ namespace Ghul.Project is
                 return null
             fi
 
-            let manifest = MANIFEST(name, version, kind, targets, sources, compiler, options, dependencies, compiler_build, prefer, host_wasm)
+            let manifest = MANIFEST(name, version, kind, targets, sources, options, dependencies, compiler_build, prefer, host_wasm)
 
             manifest.ignores_dotnet = _ignored_dotnet
 
@@ -247,6 +247,16 @@ namespace Ghul.Project is
             _problems.add(MANIFEST_PROBLEM(key, message))
         si
 
+        // The compiler is always the newest release, as ghul-core, ghul-runtime
+        // and ghul-llvm are, so a manifest has no way to name a version of any.
+        _reject_tool_pins(root: JsonElement) is
+            let value: JsonElement mut
+
+            if root.try_get_property("compiler", value ref) then
+                _report("compiler", "the compiler version cannot be pinned: ghul always uses the newest release")
+            fi
+        si
+
         // Every problem, rather than the first, so one reading of the
         // manifest answers for the whole file.
         _check_keys(element: JsonElement, known: Collections.LIST[string]) is
@@ -335,6 +345,12 @@ namespace Ghul.Project is
             fi
 
             let tag = _dependency_string(name, entry, "tag")
+
+            if (name =~ "ghul-core" \/ name =~ "ghul-runtime") /\ tag? then
+                _report("dependencies.{name}", "{name} is the compiler's library and always the newest release: it cannot be pinned to a tag")
+                return null
+            fi
+
             let branch = _dependency_string(name, entry, "branch")
             let directory = _dependency_string(name, entry, "directory")
 

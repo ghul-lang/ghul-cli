@@ -273,8 +273,8 @@ namespace Ghul.Cli is
         out.write_line("       ghul run [--target <name>] [--debug] [--optimise <0-3>] [-- args...]")
         out.write_line("       ghul project response-file --output <path> [--source-globs <path>] [--target <name>]")
         out.write_line("       ghul project compiler")
-        out.write_line("       ghul install <compiler|wasmtime|node|llvm> [--version <version>]")
-        out.write_line("       ghul update [--version <tag>] [--check]")
+        out.write_line("       ghul install <compiler|wasmtime|node|llvm>")
+        out.write_line("       ghul update [--check]")
         out.write_line("       ghul cache clear")
         out.write_line("       ghul repl")
         out.write_line("       ghul version")
@@ -436,18 +436,15 @@ namespace Ghul.Cli is
     // the ghul-llvm toolchain an llvm build links with.
     cmd_install(rest: Collections.List[string]) -> int is
         let positional = Collections.LIST[string]()
-        let version: string? mut = null
         let llvm_built mut = false
         let i mut = 0
 
         while i < rest.count do
             let argument = rest[i]
 
-            if argument =~ "--version" /\ i + 1 < rest.count then
-                version = rest[i + 1]
-                i = i + 1
-            elif argument.starts_with("--version=") then
-                version = argument.substring("--version=".length)
+            if argument =~ "--version" \/ argument.starts_with("--version=") then
+                LOG.say("a version cannot be chosen: ghul always installs the newest release")
+                return 1
             elif argument =~ "--llvm" then
                 llvm_built = true
             elif !argument.starts_with("-") then
@@ -458,12 +455,13 @@ namespace Ghul.Cli is
         od
 
         if positional.count == 0 then
-            Std.error.write_line("usage: ghul install <compiler|llvm|node|wasmtime> [--version <version>]")
+            Std.error.write_line("usage: ghul install <compiler|llvm|node|wasmtime>")
             return 1
         fi
 
-        if !version? /\ positional.count > 1 then
-            version = positional[1]
+        if positional.count > 1 then
+            LOG.say("a version cannot be chosen: ghul always installs the newest release")
+            return 1
         fi
 
         let (forced, problem) = Ghul.Project.COMPILER_HOST.from_environment()
@@ -480,7 +478,7 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        return COMPONENT_VERBS.install(component!, version)
+        return COMPONENT_VERBS.install(component!, null)
     si
 
     // Under the install lock, since a script run elsewhere may be
@@ -515,11 +513,10 @@ namespace Ghul.Cli is
         yrt
     si
 
-    // Updates an install.sh install of this tool to the latest release, or
-    // to the one `--version` names, by running that release's install script.
+    // Updates an install.sh install of this tool to the latest release by
+    // running that release's install script.
     // `--check` reports whether there is anything to update and stops.
     cmd_update_self(rest: Collections.List[string]) -> int is
-        let wanted: string? mut = null
         let check_only mut = false
         let i mut = 0
 
@@ -528,13 +525,11 @@ namespace Ghul.Cli is
 
             if argument =~ "--check" then
                 check_only = true
-            elif argument =~ "--version" /\ i + 1 < rest.count then
-                wanted = rest[i + 1]
-                i = i + 1
-            elif argument.starts_with("--version=") then
-                wanted = argument.substring("--version=".length)
+            elif argument =~ "--version" \/ argument.starts_with("--version=") then
+                LOG.say("a version cannot be chosen: ghul always updates to the newest release")
+                return 1
             else
-                Std.error.write_line("usage: ghul update [--version <tag>] [--check]")
+                Std.error.write_line("usage: ghul update [--check]")
                 return 1
             fi
 
@@ -559,36 +554,24 @@ namespace Ghul.Cli is
         let update = SELF_UPDATE.from_environment()
         let running = cli_version()
 
-        let tag mut = ""
+        let latest = update.latest_tag()
 
-        if let named: string = wanted then
-            tag = named
-        else
-            let latest = update.latest_tag()
-
-            if let problem: ERROR = latest then
-                LOG.say("the latest release could not be found: {problem.error}")
-                return 1
-            fi
-
-            tag = latest!
+        if let problem: ERROR = latest then
+            LOG.say("the latest release could not be found: {problem.error}")
+            return 1
         fi
 
+        let tag = latest!
+
         if SELF_UPDATE.is_running_version(tag, running) then
-            if wanted? then
-                LOG.say("ghul {running} is installed, which is {tag}")
-            else
-                LOG.say("ghul {running} is installed, and is the latest release")
-            fi
+            LOG.say("ghul {running} is installed, and is the latest release")
 
             return 0
         fi
 
         if check_only then
-            let which = if wanted? then "was asked for" else "is the latest release" fi
-
-            LOG.say("ghul {running} is installed; {tag} {which}")
-            LOG.say("'ghul update{if wanted? then " --version {tag}" else "" fi}' installs it")
+            LOG.say("ghul {running} is installed; {tag} is the latest release")
+            LOG.say("'ghul update' installs it")
             return 0
         fi
 
@@ -858,7 +841,7 @@ namespace Ghul.Cli is
         let manifest =
             Ghul.Project.MANIFEST(
                 "script", null, Ghul.Project.ManifestKind.PROGRAM,
-                Collections.LIST[Ghul.Project.BuildTarget]([target]), Collections.LIST[string](["script.ghul"]), null,
+                Collections.LIST[Ghul.Project.BuildTarget]([target]), Collections.LIST[string](["script.ghul"]),
                 Ghul.Project.MANIFEST_OPTIONS(null, false, Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), null),
                 Collections.MAP[string, Ghul.Project.DEPENDENCY](), Ghul.Project.CompilerBuild.DEFAULT,
                 Collections.LIST[Ghul.Project.BuildTarget](), null)
@@ -1295,7 +1278,7 @@ namespace Ghul.Cli is
         // from its own store; it compiles for wasm and llvm only.
         let wants_llvm = project.manifest.compiler_build == Ghul.Project.CompilerBuild.LLVM
 
-        let request = Ghul.Project.COMPILER_REQUEST.from_environment(overrides.compiler_command, project.manifest.compiler_version)
+        let request = Ghul.Project.COMPILER_REQUEST.from_environment(overrides.compiler_command)
 
         if let problem: Ghul.Project.CompilerRequest.PROBLEM = request then
             say(problem.message)
@@ -1341,42 +1324,11 @@ namespace Ghul.Cli is
             fi
         fi
 
-        let wanted: string? mut = null
-
-        if isa Ghul.Project.CompilerRequest.LATEST(request) then
-            let latest = update_compiler_to_latest(chosen)
-
-            if let (error): ERROR = latest then
-                if let other: Host.COMPILER_STORE = fallback then
-                    let retried = update_compiler_to_latest(other)
-
-                    if let (retry_error): ERROR = retried then
-                        say(error)
-                        say(retry_error)
-                        say("could not install the latest ghul.compiler")
-                        return null
-                    fi
-
-                    chosen = other
-                    fallback = null
-                    wanted = retried!
-                else
-                    say(error)
-                    say("could not install the latest ghul.compiler")
-                    return null
-                fi
-            else
-                wanted = latest!
-            fi
-        else
-            wanted = cast Ghul.Project.CompilerRequest.VERSION(request).version
-        fi
-
         // The first attempt's complaints are held back until it is known
         // whether the fallback rescues the build, so a build that succeeds
         // does not first report a failure.
         if !fallback? then
-            if let version: string = project_compiler(chosen, project, wanted, mode, say) then
+            if let version: string = project_compiler(chosen, project, mode, say) then
                 return _built_compiler(chosen, version)
             fi
 
@@ -1385,7 +1337,7 @@ namespace Ghul.Cli is
 
         let held = Collections.LIST[string]()
 
-        if let version: string = project_compiler(chosen, project, wanted, mode, message => held.add(message)) then
+        if let version: string = project_compiler(chosen, project, mode, message => held.add(message)) then
             for message in held do
                 say(message)
             od
@@ -1393,7 +1345,7 @@ namespace Ghul.Cli is
             return _built_compiler(chosen, version)
         fi
 
-        if let version: string = project_compiler(fallback, project, wanted, mode, say) then
+        if let version: string = project_compiler(fallback, project, mode, say) then
             return _built_compiler(fallback, version)
         fi
 
@@ -1469,7 +1421,7 @@ namespace Ghul.Cli is
         manifest: Ghul.Project.MANIFEST,
         overrides: Ghul.Project.BUILD_OVERRIDES
     ) -> (compiler: Ghul.Project.COMPILER_PROCESS, version: string, runtime_assembly: string?)? is
-        let request = Ghul.Project.COMPILER_REQUEST.from_environment(overrides.compiler_command, manifest.compiler_version)
+        let request = Ghul.Project.COMPILER_REQUEST.from_environment(overrides.compiler_command)
 
         if let problem: Ghul.Project.CompilerRequest.PROBLEM = request then
             LOG.say("{problem.message}")
@@ -1489,12 +1441,7 @@ namespace Ghul.Cli is
 
         let store = planned![0]
 
-        let installed =
-            if isa Ghul.Project.CompilerRequest.LATEST(request) then
-                update_compiler_to_latest(store)
-            else
-                ensure_compiler_installed(store, cast Ghul.Project.CompilerRequest.VERSION(request).version, false)
-            fi
+        let installed = ensure_compiler_installed(store, null, false)
 
         if let (error): ERROR = installed then
             LOG.say("{error}")
@@ -1565,23 +1512,16 @@ namespace Ghul.Cli is
         yrt
     si
 
-    // The release a build of `project` uses, given the one asked for, or
-    // null for the newest installed: checked against the target's minimum
+    // The release a build of `project` uses: the newest installed, checked against the target's minimum
     // compiler, and installed if need be.
     project_compiler(
         store: Host.COMPILER_STORE,
         project: Ghul.Project.LOADED_PROJECT,
-        named: string?,
         mode: Ghul.Project.BUILD_MODE,
         say: (string) -> void
     ) -> string? is
         let choice =
-            Ghul.Project.COMPILER_CHOICE.choose(project.target, mode, named, store.highest_version())
-
-        if let problem: Ghul.Project.CompilerChoice.PROBLEM = choice then
-            say(problem.message)
-            return null
-        fi
+            Ghul.Project.COMPILER_CHOICE.choose(project.target, mode, store.highest_version())
 
         if let newest: Ghul.Project.CompilerChoice.NEWEST = choice then
             say(
@@ -1598,9 +1538,7 @@ namespace Ghul.Cli is
             return updated!
         fi
 
-        let requested = cast Ghul.Project.CompilerChoice.REQUESTED(choice)
-
-        let version = ensure_compiler_installed(store, requested.version, true)
+        let version = ensure_compiler_installed(store, null, true)
 
         if let (error): ERROR = version then
             say(error)

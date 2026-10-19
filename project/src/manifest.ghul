@@ -9,7 +9,6 @@ namespace Ghul.Project is
         kind: ManifestKind,
         targets: Collections.List[BuildTarget],
         sources: Collections.List[string],
-        compiler_version: string?,
         options: MANIFEST_OPTIONS,
         dependencies: Collections.Map[string, DEPENDENCY],
         compiler_build: CompilerBuild,
