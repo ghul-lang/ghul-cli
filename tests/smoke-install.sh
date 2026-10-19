@@ -32,7 +32,7 @@ mkdir -p "$home"
 
 # What a machine with no .NET has: the system tools, git for the libraries,
 # and no node and no dotnet.
-path_without_dotnet="/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin"
+path_without_dotnet="/usr/bin:/bin:/usr/sbin:/sbin"
 
 for hidden in dotnet node; do
     if env -i PATH="$path_without_dotnet" sh -c "command -v $hidden" > /dev/null 2>&1; then

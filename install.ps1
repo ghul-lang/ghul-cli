@@ -257,13 +257,8 @@ try {
         Say ''
         Say 'ghul runs its compiler and wasm programs with Node.js, and none was found.'
 
-        # The tool reports on its standard error; merged here so the installer's
-        # own output carries it, and so a native error is not an exception.
-        $previous = $ErrorActionPreference
-        $ErrorActionPreference = 'Continue'
-        & $target install node 2>&1 | ForEach-Object { Say "$_" }
-        $code = $LASTEXITCODE
-        $ErrorActionPreference = $previous
+        $fetched = Start-Process -FilePath $target -ArgumentList 'install', 'node' -NoNewWindow -Wait -PassThru
+        $code = $fetched.ExitCode
 
         if ($code -ne 0) {
             Say "Node.js could not be fetched; 'ghul install node' brings one in later."
