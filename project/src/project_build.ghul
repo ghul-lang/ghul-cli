@@ -9,12 +9,13 @@ namespace Ghul.Project is
     /// How the compiler is started: the program, and the arguments that
     /// come before the build's own.
     class COMPILER_PROCESS(file_name: string, leading_arguments: Collections.List[string]) is
-        /// The directory the compiler is in: the one holding its assembly
-        /// where it runs on the .NET host, or the one holding the executable
-        /// where it is native, or null where neither is a path.
+        /// The directory the compiler is in: the one holding its assembly or
+        /// loader where it runs on the .NET host or under Node, or the one
+        /// holding the executable where it is native, or null where none is
+        /// a path.
         directory: string? is
             for argument in leading_arguments do
-                if argument.ends_with(".dll") then
+                if argument.ends_with(".dll") \/ argument.ends_with(".mjs") then
                     return Path.get_directory_name(Path.get_full_path(argument))
                 fi
             od
