@@ -70,9 +70,7 @@ namespace Ghul.Repl.Host is
         // The target triple the llvm-built compiler for the .NET runtime
         // identifier `rid` is published under, where a release builds one.
         llvm_triple(rid: string) -> string? static =>
-            if rid =~ "linux-x64" then "x86_64-unknown-linux-musl"
-            elif rid =~ "linux-arm64" then "aarch64-unknown-linux-musl"
-            else null fi
+            if rid =~ "linux-x64" then "x86_64-unknown-linux-musl" else null fi
 
         // What the compiler this download installs is called in what it says.
         kind() -> string => if _store.is_llvm then "llvm-built" else "Native AOT" fi

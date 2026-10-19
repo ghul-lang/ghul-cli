@@ -160,16 +160,22 @@ it needs to, and it does not run the result. The path is the only thing it
 writes to standard output, so `node $(ghul compile script.ghul)` runs it.
 Compiler messages go to standard error.
 
-`ghul install-compiler` installs `ghul.compiler` into `ghul`'s own compiler
-store, so that the first script does not wait for the install. With no
-version, it installs the latest release, or updates to it. With a version, it
-installs exactly that version, older or newer, and does nothing if that
-version is already installed. `GHUL_COMPILER_FEED` names a different feed to
-download from, for a mirror or an offline network.
+`ghul install compiler` installs `ghul.compiler` into `ghul`'s own compiler
+store, so that the first script does not wait for the install. It installs the
+compiler this machine uses: the managed compiler where there is a .NET host to
+run it, and the wasm-built compiler, run by Node.js, everywhere else, with a
+Node.js fetched first where there is none. A Native AOT compiler is installed
+only by an earlier release's install, and kept up to date while it is there.
+`GHUL_COMPILER_HOST` (`wasm`, `dotnet` or `native`) names the one to use
+instead. With no version, `install compiler` installs the latest release; with
+a version, exactly that version, older or newer, and nothing if it is already
+installed. `GHUL_COMPILER_FEED` names a different feed to download from, for a
+mirror or an offline network.
 
-`ghul install llvm` installs the ghul-llvm tool the llvm target links with: the
-release the installed compiler needs, or the newest compatible one. It is
-released for Linux on x64 and arm64. `ghul install wasmtime`
+`ghul install llvm` installs the ghul-llvm tool the llvm target links with. It
+needs no compiler: with one installed it takes the newest release that
+compiler admits, and with none the newest release. `--version` names one. It
+is released for Linux on x64 and arm64. `ghul install wasmtime`
 installs the wasmtime host that runs wasm programs where there is no Node.js;
 a run that needs it and finds it missing downloads the latest release first.
 `ghul install node` brings a Node.js distribution into the cache from
@@ -178,7 +184,7 @@ to the newest release when no LTS does, verified against the release's
 published checksums — for a machine that wants the node host
 without installing Node system-wide.
 
-`ghul install-compiler --llvm` installs the compiler built with the llvm
+`ghul install compiler --llvm` installs the compiler built with the llvm
 target instead, a native executable that builds for the `wasm` and `llvm`
 targets only, into a store of its own. A project chooses it with
 `"compiler-build": "llvm"` in its manifest; `"default"`, or no entry, keeps
@@ -191,11 +197,15 @@ compiler --llvm`.
 `ghul update` updates a `ghul` installed without .NET to the latest release,
 or to the release `--version` names, older or newer. It runs that release's
 own install script, after checking it against the published sha256, so the
-tool is replaced the same way a fresh install puts it in place. `--check`
-reports whether there is anything to update and changes nothing. A `ghul`
+tool is replaced the same way a fresh install puts it in place. A `ghul`
 installed as a .NET tool is updated by `dotnet tool update -g ghul.cli`
-instead, which `ghul update` prints. `GHUL_CLI_API` and `GHUL_CLI_RELEASES`
-name a mirror, as they do for `install.sh`.
+instead, which `ghul update` prints. It then brings every component that is
+installed up to date: each compiler, ghul-llvm, Node.js and the wasmtime host.
+A component that is not installed is left alone and not mentioned, and what
+is said is what is being done or what went wrong. `--check` reports what has
+a newer release and changes nothing. `GHUL_CLI_API` and `GHUL_CLI_RELEASES`
+name a mirror, as they do for `install.sh`. Everything `ghul` says about its
+own work begins `ghul: `.
 
 A `-` in place of the script reads the source from standard input. This
 works for running and for compiling:

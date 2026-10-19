@@ -156,7 +156,7 @@ namespace Ghul.Cli is
                 wanted = newest!
             fi
 
-            let say = (line: string) -> void => if show_output then Std.error.write_line(line) fi
+            let say = (line: string) -> void => if show_output then LOG.say(line) fi
 
             if let (error): ERROR = install_compiler(store, wanted!, say) then
                 return ERROR(error)
@@ -166,6 +166,25 @@ namespace Ghul.Cli is
         finally
             lock_stream.close()
         yrt
+    si
+
+    // A Node.js that runs the wasm target: the one the machine has, or one
+    // fetched into the cache where it has none. The wasm-built compiler and
+    // wasm programs run under it.
+    ensure_node(say: (string) -> void) -> Result[unit, string] is
+        if Ghul.Project.WASM_HOST_SELECTION.resolve("node")? then
+            return OK(_)
+        fi
+
+        say("no Node.js that runs the wasm target was found; fetching one")
+
+        let fetched = Ghul.Project.NODE_DOWNLOAD.of(Ghul.Project.NODE_STORE.for_this_user()).install(say)
+
+        if let (error): ERROR = fetched then
+            return ERROR("no Node.js ghul can run was found and one could not be fetched: {error}")
+        fi
+
+        return OK(_)
     si
 
     // The compiler the machine can actually run: the managed one where a
@@ -276,7 +295,7 @@ namespace Ghul.Cli is
         let parsed = Ghul.Project.PROJECT_SCAFFOLD.parse(rest, Ghul.Project.TARGET_CHOICE.ORDER)
 
         if let (problem): ERROR = parsed then
-            Std.error.write_line("ghul: {problem}")
+            LOG.say("{problem}")
             Std.error.write_line("usage: ghul new <name> [--target <target>[,<target>...]]")
             return 1
         fi
@@ -285,11 +304,11 @@ namespace Ghul.Cli is
         let created = Ghul.Project.PROJECT_SCAFFOLD.create(command_line)
 
         if let (problem): ERROR = created then
-            Std.error.write_line("ghul: {problem}")
+            LOG.say("{problem}")
             return 1
         fi
 
-        Std.error.write_line("ghul: created {command_line.directory}; cd into it and ghul run")
+        LOG.say("created {command_line.directory}; cd into it and ghul run")
 
         // A project for wasm alone builds wherever the compiler does; running
         // it needs a host, and saying so here is the difference between a
@@ -301,7 +320,7 @@ namespace Ghul.Cli is
             let global_host = Ghul.Project.GLOBAL_DEFAULTS.read(Ghul.Project.GLOBAL_DEFAULTS.path(), host_problem ref).host_wasm
 
             if !Ghul.Project.WASM_HOST_SELECTION.chosen_for_wasm(null, global_host) then
-                Std.error.write_line("ghul: {MACHINE_TARGETS.no_node()}")
+                LOG.say("{MACHINE_TARGETS.no_node()}")
             fi
         fi
 
@@ -324,21 +343,21 @@ namespace Ghul.Cli is
         let index = LLVM_TOOLCHAIN.fetch(index_url)
 
         if let (error): ERROR = index then
-            Std.error.write_line("ghul: the Rosetta Code index cannot be read: {error}")
+            LOG.say("the Rosetta Code index cannot be read: {error}")
             return 1
         fi
 
         let found = Ghul.Project.ROSETTA_TASK.find(System.Text.Encoding.utf8.get_string(index!), rest[0])
 
         if let (problem): ERROR = found then
-            Std.error.write_line("ghul: {problem}")
+            LOG.say("{problem}")
             return 1
         fi
 
         let part = found!.part
 
         if part.targets.count == 0 then
-            Std.error.write_line("ghul: {part.id} builds for no target this machine has")
+            LOG.say("{part.id} builds for no target this machine has")
             return 1
         fi
 
@@ -346,7 +365,7 @@ namespace Ghul.Cli is
         let name = Path.get_file_name(Path.trim_ending_directory_separator(directory)) ?? part.id
 
         if Directory.exists(directory) /\ Directory.get_file_system_entries(directory).count > 0 then
-            Std.error.write_line("ghul: {directory} already exists and is not empty")
+            LOG.say("{directory} already exists and is not empty")
             return 1
         fi
 
@@ -359,7 +378,7 @@ namespace Ghul.Cli is
         let source = LLVM_TOOLCHAIN.fetch(url(part.source))
 
         if let (error): ERROR = source then
-            Std.error.write_line("ghul: {part.id} cannot be fetched: {error}")
+            LOG.say("{part.id} cannot be fetched: {error}")
             return 1
         fi
 
@@ -369,7 +388,7 @@ namespace Ghul.Cli is
             let read = LLVM_TOOLCHAIN.fetch(url(file.path))
 
             if let (error): ERROR = read then
-                Std.error.write_line("ghul: {file.name}, which {part.id} reads, cannot be fetched: {error}")
+                LOG.say("{file.name}, which {part.id} reads, cannot be fetched: {error}")
                 return 1
             fi
 
@@ -382,7 +401,7 @@ namespace Ghul.Cli is
         if let problems: Ghul.Project.ReadOutcome.PROBLEMS = check then
             let first = if problems.problems.count > 0 then problems.problems[0].describe() else "it cannot be read" fi
 
-            Std.error.write_line("ghul: {name} cannot name a project: {first}")
+            LOG.say("{name} cannot name a project: {first}")
             return 1
         fi
 
@@ -397,7 +416,7 @@ namespace Ghul.Cli is
         let target = if part.targets.count > 1 then " --target {Ghul.Project.BUILD_TARGETS.name(part.targets[0])}" else "" fi
         let arguments = if part.args.count > 0 then " -- {string.join(" ", [_quoted(a) for a in part.args])}" else "" fi
 
-        Std.error.write_line("ghul: fetched {part.id} into {directory}; cd into it and ghul run{target}{arguments}")
+        LOG.say("fetched {part.id} into {directory}; cd into it and ghul run{target}{arguments}")
 
         return 0
     si
@@ -416,257 +435,52 @@ namespace Ghul.Cli is
     // under, `wasmtime` for the host that runs wasm programs, `llvm` for
     // the ghul-llvm toolchain an llvm build links with.
     cmd_install(rest: Collections.List[string]) -> int is
-        let things = [argument for argument in rest if !argument.starts_with("--")]
+        let positional = Collections.LIST[string]()
         let version: string? mut = null
-
+        let llvm_built mut = false
         let i mut = 0
 
         while i < rest.count do
-            if rest[i] =~ "--version" /\ i + 1 < rest.count then
+            let argument = rest[i]
+
+            if argument =~ "--version" /\ i + 1 < rest.count then
                 version = rest[i + 1]
                 i = i + 1
-            elif rest[i].starts_with("--version=") then
-                version = rest[i].substring("--version=".length)
+            elif argument.starts_with("--version=") then
+                version = argument.substring("--version=".length)
+            elif argument =~ "--llvm" then
+                llvm_built = true
+            elif !argument.starts_with("-") then
+                positional.add(argument)
             fi
 
             i = i + 1
         od
 
-        if things.count == 0 then
-            Std.error.write_line("usage: ghul install <compiler|wasmtime|node|llvm> [--version <version>]")
+        if positional.count == 0 then
+            Std.error.write_line("usage: ghul install <compiler|llvm|node|wasmtime> [--version <version>]")
             return 1
         fi
 
-        let thing = things[0]
-        let others mut = Collections.LIST[string]([argument for argument in rest if argument != thing /\ !argument.starts_with("--version") /\ !argument.starts_with("-")])
-
-        // A version spelled either way is forwarded to whatever is being
-        // installed, so `--version=X` and `--version X` mean the same.
-        if let wanted: string = version then
-            others.add(wanted)
+        if !version? /\ positional.count > 1 then
+            version = positional[1]
         fi
 
-        if thing =~ "compiler" then
-            return cmd_install_compiler(others)
-        elif thing =~ "wasmtime" then
-            return cmd_install_wasmtime(version)
-        elif thing =~ "node" then
-            return cmd_install_node(version)
-        elif thing =~ "llvm" then
-            return cmd_install_llvm(version)
-        fi
+        let (forced, problem) = Ghul.Project.COMPILER_HOST.from_environment()
 
-        Std.error.write_line("ghul: unknown thing '{thing}'; install compiler, wasmtime, node or llvm")
-        return 1
-    si
-
-    // Installs the ghul-llvm tool the llvm target links with, into the
-    // cache: the release the installed compiler declares it needs, or the
-    // release `version` names. A build for the llvm target fetches it for
-    // itself when it is missing; this brings it in beforehand.
-    cmd_install_llvm(version: string?) -> int is
-        let platform = LLVM_TOOLCHAIN.triple()
-
-        if !platform? then
-            Std.error.write_line("ghul: the llvm target builds only on Linux x64 and arm64")
+        if let message: string = problem then
+            LOG.say(message)
             return 1
         fi
 
-        let toolchain = LLVM_TOOLCHAIN.for_this_user()
+        let component = COMPONENTS.named(MACHINE.this_machine(), positional[0], forced, llvm_built)
 
-        if let wanted: string = version then
-            return _report_llvm(toolchain.executable("v{wanted}", platform!))
-        fi
-
-        let host = _host_store()
-
-        if let problem: string = host.problem then
-            Std.error.write_line("ghul: {problem}")
+        if let (error): ERROR = component then
+            LOG.say(error)
             return 1
         fi
 
-        let store = host.store ?? Host.COMPILER_STORE.for_this_user()
-        let compiler = store.highest_version()
-
-        if !compiler? then
-            Std.error.write_line("ghul: no ghul.compiler is installed to choose a ghul-llvm for (ghul install compiler brings one in)")
-            return 1
-        fi
-
-        return _report_llvm(
-            toolchain.executable(
-                compiler!,
-                Ghul.Project.COMPILER_REQUIREMENTS.read(store.directory(compiler!))))
-    si
-
-    _report_llvm(found: Result[string, string]) -> int is
-        if let (error): ERROR = found then
-            Std.error.write_line("ghul: {error}")
-            Std.error.write_line("ghul: failed to install ghul-llvm")
-            return 1
-        fi
-
-        Std.error.write_line("ghul: ghul-llvm is installed at {found!}")
-        return 0
-    si
-
-    // Refreshes the ghul-llvm tool to the newest release the installed
-    // compiler admits, or with `check_only` says whether there is one.
-    // Nothing is said of a tool that was never installed beyond how to
-    // install it.
-    _update_llvm(check_only: bool) -> int is
-        let platform = LLVM_TOOLCHAIN.triple()
-        let toolchain = LLVM_TOOLCHAIN.for_this_user()
-
-        if !platform? \/ !toolchain.has_any(platform!) then
-            Std.error.write_line("ghul: ghul-llvm is not installed (ghul install llvm brings it in)")
-            return 0
-        fi
-
-        let host = _host_store()
-        let store = host.store ?? Host.COMPILER_STORE.for_this_user()
-        let compiler = store.highest_version()
-
-        if !compiler? then
-            return 0
-        fi
-
-        let requirements = Ghul.Project.COMPILER_REQUIREMENTS.read(store.directory(compiler!))
-        let tag = toolchain.chosen_tag(compiler!, requirements)
-
-        if let (error): ERROR = tag then
-            Std.error.write_line("ghul: ghul-llvm: {error}")
-            return 1
-        fi
-
-        if toolchain.is_kept(tag!, platform!) then
-            Std.error.write_line("ghul: ghul-llvm {tag!} is the latest")
-            return 0
-        fi
-
-        if check_only then
-            Std.error.write_line("ghul: ghul-llvm has {tag!} available")
-            return 0
-        fi
-
-        Std.error.write_line("ghul: updating ghul-llvm to {tag!}...")
-
-        return _report_llvm(toolchain.executable(compiler!, requirements))
-    si
-
-    // Installs the newest LTS Node.js release that runs the wasm target,
-    // or the release `version` names, into the cache. Unlike the wasmtime
-    // host a run fetches for itself, a node is installed only when asked:
-    // the ladder reaches for PATH's node first, and fetching a distribution
-    // the user did not ask for is a different surprise.
-    cmd_install_node(version: string?) -> int is
-        let store = Ghul.Project.NODE_STORE.for_this_user()
-        let download = Ghul.Project.NODE_DOWNLOAD.of(store)
-
-        let say = (line: string) -> void => Std.error.write_line(line)
-
-        let result =
-            if let wanted: string = version then
-                download.install(wanted, say)
-            else
-                download.install(say)
-            fi
-
-        if let (problem): Ghul.Result.ERROR = result then
-            Std.error.write_line("ghul: {problem}")
-            return 1
-        fi
-
-        return 0
-    si
-
-    // Installs the newest wasmtime host, or the release `version` names.
-    cmd_install_wasmtime(version: string?) -> int is
-        let store = Ghul.Project.WASMTIME_STORE.for_this_user()
-        let download = Ghul.Project.WASMTIME_DOWNLOAD.of(store)
-
-        let say = (line: string) -> void => Std.error.write_line(line)
-
-        if let wanted: string = version then
-            if let problem: string = download.install(wanted, say) then
-                Std.error.write_line("ghul: {problem}")
-                return 1
-            fi
-
-            return 0
-        fi
-
-        if let problem: string = download.install(say) then
-            Std.error.write_line("ghul: {problem}")
-            return 1
-        fi
-
-        return 0
-    si
-
-    cmd_install_compiler(rest: Collections.List[string]) -> int is
-        // `--llvm` installs the compiler built for llvm, into its own store.
-        let llvm = rest |> any(argument => argument =~ "--llvm")
-        let positional = [argument for argument in rest if argument !~ "--llvm"]
-
-        let version: string? = if positional.count > 0 then positional[0] else null fi
-        let store mut = Host.COMPILER_STORE.llvm_for_this_user()
-
-        // The llvm-built compiler has a store of its own, whatever host the
-        // environment picks for the others.
-        if !llvm then
-            let host = _host_store()
-
-            if let problem: string = host.problem then
-                Std.error.write_line("ghul: {problem}")
-                return 1
-            fi
-
-            store = host.store ?? Host.COMPILER_STORE.for_this_user()
-        fi
-
-        if let wanted: string = version /\ store.is_installed(wanted) then
-            Std.error.write_line("ghul: ghul.compiler {wanted} is already installed")
-            return 0
-        fi
-
-        let before = store.highest_version()
-
-        // With no version named, the latest is wanted whatever is
-        // installed, so an installed compiler does not end the matter
-        // the way it does for a script run.
-        if before? /\ !version? then
-            Std.error.write_line("ghul: checking for a newer ghul.compiler than {before}...")
-
-            let updated = update_compiler_to_latest(store)
-
-            if let (error): ERROR = updated then
-                Std.error.write_line("ghul: {error}")
-                Std.error.write_line("ghul: failed to update ghul.compiler")
-                return 1
-            fi
-
-            if updated! =~ before then
-                Std.error.write_line("ghul: ghul.compiler {updated!} is already installed and is the latest")
-            else
-                Std.error.write_line("ghul: ghul.compiler updated from {before} to {updated!}")
-            fi
-
-            return 0
-        fi
-
-        Std.error.write_line("ghul: installing ghul.compiler{if version? then " {version}" else "" fi}...")
-
-        let installed = ensure_compiler_installed(store, version, true)
-
-        if let (error): ERROR = installed then
-            Std.error.write_line("ghul: {error}")
-            Std.error.write_line("ghul: failed to install ghul.compiler")
-            return 1
-        fi
-
-        Std.error.write_line("ghul: ghul.compiler {installed!} is installed")
-        return 0
+        return COMPONENT_VERBS.install(component!, version)
     si
 
     // Under the install lock, since a script run elsewhere may be
@@ -691,7 +505,7 @@ namespace Ghul.Cli is
                 return OK(latest)
             fi
 
-            if let (error): ERROR = install_compiler(store, latest, line => Std.error.write_line(line)) then
+            if let (error): ERROR = install_compiler(store, latest, LOG.say) then
                 return ERROR(error)
             fi
 
@@ -730,16 +544,14 @@ namespace Ghul.Cli is
         // The .NET tool is replaced by dotnet, which a running tool cannot
         // ask to replace itself.
         if !SELF_UPDATE.is_native() then
-            Std.error.write_line("ghul: this ghul is a .NET tool; update it with:")
-            Std.error.write_line("")
-            Std.error.write_line("    {SELF_UPDATE.TOOL_UPDATE_COMMAND}")
+            LOG.say("this ghul is a .NET tool; update it with '{SELF_UPDATE.TOOL_UPDATE_COMMAND}'")
             return 0
         fi
 
         let root = SELF_UPDATE.install_root(System.Environment.process_path)
 
         if let problem: ERROR = root then
-            Std.error.write_line("ghul: cannot update: {problem.error}")
+            LOG.say("cannot update: {problem.error}")
             return 1
         fi
 
@@ -755,7 +567,7 @@ namespace Ghul.Cli is
             let latest = update.latest_tag()
 
             if let problem: ERROR = latest then
-                Std.error.write_line("ghul: the latest release could not be found: {problem.error}")
+                LOG.say("the latest release could not be found: {problem.error}")
                 return 1
             fi
 
@@ -764,9 +576,9 @@ namespace Ghul.Cli is
 
         if SELF_UPDATE.is_running_version(tag, running) then
             if wanted? then
-                Std.error.write_line("ghul: ghul {running} is installed, which is {tag}")
+                LOG.say("ghul {running} is installed, which is {tag}")
             else
-                Std.error.write_line("ghul: ghul {running} is installed, and is the latest release")
+                LOG.say("ghul {running} is installed, and is the latest release")
             fi
 
             return 0
@@ -775,15 +587,15 @@ namespace Ghul.Cli is
         if check_only then
             let which = if wanted? then "was asked for" else "is the latest release" fi
 
-            Std.error.write_line("ghul: ghul {running} is installed; {tag} {which}")
-            Std.error.write_line("ghul: 'ghul update{if wanted? then " --version {tag}" else "" fi}' installs it")
+            LOG.say("ghul {running} is installed; {tag} {which}")
+            LOG.say("'ghul update{if wanted? then " --version {tag}" else "" fi}' installs it")
             return 0
         fi
 
         let script = update.install_script(tag)
 
         if let problem: ERROR = script then
-            Std.error.write_line("ghul: cannot update to {tag}: {problem.error}")
+            LOG.say("cannot update to {tag}: {problem.error}")
             return 1
         fi
 
@@ -792,7 +604,7 @@ namespace Ghul.Cli is
         try
             File.write_all_bytes(script_path, script!)
 
-            Std.error.write_line("ghul: updating ghul {running} to {tag} in {install_root}...")
+            LOG.say("updating ghul {running} to {tag} in {install_root}...")
 
             let start = System.Diagnostics.ProcessStartInfo("sh")
 
@@ -811,12 +623,24 @@ namespace Ghul.Cli is
             let process = System.Diagnostics.Process.start(start)
 
             if !process? then
-                Std.error.write_line("ghul: cannot update: sh could not be started")
+                LOG.say("cannot update: sh could not be started")
                 return 1
             fi
 
+            // What the install script says is ghul's own output, so each
+            // line is prefixed like the rest; its blank lines and the
+            // "Try:" suggestions for a first install have no place in an
+            // update.
+            let suggesting mut = false
+
             while let line = process.standard_output.read_line() do
-                Std.error.write_line(line)
+                if line.trim() =~ "Try:" then
+                    suggesting = true
+                fi
+
+                if !suggesting then
+                    LOG.say(line.trim())
+                fi
             od
 
             process.wait_for_exit()
@@ -845,108 +669,13 @@ namespace Ghul.Cli is
             return self_status
         fi
 
-        Std.error.write_line("")
-
-        return update_components(check_only)
-    si
-
-    // The component refresh `ghul update` runs after ghul itself.
-    update_components(check_only: bool) -> int is
         let status mut = 0
 
-        let host = _host_store()
-
-        if let problem: string = host.problem then
-            Std.error.write_line("ghul: {problem}")
-            return 1
-        fi
-
-        // The compilers: the store builds use, and every other store that
-        // holds a compiler.
-        for store in _compiler_stores(host.store) do
-            let kind = if store.is_llvm then "ghul.compiler (llvm-built)" else "ghul.compiler ({Path.get_file_name(store.root)})" fi
-
-            if !store.highest_version()? then
-                Std.error.write_line("ghul: {kind} is not installed (ghul install compiler{if store.is_llvm then " --llvm" else "" fi} brings it in)")
-                continue
-            fi
-
-            let download = Host.COMPILER_DOWNLOAD.of(store)
-            let newest = download.latest_release()
-
-            if let (error): ERROR = newest then
-                Std.error.write_line("ghul: {kind}: {error}")
+        for component in COMPONENTS.held(MACHINE.this_machine()) do
+            if COMPONENT_VERBS.refresh(component, check_only) != 0 then
                 status = 1
-                continue
-            fi
-
-            let latest = newest!
-
-            if store.is_installed(latest) then
-                Std.error.write_line("ghul: {kind} {latest} is the latest")
-                continue
-            fi
-
-            if check_only then
-                Std.error.write_line("ghul: {kind} has {latest} available")
-                continue
-            fi
-
-            Std.error.write_line("ghul: updating {kind} to {latest}...")
-
-            let updated = update_compiler_to_latest(store)
-
-            if let (error): ERROR = updated then
-                Std.error.write_line("ghul: {error}")
-                Std.error.write_line("ghul: {kind} could not be updated")
-                status = 1
-            else
-                Std.error.write_line("ghul: {kind} updated to {updated!}")
             fi
         od
-
-        // The ghul-llvm tool, where one is in the cache already.
-        if _update_llvm(check_only) != 0 then
-            status = 1
-        fi
-
-        // The wasmtime host: the refresh and its tag handling are the
-        // download's own, shared with the run path that fetches on first
-        // use, so the two cannot disagree on what a release is called.
-        let store = Ghul.Project.WASMTIME_STORE.for_this_user()
-
-        if store.installed() == null then
-            Std.error.write_line("ghul: the wasmtime host is not installed (ghul install wasmtime brings it in)")
-        else
-            let failure =
-                Ghul.Project.WASMTIME_DOWNLOAD.of(store).update(
-                    check_only,
-                    line => Std.error.write_line("ghul: {line}"))
-
-            if let problem: string = failure then
-                Std.error.write_line("ghul: the wasmtime host could not be updated: {problem}")
-
-                status = 1
-            fi
-        fi
-
-        // A node the machine holds in its store: refreshed the same way.
-        // A store holding nothing says nothing — a machine served by the
-        // node on its PATH, or by the wasmtime host, is not stale.
-        let node_store = Ghul.Project.NODE_STORE.for_this_user()
-
-        if node_store.installed() != null then
-            let failure =
-                Ghul.Project.NODE_DOWNLOAD.of(node_store).update(
-                    check_only,
-                    line => Std.error.write_line("ghul: {line}"))
-
-            if let problem: string = failure then
-                Std.error.write_line("ghul: node could not be updated: {problem}")
-
-                status = 1
-            fi
-        fi
 
         return status
     si
@@ -966,23 +695,21 @@ namespace Ghul.Cli is
             Directory.delete(root, true)
         fi
 
-        Std.error.write_line("ghul: cache cleared ({root})")
+        LOG.say("cache cleared ({root})")
         return 0
     si
 
     cmd_version() -> int is
         Std.out.write_line("ghul {cli_version()}")
 
-        let host = _host_store()
+        let planned = planned_stores(false)
 
-        if let problem: string = host.problem then
-            Std.error.write_line("ghul: {problem}")
+        if let (problem): ERROR = planned then
+            LOG.say(problem)
             return 1
         fi
 
-        let store = host.store ?? Host.COMPILER_STORE.for_this_user()
-
-        if let compiler_version: string = store.highest_version() then
+        if let compiler_version: string = planned![0].highest_version() then
             Std.out.write_line("ghul.compiler {compiler_version}")
         else
             Std.out.write_line("ghul.compiler not installed")
@@ -1000,7 +727,7 @@ namespace Ghul.Cli is
         let script_ref = rest[0]
 
         if !is_stdin_marker(script_ref) /\ !File.exists(script_ref) then
-            Std.error.write_line("ghul: no such file: {script_ref}")
+            LOG.say("no such file: {script_ref}")
             return 1
         fi
 
@@ -1042,7 +769,7 @@ namespace Ghul.Cli is
         let script_args = rest[1..<0]
 
         if !is_stdin_marker(script_ref) /\ !File.exists(script_ref) then
-            Std.error.write_line("ghul: no such file: {script_ref}")
+            LOG.say("no such file: {script_ref}")
             return 1
         fi
 
@@ -1069,7 +796,7 @@ namespace Ghul.Cli is
         let global_host = Ghul.Project.GLOBAL_DEFAULTS.read(Ghul.Project.GLOBAL_DEFAULTS.path(), host_problem ref).host_wasm
 
         if let problem: string = host_problem then
-            Std.error.write_line("ghul: {problem}")
+            LOG.say("{problem}")
             return null
         fi
 
@@ -1081,7 +808,7 @@ namespace Ghul.Cli is
                 MACHINE_TARGETS(will_run, true, global_host, null))
 
         if let problem: string = chosen.problem then
-            Std.error.write_line("ghul: {problem}")
+            LOG.say("{problem}")
             return null
         fi
 
@@ -1098,15 +825,22 @@ namespace Ghul.Cli is
         reason: string?,
         force: bool
     ) -> (exit_code: int, project: Ghul.Project.LOADED_PROJECT?, output: string) is
-        let say = (message: string) -> void => Std.error.write_line("ghul: {message}")
-        let host = _host_store()
+        let say = (message: string) -> void => LOG.say(message)
+        let planned = planned_stores(false)
 
-        if let problem: string = host.problem then
+        if let (problem): ERROR = planned then
             say(problem)
             return (exit_code = 1, project = null, output = "")
         fi
 
-        let store = host.store ?? Host.COMPILER_STORE.for_this_user()
+        let store = planned![0]
+
+        if store.is_wasm then
+            if let (problem): ERROR = ensure_node(say) then
+                say(problem)
+                return (exit_code = 1, project = null, output = "")
+            fi
+        fi
 
         let ensured = ensure_compiler_installed(store, null, true)
 
@@ -1227,7 +961,7 @@ namespace Ghul.Cli is
         let built = build_native_script(script, target, reason, force)
 
         if let project: Ghul.Project.LOADED_PROJECT = built.project then
-            let say = (message: string) -> void => Std.error.write_line("ghul: {message}")
+            let say = (message: string) -> void => LOG.say("{message}")
             let problem: string? mut = null
             let defaults = Ghul.Project.GLOBAL_DEFAULTS.read(Ghul.Project.GLOBAL_DEFAULTS.path(), problem ref)
 
@@ -1360,7 +1094,7 @@ namespace Ghul.Cli is
             Std.error.write_line(
                 "ghul: the session needs ghul.compiler {MINIMUM_REPL_COMPILER} or newer; {installed} is installed")
 
-            Std.error.write_line("ghul: run ghul install-compiler to update it")
+            LOG.say("run ghul install-compiler to update it")
 
             return 1
         fi
@@ -1368,7 +1102,7 @@ namespace Ghul.Cli is
         let ensured = ensure_compiler_installed(store, null, true)
 
         if let (error): ERROR = ensured then
-            Std.error.write_line("ghul: {error}")
+            LOG.say("{error}")
             return 1
         fi
 
@@ -1376,7 +1110,7 @@ namespace Ghul.Cli is
 
         let runtime_assembly = store.runtime_assembly(ensured!)
 
-            let say = (line: string) -> void => Std.error.write_line(line)
+            let say = (line: string) -> void => LOG.say(line)
 
             let make_session = () -> Host.HOSTED_SESSION =>
                 Host.HOST_SESSIONS.start(
@@ -1423,7 +1157,7 @@ namespace Ghul.Cli is
     // compiler the manifest names is installed if need be, the project is
     // built into out/<target>/, or out/<target>-debug/ and the like for other modes, and a run then starts what was built.
     cmd_project(rest: Collections.List[string], wants_run: bool) -> int is
-        let say = (message: string) -> void => Std.error.write_line("ghul: {message}")
+        let say = (message: string) -> void => LOG.say("{message}")
         let command_line = Ghul.Project.PROJECT_COMMAND_LINE.parse(rest, wants_run)
 
         let global_problem: string? mut = null
@@ -1499,9 +1233,7 @@ namespace Ghul.Cli is
             say(reason)
         fi
 
-        let store = Host.COMPILER_STORE.for_this_user()
-
-        if let (compiler, compiler_version, runtime_assembly) = build_compiler(store, project, overrides, mode, say) then
+        if let (compiler, compiler_version, runtime_assembly) = build_compiler(project, overrides, mode, say) then
             let linker: string? mut = null
 
             // A program for the llvm target is linked by the compiler, with
@@ -1557,7 +1289,6 @@ namespace Ghul.Cli is
     // for the project. Null, with the reason reported to `say`, where none
     // can be had.
     build_compiler(
-        store: Host.COMPILER_STORE,
         project: Ghul.Project.LOADED_PROJECT,
         overrides: Ghul.Project.BUILD_OVERRIDES,
         mode: Ghul.Project.BUILD_MODE,
@@ -1566,8 +1297,6 @@ namespace Ghul.Cli is
         // A project that names the llvm-built compiler is compiled with it,
         // from its own store; it compiles for wasm and llvm only.
         let wants_llvm = project.manifest.compiler_build == Ghul.Project.CompilerBuild.LLVM
-
-        let chosen mut = if wants_llvm then Host.COMPILER_STORE.llvm_for_this_user() else store fi
 
         let request = Ghul.Project.COMPILER_REQUEST.from_environment(overrides.compiler_command, project.manifest.compiler_version)
 
@@ -1597,25 +1326,22 @@ namespace Ghul.Cli is
             return given
         fi
 
-        // GHUL_COMPILER_HOST picks the compiler's host outright, unless the
-        // manifest names the llvm-built compiler.
-        let host = _host_store()
+        // The compiler plan says which stores to try, most wanted first.
+        let planned = planned_stores(wants_llvm)
 
-        if let problem: string = host.problem then
+        if let (problem): ERROR = planned then
             say(problem)
             return null
         fi
 
-        // With no .NET, the wasm-built compiler under Node is the compiler
-        // to use: one archive for every platform. The Native AOT compiler
-        // stays as the fallback for a machine with no Node to run it.
-        let fallback: Host.COMPILER_STORE? mut = null
+        let chosen mut = planned![0]
+        let fallback: Host.COMPILER_STORE? mut = if planned!.count > 1 then planned![1] else null fi
 
-        if let forced: Host.COMPILER_STORE = host.store /\ !wants_llvm then
-            chosen = forced
-        elif let wasm_store: Host.COMPILER_STORE = _wasm_store(chosen, wants_llvm, project.target) then
-            fallback = chosen
-            chosen = wasm_store
+        if chosen.is_wasm then
+            if let (problem): ERROR = ensure_node(say) then
+                say(problem)
+                return null
+            fi
         fi
 
         let wanted: string? mut = null
@@ -1702,89 +1428,30 @@ namespace Ghul.Cli is
         return (compiler, version, store.runtime_assembly(version))
     si
 
-    // The wasm-built compiler's store, where it should build in place of
-    // `chosen`: not already itself, not the llvm-built compiler the
-    // manifest asked for by name, a target it can build (wasm or llvm,
-    // never dotnet), no .NET to run the managed compiler, and a node this
-    // machine can start - on PATH, or cached by `ghul install node`. Null
-    // where any of that does not hold.
-    _wasm_store(chosen: Host.COMPILER_STORE, wants_llvm: bool, target: Ghul.Project.BuildTarget) -> Host.COMPILER_STORE? is
-        if wants_llvm \/ chosen.is_wasm \/ Host.HOST.has_dotnet() then
-            return null
-        fi
-
-        if !Ghul.Project.WASM_HOST_SELECTION.resolve("node")? then
-            return null
-        fi
-
-        return Host.COMPILER_STORE.wasm_for_this_user()
-    si
-
-    // The compiler stores `ghul update` refreshes: the one builds use, then
-    // the others that hold a compiler, then the llvm-built compiler's.
-    _compiler_stores(chosen: Host.COMPILER_STORE?) -> Collections.List[Host.COMPILER_STORE] is
-        let stores = Collections.LIST[Host.COMPILER_STORE]()
-
-        stores.add(chosen ?? Host.COMPILER_STORE.for_this_user())
-
-        for other in [
-            Host.COMPILER_STORE.managed_for_this_user(),
-            Host.COMPILER_STORE.native_for_this_user(),
-            Host.COMPILER_STORE.wasm_for_this_user()
-        ] do
-            if other.root !~ stores[0].root /\ other.highest_version()? then
-                stores.add(other)
-            fi
-        od
-
-        stores.add(Host.COMPILER_STORE.llvm_for_this_user())
-
-        return stores
-    si
-
-    // The store `GHUL_COMPILER_HOST` picks, null where it picks none, or the
-    // reason the host it picks cannot be had. Asking for wasm fetches a Node
-    // where this machine has none ghul can run.
-    _host_store() -> (store: Host.COMPILER_STORE?, problem: string?) is
-        let (host, problem) = Ghul.Project.COMPILER_HOST.from_environment()
-        let variable = Ghul.Project.COMPILER_HOST.VARIABLE
+    // The compiler stores this machine's compiler can come from for the
+    // request, most wanted first: the one place the choice is made. The
+    // environment's compiler host and a manifest's llvm-built compiler are
+    // honoured, or the reason they cannot be.
+    planned_stores(llvm_built: bool) -> Result[Collections.List[Host.COMPILER_STORE], string] is
+        let (forced, problem) = Ghul.Project.COMPILER_HOST.from_environment()
 
         if let message: string = problem then
-            return (store = null, problem = message)
+            return ERROR(message)
         fi
 
-        if !host? then
-            return (store = null, problem = null)
+        let order = COMPILER_PLAN.order(MACHINE.this_machine(), forced, llvm_built)
+
+        if let (error): ERROR = order then
+            return ERROR(error)
         fi
 
-        case host
-        when Ghul.Project.CompilerHost.WASM then
-            if !Ghul.Project.WASM_HOST_SELECTION.resolve("node")? then
-                let download = Ghul.Project.NODE_DOWNLOAD.of(Ghul.Project.NODE_STORE.for_this_user())
+        let stores = Collections.LIST[Host.COMPILER_STORE]()
 
-                if let (error): Ghul.Result.ERROR = download.install(line => Std.error.write_line(line)) then
-                    return (store = null, problem = "{variable} is wasm, but no Node.js ghul can run was found and one could not be fetched: {error}")
-                fi
-            fi
+        for kind in order! do
+            stores.add(COMPILER_PLAN.store(kind))
+        od
 
-            return (store = Host.COMPILER_STORE.wasm_for_this_user(), problem = null)
-
-        when Ghul.Project.CompilerHost.DOTNET then
-            if !Host.HOST.has_dotnet() then
-                return (store = null, problem = "{variable} is dotnet, but no .NET host was found")
-            fi
-
-            return (store = Host.COMPILER_STORE.managed_for_this_user(), problem = null)
-
-        when Ghul.Project.CompilerHost.NATIVE then
-            let rid = Host.HOST.rid()
-
-            if !rid? \/ !Host.NATIVE_COMPILER_DOWNLOAD.is_built_for(rid) then
-                return (store = null, problem = "{variable} is native, but there is no Native AOT compiler for {rid ?? "this platform"}")
-            fi
-
-            return (store = Host.COMPILER_STORE.native_for_this_user(), problem = null)
-        esac
+        return OK(stores)
     si
 
     // The compiler run as a command, as `--compiler` or `GHUL_COMPILER`
@@ -1802,14 +1469,13 @@ namespace Ghul.Cli is
     // installed if need be - the wasm-built one under node where this
     // machine has no .NET to run the managed one.
     tool_compiler(
-        managed_store: Host.COMPILER_STORE,
         manifest: Ghul.Project.MANIFEST,
         overrides: Ghul.Project.BUILD_OVERRIDES
     ) -> (compiler: Ghul.Project.COMPILER_PROCESS, version: string, runtime_assembly: string?)? is
         let request = Ghul.Project.COMPILER_REQUEST.from_environment(overrides.compiler_command, manifest.compiler_version)
 
         if let problem: Ghul.Project.CompilerRequest.PROBLEM = request then
-            Std.error.write_line("ghul: {problem.message}")
+            LOG.say("{problem.message}")
             return null
         fi
 
@@ -1817,14 +1483,14 @@ namespace Ghul.Cli is
             return command_compiler(named.command)
         fi
 
-        let host = _host_store()
+        let planned = planned_stores(false)
 
-        if let problem: string = host.problem then
-            Std.error.write_line("ghul: {problem}")
+        if let (problem): ERROR = planned then
+            LOG.say(problem)
             return null
         fi
 
-        let store = host.store ?? _editor_store(managed_store)
+        let store = planned![0]
 
         let installed =
             if isa Ghul.Project.CompilerRequest.LATEST(request) then
@@ -1834,8 +1500,8 @@ namespace Ghul.Cli is
             fi
 
         if let (error): ERROR = installed then
-            Std.error.write_line("ghul: {error}")
-            Std.error.write_line("ghul: could not install ghul.compiler")
+            LOG.say("{error}")
+            LOG.say("could not install ghul.compiler")
             return null
         fi
 
@@ -1866,17 +1532,6 @@ namespace Ghul.Cli is
 
     // The oldest wasm-built compiler that serves analysis requests.
     WASM_ANALYSIS_MINIMUM: string static => "66.1.0"
-
-    // The store an editor's compiler comes from: `managed_store` where
-    // this machine has .NET to run it, and the wasm-built compiler's where
-    // it does not and node can be started.
-    _editor_store(managed_store: Host.COMPILER_STORE) -> Host.COMPILER_STORE is
-        if !Host.HOST.has_dotnet() /\ Ghul.Project.WASM_HOST_SELECTION.resolve("node")? then
-            return Host.COMPILER_STORE.wasm_for_this_user()
-        fi
-
-        return managed_store
-    si
 
     // What a compiler command prints as its version when run with no
     // arguments, or null where it prints none or cannot be run.
@@ -1962,7 +1617,7 @@ namespace Ghul.Cli is
     // `ghul project response-file` and `ghul project compiler`: what an
     // editor reads to analyse a project the way its build compiles it.
     cmd_project_tool(rest: Collections.List[string]) -> int is
-        let say = (message: string) -> void => Std.error.write_line("ghul: {message}")
+        let say = (message: string) -> void => LOG.say("{message}")
 
         if rest.count < 1 \/ (rest[0] !~ "response-file" /\ rest[0] !~ "compiler") then
             Std.error.write_line("usage: ghul project response-file --output <path> [--source-globs <path>] [--target <name>]")
@@ -1990,9 +1645,7 @@ namespace Ghul.Cli is
 
         let manifest = read.manifest!
 
-        let store = Host.COMPILER_STORE.for_this_user()
-
-        if let (compiler, compiler_version, runtime_assembly) = tool_compiler(store, manifest, options.overrides) then
+        if let (compiler, compiler_version, runtime_assembly) = tool_compiler(manifest, options.overrides) then
             if !wants_response_file then
                 Std.out.write_line(
                     if options.json then Ghul.Project.EDITOR_FILES.command_json(compiler) else Ghul.Project.EDITOR_FILES.command_line(compiler) fi)
@@ -2080,7 +1733,7 @@ namespace Ghul.Cli is
         // Reported before anything runs, so a misspelt host is not hidden by
         // a build that is already up to date and never asks for a compiler.
         if let problem: string = Ghul.Project.COMPILER_HOST.from_environment().problem then
-            Std.error.write_line("ghul: {problem}")
+            LOG.say("{problem}")
             return 1
         fi
 
@@ -2097,8 +1750,14 @@ namespace Ghul.Cli is
         let rest = items[1..<0]
 
         if verb =~ "install-compiler" then
-            Std.error.write_line("ghul: 'ghul install-compiler' is now 'ghul install compiler' (or 'ghul install compiler --llvm' for the llvm-built compiler)")
-            return cmd_install_compiler(rest)
+            LOG.say("'ghul install-compiler' is now 'ghul install compiler' (or 'ghul install compiler --llvm' for the llvm-built compiler)")
+            let arguments = Collections.LIST[string](["compiler"])
+
+            for argument in rest do
+                arguments.add(argument)
+            od
+
+            return cmd_install(arguments)
         fi
 
         if verb =~ "install" then

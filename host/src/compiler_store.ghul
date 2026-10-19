@@ -47,6 +47,20 @@ namespace Ghul.Repl.Host is
         for_this_user() -> COMPILER_STORE static =>
             if HOST.has_dotnet() then managed_for_this_user() else native_for_this_user() fi
 
+        /// Whether a Native AOT compiler is published for the platform with
+        /// .NET runtime identifier `rid`, such as `linux-x64`.
+        ///
+        /// - rid: the runtime identifier, or null where it is not known
+        native_is_built_for(rid: string?) -> bool static =>
+            rid? /\ NATIVE_COMPILER_DOWNLOAD.is_built_for(rid!)
+
+        /// Whether a compiler built for llvm is published for the platform
+        /// with .NET runtime identifier `rid`.
+        ///
+        /// - rid: the runtime identifier, or null where it is not known
+        llvm_is_built_for(rid: string?) -> bool static =>
+            rid? /\ NATIVE_COMPILER_DOWNLOAD.llvm_triple(rid!)?
+
         /// This user's store of the llvm-built compiler a release ships,
         /// beside the others so the builds of one version are held apart.
         llvm_for_this_user() -> COMPILER_STORE static =>
