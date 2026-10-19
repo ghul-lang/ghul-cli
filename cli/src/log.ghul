@@ -1,0 +1,43 @@
+namespace Ghul.Cli is
+    /// What ghul says about its own work, on standard error: every line
+    /// begins "ghul: ", whichever part of the tool or downloader says it.
+    class LOG is
+        PREFIX: string static => "ghul: "
+
+        _redirected: ((string) -> void)? static;
+
+        /// The line `text` is written as: the text with the prefix, or as it
+        /// stands where it already has one.
+        ///
+        /// - text: what is to be said
+        line(text: string) -> string static =>
+            if text.starts_with(PREFIX) then text else "{PREFIX}{text}" fi
+
+        /// Says `text` as a line of ghul's own output. Nothing is written
+        /// for text with nothing in it.
+        ///
+        /// - text: what is to be said
+        say(text: string) static is
+            if text.trim().length > 0 then
+                if let to = _redirected then
+                    to(line(text))
+                else
+                    IO.Std.error.write_line(line(text))
+                fi
+            fi
+        si
+
+        /// Sends what is said to `to` instead of standard error, for a test
+        /// that wants to read it. `restore` undoes it.
+        ///
+        /// - to: where each line goes
+        redirect(to: (string) -> void) static is
+            _redirected = to
+        si
+
+        /// Sends what is said to standard error again.
+        restore() static is
+            _redirected = null
+        si
+    si
+si

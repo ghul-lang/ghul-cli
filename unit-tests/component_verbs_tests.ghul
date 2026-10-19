@@ -1,0 +1,161 @@
+namespace Ghul.Cli.Tests is
+    use Collections.LIST
+
+    use Ghul.Cli.COMPONENT_VERBS
+    use Ghul.Cli.Component
+    use Ghul.Cli.LOG
+
+    use Result.*
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // A component that holds what it is told it holds and downloads nothing.
+    class FAKE_COMPONENT: Component is
+        held: string? public;
+        newest: Result[string, string] public;
+        install_error: string? public;
+        installed_versions: LIST[string] public;
+
+        init(held: string?, newest: string) is
+            self.held = held
+            self.newest = OK(newest)
+            self.install_error = null
+            self.installed_versions = LIST[string]()
+        si
+
+        title() -> string => "thing"
+
+        installed() -> string? => held
+
+        latest() -> Result[string, string] => newest
+
+        has(version: string) -> bool => held? /\ held =~ version
+
+        is_current(latest: string) -> bool => has(latest)
+
+        install(version: string, say: (string) -> void) -> Result[unit, string] is
+            say("downloading thing {version}...")
+
+            if let problem: string = install_error then
+                return ERROR(problem)
+            fi
+
+            installed_versions.add(version)
+            held = version
+
+            return OK(_)
+        si
+    si
+
+    // Install and update are written once for every component: what they
+    // do and what they say.
+    @TestClass()
+    class COMPONENT_VERBS_TESTS is
+        init() is si
+
+        // What a verb says, as one string, and its status.
+        _run(action: (Collections.List[string]) -> int) -> string is
+            let said = LIST[string]()
+
+            LOG.redirect(line => said.add(line))
+
+            try
+                let status = action(said)
+
+                return "{status} | {said |> Ghul.Pipes.join(" | ")}"
+            finally
+                LOG.restore()
+            yrt
+        si
+
+        @Test()
+        every_line_is_prefixed_once() is
+            assert LOG.line("plain") =~ "ghul: plain"
+            assert LOG.line("ghul: already") =~ "ghul: already"
+        si
+
+        @Test()
+        installing_a_version_already_held__does_nothing() is
+            let fake = FAKE_COMPONENT("1.0.0", "2.0.0")
+            let said = _run(said => COMPONENT_VERBS.install(fake, "1.0.0"))
+
+            assert said =~ "0 | ghul: thing 1.0.0 is already installed" else said
+            assert fake.installed_versions.count == 0
+        si
+
+        @Test()
+        installing_with_no_version__takes_the_newest_and_says_so() is
+            let fake = FAKE_COMPONENT(null, "2.0.0")
+            let said = _run(said => COMPONENT_VERBS.install(fake, null))
+
+            assert said =~ "0 | ghul: installing thing 2.0.0... | ghul: downloading thing 2.0.0... | ghul: thing 2.0.0 is installed" else said
+            assert fake.installed_versions[0] =~ "2.0.0"
+        si
+
+        @Test()
+        installing_with_no_version__when_the_newest_is_held__does_nothing() is
+            let fake = FAKE_COMPONENT("2.0.0", "2.0.0")
+            let said = _run(said => COMPONENT_VERBS.install(fake, null))
+
+            assert said =~ "0 | ghul: thing 2.0.0 is already installed" else said
+        si
+
+        @Test()
+        a_failed_install__is_reported_with_its_reason_and_fails() is
+            let fake = FAKE_COMPONENT(null, "2.0.0")
+
+            fake.install_error = "the server said no"
+
+            let said = _run(said => COMPONENT_VERBS.install(fake, null))
+
+            assert said =~ "1 | ghul: installing thing 2.0.0... | ghul: downloading thing 2.0.0... | ghul: the server said no | ghul: failed to install thing" else said
+        si
+
+        @Test()
+        a_newest_version_that_cannot_be_found__fails_the_install() is
+            let fake = FAKE_COMPONENT(null, "2.0.0")
+
+            fake.newest = ERROR("no network")
+
+            let said = _run(said => COMPONENT_VERBS.install(fake, null))
+
+            assert said =~ "1 | ghul: no network | ghul: failed to install thing" else said
+        si
+
+        @Test()
+        refreshing_a_current_component__says_it_is_up_to_date() is
+            let fake = FAKE_COMPONENT("2.0.0", "2.0.0")
+
+            assert _run(said => COMPONENT_VERBS.refresh(fake, false)) =~ "0 | ghul: thing 2.0.0 is up to date"
+            assert _run(said => COMPONENT_VERBS.refresh(fake, true)) =~ "0 | ghul: thing 2.0.0 is up to date"
+        si
+
+        @Test()
+        checking_a_stale_component__reports_and_changes_nothing() is
+            let fake = FAKE_COMPONENT("1.0.0", "2.0.0")
+            let said = _run(said => COMPONENT_VERBS.refresh(fake, true))
+
+            assert said =~ "0 | ghul: thing 2.0.0 is available, 1.0.0 is installed" else said
+            assert fake.installed_versions.count == 0
+        si
+
+        @Test()
+        refreshing_a_stale_component__installs_the_newest() is
+            let fake = FAKE_COMPONENT("1.0.0", "2.0.0")
+            let said = _run(said => COMPONENT_VERBS.refresh(fake, false))
+
+            assert said =~ "0 | ghul: updating thing 1.0.0 to 2.0.0... | ghul: downloading thing 2.0.0... | ghul: thing updated to 2.0.0" else said
+            assert fake.installed_versions[0] =~ "2.0.0"
+        si
+
+        @Test()
+        a_refresh_that_cannot_find_the_newest__fails_naming_the_component() is
+            let fake = FAKE_COMPONENT("1.0.0", "2.0.0")
+
+            fake.newest = ERROR("no network")
+
+            assert _run(said => COMPONENT_VERBS.refresh(fake, false)) =~ "1 | ghul: thing: no network"
+        si
+    si
+si

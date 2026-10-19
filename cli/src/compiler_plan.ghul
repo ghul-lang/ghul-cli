@@ -1,0 +1,132 @@
+namespace Ghul.Cli is
+    use Host = Ghul.Repl.Host
+
+    use Collections.LIST
+
+    use Result.*
+
+    /// The ways ghul.compiler comes: the managed one run by .NET, the Native
+    /// AOT executable, the one built for wasm and run by Node, and the one
+    /// built for llvm.
+    enum CompilerKind is
+        MANAGED,
+        NATIVE,
+        WASM,
+        LLVM_BUILT
+    si
+
+    /// Which compiler a machine uses, in one place. A build, an install, an
+    /// update and the version report all ask here, so they cannot disagree.
+    class COMPILER_PLAN is
+        /// The kinds of compiler this machine uses, most wanted first.
+        ///
+        /// A manifest that names the llvm-built compiler gets only that, and
+        /// so does a host the environment names. Otherwise a machine with
+        /// .NET uses the managed compiler; one without uses the wasm-built
+        /// compiler, with a Native AOT compiler that is already installed
+        /// as its fallback, or first where there is no Node to run the wasm
+        /// one. A Native AOT compiler is never newly chosen.
+        ///
+        /// - machine: the machine
+        /// - forced: the host `GHUL_COMPILER_HOST` names, or null
+        /// - llvm_built_wanted: whether the manifest names the llvm-built compiler
+        order(machine: MACHINE, forced: Ghul.Project.CompilerHost?, llvm_built_wanted: bool) -> Result[Collections.List[CompilerKind], string] static is
+            let kinds = LIST[CompilerKind]()
+            let variable = Ghul.Project.COMPILER_HOST.VARIABLE
+            let platform = machine.rid ?? "this platform"
+
+            if llvm_built_wanted then
+                if !machine.llvm_compiler_is_built then
+                    return ERROR("there is no llvm-built compiler for {platform}")
+                fi
+
+                kinds.add(CompilerKind.LLVM_BUILT)
+
+                return OK(kinds)
+            fi
+
+            if let host = forced then
+                case host
+                when Ghul.Project.CompilerHost.WASM then
+                    kinds.add(CompilerKind.WASM)
+                when Ghul.Project.CompilerHost.DOTNET then
+                    if !machine.has_dotnet then
+                        return ERROR("{variable} is dotnet, but no .NET host was found")
+                    fi
+
+                    kinds.add(CompilerKind.MANAGED)
+                when Ghul.Project.CompilerHost.NATIVE then
+                    if !machine.native_is_built then
+                        return ERROR("{variable} is native, but there is no Native AOT compiler for {platform}")
+                    fi
+
+                    kinds.add(CompilerKind.NATIVE)
+                esac
+
+                return OK(kinds)
+            fi
+
+            if machine.has_dotnet then
+                kinds.add(CompilerKind.MANAGED)
+
+                return OK(kinds)
+            fi
+
+            let fallback = machine.native_is_built /\ machine.has_native_compiler
+
+            if machine.has_node then
+                kinds.add(CompilerKind.WASM)
+
+                if fallback then
+                    kinds.add(CompilerKind.NATIVE)
+                fi
+            else
+                if fallback then
+                    kinds.add(CompilerKind.NATIVE)
+                fi
+
+                kinds.add(CompilerKind.WASM)
+            fi
+
+            return OK(kinds)
+        si
+
+        /// The store that holds compilers of `kind`.
+        ///
+        /// - kind: the kind of compiler
+        store(kind: CompilerKind) -> Host.COMPILER_STORE static =>
+            case kind
+            when CompilerKind.MANAGED then Host.COMPILER_STORE.managed_for_this_user()
+            when CompilerKind.NATIVE then Host.COMPILER_STORE.native_for_this_user()
+            when CompilerKind.WASM then Host.COMPILER_STORE.wasm_for_this_user()
+            when CompilerKind.LLVM_BUILT then Host.COMPILER_STORE.llvm_for_this_user()
+            esac
+
+        /// What ghul calls a compiler of `kind` in what it says.
+        ///
+        /// - kind: the kind of compiler
+        title(kind: CompilerKind) -> string static =>
+            case kind
+            when CompilerKind.MANAGED then "ghul.compiler (dotnet)"
+            when CompilerKind.NATIVE then "ghul.compiler (native)"
+            when CompilerKind.WASM then "ghul.compiler (wasm)"
+            when CompilerKind.LLVM_BUILT then "ghul.compiler (llvm-built)"
+            esac
+
+        /// Every kind of compiler, in the order they are refreshed.
+        all_kinds() -> CompilerKind[] static =>
+            [CompilerKind.MANAGED, CompilerKind.WASM, CompilerKind.NATIVE, CompilerKind.LLVM_BUILT]
+
+        /// Whether the machine can hold a compiler of `kind` at all.
+        ///
+        /// - machine: the machine
+        /// - kind: the kind of compiler
+        is_possible(machine: MACHINE, kind: CompilerKind) -> bool static =>
+            case kind
+            when CompilerKind.MANAGED then machine.has_dotnet
+            when CompilerKind.NATIVE then machine.native_is_built
+            when CompilerKind.WASM then true
+            when CompilerKind.LLVM_BUILT then machine.llvm_compiler_is_built
+            esac
+    si
+si

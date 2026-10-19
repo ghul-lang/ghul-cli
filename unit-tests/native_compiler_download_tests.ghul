@@ -16,9 +16,9 @@ namespace Ghul.Cli.Tests is
             NATIVE_COMPILER_DOWNLOAD(COMPILER_STORE("unused", is_llvm, false), "https://example.test/releases")
 
         @Test()
-        the_llvm_triple__is_named_for_linux_x64_and_arm64() is
+        the_llvm_triple__is_named_for_linux_x64_only() is
             assert NATIVE_COMPILER_DOWNLOAD.llvm_triple("linux-x64") =~ "x86_64-unknown-linux-musl"
-            assert NATIVE_COMPILER_DOWNLOAD.llvm_triple("linux-arm64") =~ "aarch64-unknown-linux-musl"
+            assert !NATIVE_COMPILER_DOWNLOAD.llvm_triple("linux-arm64")?
             assert !NATIVE_COMPILER_DOWNLOAD.llvm_triple("osx-arm64")?
         si
 

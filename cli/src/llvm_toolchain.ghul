@@ -39,9 +39,14 @@ namespace Ghul.Cli is
 
         /// The platform `ghul-llvm` is released for that this machine is,
         /// as a target triple, or null where there is no release for it.
-        triple() -> string? static is
-            let rid = Host.HOST.rid()
+        triple() -> string? static => triple_for(Host.HOST.rid())
 
+        /// The platform `ghul-llvm` is released for that the machine with
+        /// runtime identifier `rid` is, as a target triple, or null where
+        /// there is no release for it.
+        ///
+        /// - rid: the runtime identifier, or null where it is not known
+        triple_for(rid: string?) -> string? static is
             if rid =~ "linux-x64" then
                 return "x86_64-unknown-linux-musl"
             fi
@@ -51,6 +56,39 @@ namespace Ghul.Cli is
             fi
 
             return null
+        si
+
+        /// The highest release of `ghul-llvm` kept for `triple`, as its tag, or
+        /// null where none is.
+        ///
+        /// - triple: the platform
+        highest_kept(triple: string) -> string? is
+            if !Directory.exists(root) then
+                return null
+            fi
+
+            let best: string? mut = null
+            let best_version: System.Version? mut = null
+
+            for directory in Directory.get_directories(root) do
+                let tag = Path.get_file_name(directory) ?? ""
+                let version: System.Version? mut
+
+                if !tag.starts_with("v") \/ !System.Version.try_parse(tag.substring(1), version ref) \/ !version? then
+                    continue
+                fi
+
+                if !File.exists(Path.join([directory, triple, "bin", "ghul-llvm"])) then
+                    continue
+                fi
+
+                if !best_version? \/ version! > best_version! then
+                    best = tag
+                    best_version = version
+                fi
+            od
+
+            return best
         si
 
         /// Whether some release of `ghul-llvm` for `triple` is already in the

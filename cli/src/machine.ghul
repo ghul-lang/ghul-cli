@@ -1,0 +1,30 @@
+namespace Ghul.Cli is
+    use Host = Ghul.Repl.Host
+
+    /// The facts about a machine that decide which components ghul uses
+    /// and offers: what it is, and which engines it has to run them.
+    ///
+    /// - rid: the .NET runtime identifier, such as `linux-arm64`, or null
+    ///   where it is not known
+    /// - has_dotnet: whether a .NET host is there to run the managed compiler
+    /// - has_node: whether a Node.js that runs the wasm target can be started
+    /// - has_native_compiler: whether a Native AOT compiler is already installed
+    class MACHINE(rid: string?, has_dotnet: bool, has_node: bool, has_native_compiler: bool) is
+        /// The machine ghul is running on.
+        this_machine() -> MACHINE static =>
+            MACHINE(
+                Host.HOST.rid(),
+                Host.HOST.has_dotnet(),
+                Ghul.Project.WASM_HOST_SELECTION.resolve("node")?,
+                Host.COMPILER_STORE.native_for_this_user().highest_version()?)
+
+        /// Whether a Native AOT compiler is published for this machine.
+        native_is_built: bool => Host.COMPILER_STORE.native_is_built_for(rid)
+
+        /// Whether a compiler built for llvm is published for this machine.
+        llvm_compiler_is_built: bool => Host.COMPILER_STORE.llvm_is_built_for(rid)
+
+        /// Whether ghul-llvm is released for this machine.
+        llvm_tool_is_released: bool => LLVM_TOOLCHAIN.triple_for(rid)?
+    si
+si
