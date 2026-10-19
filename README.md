@@ -332,14 +332,29 @@ line, or 25 or later, which `ghul` checks before running it; Node 23 cannot
 run it. A wasm build compiles in two libraries,
 fetched from Git into `~/.cache/ghul-cli/libraries`: ghul-core, which gives
 the built-in types their members, and then ghul-runtime, which supplies the
-pipes and the rest of `Ghul`. Declaring `ghul-core` or `ghul-runtime` in the
-manifest's `dependencies` at a `path` uses that instead; a `tag` is refused.
+pipes and the rest of `Ghul`. They are libraries with releases of their own, so
+a project declares both in its `dependencies`, which `ghul new` writes:
 
-A build uses the newest release of each library. The releases are listed on
-every build; where GitHub cannot be reached, the release used last is used
-again. A library that needs a newer compiler than the installed one fails to
-compile with the compiler's own error, and `ghul update` brings the compiler up
-to date.
+```json
+"dependencies": {
+    "ghul-core": { "version": ">=0.75.1" },
+    "ghul-runtime": { "version": ">=29.1.1" }
+}
+```
+
+The repository is known, so a version alone is enough. It is a range as for
+any dependency, and a build uses the newest release it admits: `>=` is a floor
+and admits a newer major version, where `^` stops at the next one. `>=0.0.0`
+says the project accepts any release. A `path` uses a checkout instead. A
+project for wasm or llvm that leaves either out is refused, and the message
+names the lines to add with the newest release as the floor. The releases are
+listed on every build; where GitHub cannot be reached, the release used last
+is used again. A library that needs a newer compiler than the installed one
+fails to compile with the compiler's own error, and `ghul update` brings the
+compiler up to date.
+
+A script is not a project and declares nothing: it is built with the newest
+release of each.
 
 Any other entry in `dependencies` names a source library a wasm build compiles
 in after those two: a directory holding a `ghul-project.json` that lists

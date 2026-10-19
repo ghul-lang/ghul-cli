@@ -108,11 +108,18 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        a_tag_for_the_compilers_libraries_is_refused() is
-            let problems = _problems("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"dependencies\": {{\"ghul-core\": {{\"git\": \"https://example.com/core\", \"tag\": \"v1.0.0\"}}, \"ghul-runtime\": {{\"git\": \"https://example.com/rt\", \"tag\": \"v1.0.0\"}}}} }}")
+        the_compilers_libraries_are_declared_by_version_alone() is
+            let outcome = MANIFEST_READER.read("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"dependencies\": {{\"ghul-core\": {{ \"version\": \">=0.0.0\" }}, \"ghul-runtime\": {{ \"version\": \"^29.0.0\" }}}} }}", "ghul-project.json")
 
-            assert problems.count == 2;
-            assert problems[0].contains("always the newest release");
+            assert isa ReadOutcome.OK(outcome);
+
+            let dependencies = (cast ReadOutcome.OK(outcome)).manifest.dependencies
+            let core = cast DEPENDENCY.GIT(dependencies["ghul-core"])
+            let runtime = cast DEPENDENCY.GIT(dependencies["ghul-runtime"])
+
+            assert core.url.contains("ghul-core");
+            assert core.version!.to_string() =~ ">=0.0.0";
+            assert runtime.version!.to_string() =~ "^29.0.0";
         si
 
         @Test()

@@ -55,6 +55,13 @@ namespace Ghul.Cli.Tests is
             assert !_admits(">=1.4.2", "1.4.1")
         si
 
+
+        @Test()
+        an_at_least_admits_a_newer_major_whatever_the_floor() is
+            assert _admits(">=0.0.0", "99.4.1")
+            assert _admits(">=0.75.1", "1.0.0")
+            assert _admits(">=29.1.1", "30.0.0")
+        si
         @Test()
         a_leading_v_is_accepted_and_a_range_is_written_back_without_it() is
             assert VERSION_RANGE.parse("^v1.2.3")!.to_string() =~ "^1.2.3"

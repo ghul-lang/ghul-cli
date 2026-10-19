@@ -54,6 +54,31 @@ namespace Ghul.Project is
                 esac
         si
 
+
+        /// The problem with a project that declares neither or only one of
+        /// the compiler's two libraries, naming the lines to add with the
+        /// newest release as the floor, or null where both are declared.
+        ///
+        /// - manifest: the project's manifest
+        /// - cache: where fetched libraries are kept
+        undeclared_libraries(manifest: MANIFEST, cache: LIBRARY_CACHE) -> string? static is
+            let lines = LIST[string]()
+
+            for pair in [(name = CORE_LIBRARY.NAME, repository = CORE_LIBRARY.repository()), (name = RUNTIME_LIBRARY.NAME, repository = RUNTIME_LIBRARY.repository())] do
+                if !manifest.dependencies.contains_key(pair.name) then
+                    let newest = LIBRARY_RESOLVER(cache).latest(pair.name, pair.repository)
+                    let floor = if newest? then newest!.substring(1) else "0.0.0" fi
+
+                    lines.add("\"{pair.name}\": {{ \"version\": \">={floor}\" }}")
+                fi
+            od
+
+            if lines.count == 0 then
+                return null
+            fi
+
+            return "the manifest must declare the libraries it compiles with; add to dependencies: {string.join(", ", lines)}"
+        si
         /// The source libraries a build of `project` compiles in: the core
         /// library, the runtime library and then the libraries the
         /// manifest's own dependencies name. Null, with the problem reported
@@ -68,6 +93,11 @@ namespace Ghul.Project is
             say: (string) -> void
         ) -> Collections.List[SOURCE_LIBRARY]? static is
             let result = LIST[SOURCE_LIBRARY]()
+
+            if let missing = undeclared_libraries(project.manifest, cache) then
+                say(missing)
+                return null
+            fi
 
             let found = CORE_LIBRARY.find(project.manifest, project.directory, cache)
 

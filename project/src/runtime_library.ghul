@@ -10,8 +10,8 @@ namespace Ghul.Project is
     /// the rest of what `Ghul` and `Ghul.Pipes` declare, from the files its
     /// `wasm-sources.rsp` lists.
     ///
-    /// A project gets the newest release of ghul-runtime. Declaring `ghul-runtime` among the manifest's
-    /// dependencies, at a tag or as a path, uses that instead.
+    /// A project declares ghul-runtime among the manifest's dependencies, as a
+    /// version range, a tag or a path.
     class RUNTIME_LIBRARY is
         /// The library's name, which a manifest declares it under.
         NAME: string static => "ghul-runtime"
@@ -54,20 +54,24 @@ namespace Ghul.Project is
 
                 let git = cast DEPENDENCY.GIT(declared)
 
+                if let range = git.version then
+                    let matched = LIBRARY_RESOLVER(cache).matching(NAME, git.url, range)
+
+                    if let (problem): Result.ERROR = matched then
+                        return ERROR(problem)
+                    fi
+
+                    return _fetched(cache.fetch_tag(git.url, matched!), git.directory, matched!)
+                fi
+
                 if let tag: string = git.tag then
                     return _fetched(cache.fetch_tag(git.url, tag), git.directory, tag)
                 fi
 
-                return ERROR("{NAME} must be declared with a tag or a path")
+                return ERROR("{NAME} must be declared with a version, a tag or a path")
             fi
 
-            let resolved = LIBRARY_RESOLVER(cache).latest(NAME, repository())
-
-            if let (problem): Result.ERROR = resolved then
-                return ERROR(problem)
-            fi
-
-            return _fetched(cache.fetch_tag(repository(), resolved!), null, resolved!)
+            return ERROR("{NAME} must be declared in the manifest's dependencies")
         si
 
         _fetched(outcome: Result[(directory: string, commit: string), string], directory: string?, tag: string) -> Result[SOURCE_LIBRARY, string] static is
