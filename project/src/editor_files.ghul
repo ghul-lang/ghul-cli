@@ -36,22 +36,18 @@ namespace Ghul.Project is
         /// `say`, where the build's libraries cannot be found.
         ///
         /// - project: the project an editor is analysing
-        /// - compiler_version: the compiler the project builds with
-        /// - requirements: what the compiler declares it needs, or null
         /// - cache: where fetched libraries are kept
         /// - output: the response file to write
         /// - source_globs_output: the globs file to write, or null for none
         /// - say: where a problem is reported
         write(
             project: LOADED_PROJECT,
-            compiler_version: string,
-            requirements: COMPILER_REQUIREMENTS?,
             cache: LIBRARY_CACHE,
             output: string,
             source_globs_output: string?,
             say: (string) -> void
         ) -> bool static is
-            let libraries = PROJECT_BUILD.libraries(project, compiler_version, requirements, cache, say)
+            let libraries = PROJECT_BUILD.libraries(project, cache, say)
 
             if !libraries? then
                 return false

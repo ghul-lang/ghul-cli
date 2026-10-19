@@ -9,8 +9,7 @@ namespace Ghul.Project is
     /// the library that gives the built-in types their members and supplies
     /// the types a program uses.
     ///
-    /// A project gets the release of ghul-core this tool pins for the
-    /// compiler it builds with. Declaring `ghul-core` among the manifest's
+    /// A project gets the newest release of ghul-core. Declaring `ghul-core` among the manifest's
     /// dependencies, at a tag or as a path, uses that instead.
     class CORE_LIBRARY is
         /// The library's name, which a manifest declares it under.
@@ -28,56 +27,10 @@ namespace Ghul.Project is
             return "https://github.com/ghul-lang/ghul-core"
         si
 
-        /// The release of ghul-core to build with a compiler: the newest
-        /// whose earliest compiler is no newer than `compiler_version`, or
-        /// the oldest where the version is earlier than all of them or is
-        /// not a release number.
-        ///
-        /// - compiler_version: the `ghul.compiler` version the build uses
-        pinned_tag(compiler_version: string) -> string static is
-            let pins = _pins()
-            let result mut = pins[0].tag
-            let compiler: System.Version? mut
-
-            if !System.Version.try_parse(compiler_version, compiler ref) \/ !compiler? then
-                return result
-            fi
-
-            for pin in pins do
-                if System.Version.parse(pin.earliest_compiler) <= compiler then
-                    result = pin.tag
-                fi
-            od
-
-            return result
-        si
-
         /// The earliest compiler that builds a project for the wasm target:
-        /// one that compiles the pinned ghul-core and has a ghul-runtime
-        /// release pinned for it. Raised when a compiler fix is one the
-        /// pinned libraries need.
+        /// one that compiles the libraries. Raised when a library needs a
+        /// compiler fix.
         MINIMUM_COMPILER: string static => "64.15.0"
-
-        // Each release of ghul-core and the earliest compiler that builds
-        // it, oldest first. A new release of either adds a line.
-        _pins() -> (earliest_compiler: string, tag: string)[] static =>
-            [
-                (earliest_compiler = "64.11.0", tag = "v0.3.0"),
-                (earliest_compiler = "64.13.0", tag = "v0.6.1"),
-                (earliest_compiler = "64.13.4", tag = "v0.13.0"),
-                (earliest_compiler = "64.26.3", tag = "v0.20.0"),
-                (earliest_compiler = "64.28.1", tag = "v0.27.0"),
-                (earliest_compiler = "65.0.1", tag = "v0.34.0"),
-                (earliest_compiler = "65.1.0", tag = "v0.35.0"),
-                (earliest_compiler = "65.1.4", tag = "v0.36.0"),
-                (earliest_compiler = "65.3.1", tag = "v0.37.0"),
-                (earliest_compiler = "65.4.2", tag = "v0.38.0"),
-                (earliest_compiler = "65.4.3", tag = "v0.39.0"),
-                (earliest_compiler = "65.4.5", tag = "v0.40.0"),
-                (earliest_compiler = "65.8.1", tag = "v0.45.0"),
-                (earliest_compiler = "65.22.0", tag = "v0.55.0"),
-                (earliest_compiler = "65.30.0", tag = "v0.67.2")
-            ]
 
         /// The core library for `manifest`, fetching it into `cache` if it
         /// is not there already.
@@ -85,15 +38,10 @@ namespace Ghul.Project is
         /// - manifest: the project being built
         /// - manifest_directory: the directory holding the manifest, which a
         ///   path dependency is relative to
-        /// - compiler_version: the compiler the build uses
-        /// - requirements: what the compiler declares it needs, or null for a
-        ///   compiler from before the declaration, which gets this tool's pin
         /// - cache: where fetched libraries are kept
         find(
             manifest: MANIFEST,
             manifest_directory: string,
-            compiler_version: string,
-            requirements: COMPILER_REQUIREMENTS?,
             cache: LIBRARY_CACHE
         ) -> Result[SOURCE_LIBRARY, string] static is
             let declared: DEPENDENCY mut
@@ -112,17 +60,13 @@ namespace Ghul.Project is
                 return ERROR("{NAME} must be declared with a tag or a path")
             fi
 
-            if let floor = requirements?.core then
-                let resolved = LIBRARY_RESOLVER(cache).resolve(NAME, repository(), floor, compiler_version)
+            let resolved = LIBRARY_RESOLVER(cache).latest(NAME, repository())
 
-                if let (problem): Result.ERROR = resolved then
-                    return ERROR(problem)
-                fi
-
-                return _fetched(cache.fetch_tag(repository(), resolved!), null)
+            if let (problem): Result.ERROR = resolved then
+                return ERROR(problem)
             fi
 
-            return _fetched(cache.fetch_tag(repository(), pinned_tag(compiler_version)), null)
+            return _fetched(cache.fetch_tag(repository(), resolved!), null)
         si
 
         _fetched(outcome: Result[(directory: string, commit: string), string], directory: string?) -> Result[SOURCE_LIBRARY, string] static is

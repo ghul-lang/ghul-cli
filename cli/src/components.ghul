@@ -82,20 +82,8 @@ namespace Ghul.Cli is
             return if platform? then LLVM_TOOLCHAIN.for_this_user().highest_kept(platform!) else null fi
         si
 
-        /// The newest release that admits an installed compiler, or the
-        /// newest release where no compiler is installed.
-        latest() -> Result[string, string] is
-            let toolchain = LLVM_TOOLCHAIN.for_this_user()
-            let compiler = COMPONENTS.installed_compiler(_machine)
-
-            if !compiler? then
-                return toolchain.release_tag("0.0.0", "any")
-            fi
-
-            return toolchain.chosen_tag(
-                compiler!.version,
-                Ghul.Project.COMPILER_REQUIREMENTS.read(compiler!.store.directory(compiler!.version)))
-        si
+        /// The newest release of ghul-llvm.
+        latest() -> Result[string, string] => LLVM_TOOLCHAIN.for_this_user().latest_tag()
 
         has(version: string) -> bool is
             let platform = LLVM_TOOLCHAIN.triple_for(_machine.rid)
