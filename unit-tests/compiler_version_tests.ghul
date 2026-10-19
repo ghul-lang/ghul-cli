@@ -18,18 +18,5 @@ namespace Ghul.Cli.Tests is
             assert !is_older_than("0.0.0-local-slug.1", "60.2.0");
         si
 
-        @Test()
-        completes_at_cursor__from_the_first_compiler_that_completes_a_partial_member_there() is
-            assert !completes_at_cursor("60.2.1");
-            assert completes_at_cursor("60.2.2");
-            assert completes_at_cursor("61.0.0");
-        si
-
-        @Test()
-        wants_implicit_default_use__from_the_first_compiler_that_takes_the_flag() is
-            assert !wants_implicit_default_use("60.1.0");
-            assert wants_implicit_default_use("60.2.0");
-            assert wants_implicit_default_use("60.10.3");
-        si
     si
 si

@@ -55,7 +55,7 @@ namespace Ghul.Cli.Tests is
             let parsed = PROJECT_SCAFFOLD.parse(LIST[string](["--target", "wasm,llvm", "hello"]), [BuildTarget.WASM])
 
             assert parsed? else (cast Result.ERROR(parsed)).error
-            assert PROJECT_SCAFFOLD.manifest_text("hello", parsed!.targets).contains("\"targets\": [\"wasm\", \"llvm\"]")
+            assert PROJECT_SCAFFOLD.manifest_text("hello", parsed!.targets, LIST[(tool: string, version: string)]()).contains("\"targets\": [\"wasm\", \"llvm\"]")
         si
 
         @Test()
@@ -84,7 +84,7 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         the_manifest_reads_back_as_a_program_with_the_targets_asked_for() is
-            let text = PROJECT_SCAFFOLD.manifest_text("hello", LIST[BuildTarget]([BuildTarget.WASM, BuildTarget.LLVM]))
+            let text = PROJECT_SCAFFOLD.manifest_text("hello", LIST[BuildTarget]([BuildTarget.WASM, BuildTarget.LLVM]), LIST[(tool: string, version: string)]())
             let read = MANIFEST_READER.read(text, "ghul-project.json")
 
             assert isa ReadOutcome.OK(read) else "the scaffold's manifest does not read back"
@@ -96,8 +96,30 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
+        the_manifest_writes_a_floor_for_each_tool_and_reads_back() is
+            let floors = LIST[(tool: string, version: string)]()
+
+            floors.add((tool = "compiler", version = "66.7.0"))
+            floors.add((tool = "ghul-llvm", version = "1.0.0"))
+
+            let text = PROJECT_SCAFFOLD.manifest_text("hello", LIST[BuildTarget]([BuildTarget.WASM, BuildTarget.LLVM]), floors)
+
+            assert text.contains("\"tools\": {{ \"compiler\": \">=66.7.0\", \"ghul-llvm\": \">=1.0.0\" }}") else text
+
+            let read = MANIFEST_READER.read(text, "ghul-project.json")
+
+            assert isa ReadOutcome.OK(read) else "the scaffold's manifest does not read back"
+            _same(">=66.7.0", (cast ReadOutcome.OK(read)).manifest.tools["compiler"].to_string())
+        si
+
+        @Test()
+        a_manifest_with_no_floors_has_no_tools_key() is
+            assert !PROJECT_SCAFFOLD.manifest_text("hello", LIST[BuildTarget]([BuildTarget.WASM]), LIST[(tool: string, version: string)]()).contains("tools")
+        si
+
+        @Test()
         a_project_holds_a_manifest_a_hello_program_and_a_gitignore() is
-            let files = PROJECT_SCAFFOLD.files("hello", LIST[BuildTarget]([BuildTarget.WASM]))
+            let files = PROJECT_SCAFFOLD.files("hello", LIST[BuildTarget]([BuildTarget.WASM]), LIST[(tool: string, version: string)]())
 
             _same("ghul-project.json src/main.ghul .gitignore", string.join(" ", files |> Ghul.Pipes.map(f => f.path.replace('\\', '/'))))
             _same("out/\n", files[2].text)

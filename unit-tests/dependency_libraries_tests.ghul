@@ -190,7 +190,7 @@ namespace Ghul.Cli.Tests is
 
                 let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
 
-                assert _message(found) =~ "lib must be declared with a tag or a path" else _message(found)
+                assert _message(found) =~ "lib must be declared with a version, a tag or a path" else _message(found)
             finally
                 _delete(scratch)
             yrt

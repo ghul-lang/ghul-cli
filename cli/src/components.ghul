@@ -83,7 +83,7 @@ namespace Ghul.Cli is
         si
 
         /// The newest release of ghul-llvm.
-        latest() -> Result[string, string] => LLVM_TOOLCHAIN.for_this_user().latest_tag()
+        latest() -> Result[string, string] => LLVM_TOOLCHAIN.for_this_user().latest_tag(null)
 
         has(version: string) -> bool is
             let platform = LLVM_TOOLCHAIN.triple_for(_machine.rid)

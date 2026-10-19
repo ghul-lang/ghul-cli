@@ -15,7 +15,7 @@ namespace Ghul.Project is
     /// states the key itself.
     ///
     /// ```json
-    /// { "defaults": { "prefer": ["wasm"], "host": { "wasm": "wasmtime" } } }
+    /// { "defaults": { "prefer": ["wasm"], "engine": { "wasm": "wasmtime" } } }
     /// ```
     class GLOBAL_DEFAULTS(
         /// The targets a build prefers, in order, where the manifest names
@@ -56,6 +56,7 @@ namespace Ghul.Project is
                 fi
 
                 let prefer_element: JsonElement mut
+                let host_element: JsonElement mut
 
                 if defaults.try_get_property("prefer", prefer_element ref) then
                     if prefer_element.value_kind == JsonValueKind.ARRAY then
@@ -78,6 +79,10 @@ namespace Ghul.Project is
                 fi
 
                 host_wasm = _host_wasm(defaults)
+
+                if defaults.try_get_property("host", host_element ref) then
+                    problem! = "{config_path}: defaults.host is now defaults.engine"
+                fi
                 finally
                     document.dispose()
                 yrt
@@ -111,7 +116,7 @@ namespace Ghul.Project is
         _host_wasm(defaults: JsonElement) -> string? static is
             let host: JsonElement mut
 
-            if !defaults.try_get_property("host", host ref) then
+            if !defaults.try_get_property("engine", host ref) then
                 return null
             fi
 

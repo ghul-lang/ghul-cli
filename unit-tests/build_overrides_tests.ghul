@@ -7,6 +7,7 @@ namespace Ghul.Cli.Tests is
     use Ghul.Project.CompilerBuild
     use Ghul.Project.DEPENDENCY
     use Ghul.Project.MANIFEST
+    use Ghul.Project.VERSION_RANGE
     use Ghul.Project.MANIFEST_OPTIONS
     use Ghul.Project.ManifestKind
     use Ghul.Project.PROJECT_COMMAND_LINE
@@ -30,7 +31,7 @@ namespace Ghul.Cli.Tests is
                 LIST[string](["src/**/*.ghul"]),
                 MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](), null),
                 dependencies,
-                CompilerBuild.DEFAULT, LIST[BuildTarget](), null)
+                CompilerBuild.DEFAULT, LIST[BuildTarget](), null, MAP[string, VERSION_RANGE]())
 
         @Test()
         a_build_command_line_reads_the_compiler_and_libraries() is
@@ -70,7 +71,7 @@ namespace Ghul.Cli.Tests is
         a_library_override_replaces_the_manifest_dependency() is
             let dependencies = MAP[string, DEPENDENCY]()
 
-            dependencies["ghul-core"] = DEPENDENCY.GIT("https://example.com/core", "v1", null, null)
+            dependencies["ghul-core"] = DEPENDENCY.GIT("https://example.com/core", "v1", null, null, null)
 
             let overrides = PROJECT_COMMAND_LINE.parse(LIST[string](["--library", "ghul-core=/l/core"]), false).overrides
             let applied = overrides.apply(_manifest(dependencies))

@@ -104,7 +104,7 @@ namespace Ghul.Cli.Tests is
             let problems = _problems("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"compiler\": \"64.5.38\" }}")
 
             assert problems.count == 1;
-            assert problems[0].contains("compiler version cannot be pinned");
+            assert problems[0].contains("compiler version cannot be pinned here");
         si
 
         @Test()
@@ -120,6 +120,59 @@ namespace Ghul.Cli.Tests is
             let outcome = MANIFEST_READER.read("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"dependencies\": {{\"ghul-core\": {{\"path\": \"../core\"}}}} }}", "ghul-project.json")
 
             assert isa ReadOutcome.OK(outcome);
+        si
+
+        @Test()
+        tools_name_a_version_range_for_the_compiler_and_ghul_llvm() is
+            let outcome = MANIFEST_READER.read("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"llvm\"], \"sources\": [\"src/*.ghul\"], \"tools\": {{ \"compiler\": \">=66.7.0\", \"ghul-llvm\": \"^1.0.0\" }} }}", "ghul-project.json")
+            let manifest = cast ReadOutcome.OK(outcome)
+
+            assert manifest.manifest.tools["compiler"].to_string() =~ ">=66.7.0";
+            assert manifest.manifest.tools["ghul-llvm"].to_string() =~ "^1.0.0";
+        si
+
+        @Test()
+        a_tool_a_project_cannot_name_or_a_bad_range_is_refused() is
+            let problems = _problems("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"tools\": {{ \"node\": \">=22.0.0\", \"compiler\": \"newest\" }} }}")
+
+            assert problems.count == 2;
+            assert problems[0].contains("not a tool a project can name");
+            assert problems[1].contains("not a version range");
+        si
+
+        @Test()
+        a_host_key_is_refused_in_favour_of_engine() is
+            let problems = _problems("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"host\": {{ \"wasm\": \"node\" }} }}")
+
+            assert problems.count == 1;
+            assert problems[0].contains("host is now engine");
+        si
+
+        @Test()
+        an_engine_names_what_runs_wasm() is
+            let outcome = MANIFEST_READER.read("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"engine\": {{ \"wasm\": \"wasmtime\" }} }}", "ghul-project.json")
+
+            assert isa ReadOutcome.OK(outcome);
+            assert (cast ReadOutcome.OK(outcome)).manifest.host_wasm =~ "wasmtime";
+        si
+
+        @Test()
+        a_git_dependency_may_name_a_version_range() is
+            let outcome = MANIFEST_READER.read("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"dependencies\": {{ \"parsing\": {{ \"git\": \"https://example.com/parsing\", \"version\": \"^1.2.0\" }} }} }}", "ghul-project.json")
+
+            assert isa ReadOutcome.OK(outcome);
+
+            let git = cast DEPENDENCY.GIT((cast ReadOutcome.OK(outcome)).manifest.dependencies["parsing"])
+
+            assert git.version!.to_string() =~ "^1.2.0";
+        si
+
+        @Test()
+        a_git_dependency_with_both_a_tag_and_a_version_is_refused() is
+            let problems = _problems("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"dependencies\": {{ \"parsing\": {{ \"git\": \"https://example.com/p\", \"tag\": \"v1.0.0\", \"version\": \"1.0.0\" }} }} }}")
+
+            assert problems.count == 1;
+            assert problems[0].contains("both tag and version");
         si
         // What reading a manifest that should not have read produced, as
         // the messages a caller would report.

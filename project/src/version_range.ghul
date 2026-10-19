@@ -1,0 +1,133 @@
+namespace Ghul.Project is
+    /// How a version range is written.
+    enum RangeKind is
+        /// `1.4.2`: exactly that version.
+        EXACT,
+
+        /// `^1.4.2`: at least that version, and below the next version that
+        /// changes the leftmost non-zero part.
+        CARET,
+
+        /// `~1.4.2`: at least that version, and below the next minor.
+        TILDE,
+
+        /// `>=1.4.2`: at least that version.
+        AT_LEAST
+    si
+
+    /// The versions a library or a tool may be at, written in a manifest as a
+    /// bare version (exactly that one), `^x.y.z`, `~x.y.z` or `>=x.y.z`.
+    ///
+    /// - kind: how it was written
+    /// - lower: the version written
+    class VERSION_RANGE(kind: RangeKind public, lower: System.Version public) is
+        /// The range `text` writes, or why it is not one.
+        ///
+        /// - text: a version, optionally preceded by `^`, `~` or `>=`
+        parse(text: string) -> Result[VERSION_RANGE, string] static is
+            let trimmed = text.trim()
+            let kind mut = RangeKind.EXACT
+            let digits mut = trimmed
+
+            if trimmed.starts_with(">=") then
+                kind = RangeKind.AT_LEAST
+                digits = trimmed.substring(2).trim()
+            elif trimmed.starts_with("^") then
+                kind = RangeKind.CARET
+                digits = trimmed.substring(1).trim()
+            elif trimmed.starts_with("~") then
+                kind = RangeKind.TILDE
+                digits = trimmed.substring(1).trim()
+            fi
+
+            if digits.starts_with("v") then
+                digits = digits.substring(1)
+            fi
+
+            let parts = digits.split(['.'])
+            let version: System.Version? mut
+
+            if parts.count != 3 \/ !System.Version.try_parse(digits, version ref) \/ !version? then
+                return Result.ERROR("'{text}' is not a version range: write x.y.z, optionally after ^, ~ or >=")
+            fi
+
+            return Result.OK(VERSION_RANGE(kind, version))
+        si
+
+        /// Whether `version` is in the range.
+        ///
+        /// - version: a release version
+        admits(version: System.Version) -> bool is
+            if version < lower then
+                return false
+            fi
+
+            case kind
+            when RangeKind.EXACT then
+                return version =~ lower
+            when RangeKind.AT_LEAST then
+                return true
+            when RangeKind.TILDE then
+                return version.major == lower.major /\ version.minor == lower.minor
+            else
+                if lower.major > 0 then
+                    return version.major == lower.major
+                fi
+
+                if lower.minor > 0 then
+                    return version.major == 0 /\ version.minor == lower.minor
+                fi
+
+                return version.major == 0 /\ version.minor == 0 /\ version.build == lower.build
+            esac
+        si
+
+        /// The range as written, without a leading `v`.
+        to_string() -> string =>
+            case kind
+            when RangeKind.EXACT then "{lower}"
+            when RangeKind.CARET then "^{lower}"
+            when RangeKind.TILDE then "~{lower}"
+            else ">={lower}"
+            esac
+    si
+si
+
+namespace Ghul.Project is
+    /// The names a manifest's `tools` uses.
+    class PROJECT_TOOLS is
+        /// The compiler.
+        COMPILER: string static => "compiler"
+
+        /// The assembler, optimiser and linker the llvm target links with.
+        LLVM: string static => "ghul-llvm"
+    si
+si
+
+namespace Ghul.Project is
+    /// Checks the version of a tool in use against what a manifest's `tools`
+    /// accepts for it.
+    class TOOL_FLOOR is
+        /// Why `version` of `tool` is not one the project accepts, or null
+        /// where it is, where the project says nothing about the tool, or
+        /// where the version is a build of the tool rather than a release.
+        ///
+        /// - tools: the manifest's `tools`
+        /// - tool: the tool's name there
+        /// - version: the version in use
+        problem(tools: Collections.Map[string, VERSION_RANGE], tool: string, version: string) -> string? static is
+            let range: VERSION_RANGE mut
+            let parsed: System.Version? mut
+
+            if !tools.try_get_value(tool, range ref) \/ !System.Version.try_parse(version, parsed ref) \/ !parsed? then
+                return null
+            fi
+
+            if range.admits(parsed) then
+                return null
+            fi
+
+            return "{tool} {version} is outside {range} that the project names in tools"
+        si
+    si
+si

@@ -97,7 +97,7 @@ namespace Ghul.Cli.Tests is
             try
                 let toolchain = _releases(scratch)
 
-                assert toolchain.latest_tag()! =~ "v1.10.0"
+                assert toolchain.latest_tag(null)! =~ "v1.10.0"
             finally
                 Directory.delete(scratch, true)
             yrt
@@ -110,11 +110,11 @@ namespace Ghul.Cli.Tests is
             try
                 let toolchain = _releases(scratch)
 
-                assert toolchain.latest_tag()! =~ "v1.10.0"
+                assert toolchain.latest_tag(null)! =~ "v1.10.0"
 
                 Directory.delete(Path.combine(scratch, "releases"), true)
 
-                assert toolchain.latest_tag()! =~ "v1.10.0"
+                assert toolchain.latest_tag(null)! =~ "v1.10.0"
             finally
                 Directory.delete(scratch, true)
             yrt
@@ -127,7 +127,7 @@ namespace Ghul.Cli.Tests is
             try
                 let toolchain = LLVM_TOOLCHAIN(Path.combine(scratch, "cache"), System.Uri(Path.combine(scratch, "releases")).absolute_uri)
 
-                assert !toolchain.latest_tag()?
+                assert !toolchain.latest_tag(null)?
             finally
                 Directory.delete(scratch, true)
             yrt

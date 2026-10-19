@@ -238,6 +238,28 @@ builds for and where its sources are:
 `ghul new` writes `["wasm"]` unless `--target` names others. A manifest that
 lists `dotnet` is refused, with a message pointing at the .NET SDK.
 
+A manifest's `tools` names the oldest release of a tool the project was written
+with, as the same ranges a dependency takes:
+
+```json
+{
+    "name": "greeter",
+    "kind": "program",
+    "targets": ["llvm", "wasm"],
+    "sources": ["src/**/*.ghul"],
+    "tools": { "compiler": ">=66.7.0", "ghul-llvm": ">=1.0.0" }
+}
+```
+
+The tools a project can name are `compiler` and, for an llvm build,
+`ghul-llvm`. `ghul new` writes a floor (`>=`) for each tool its targets need,
+the release in use when it ran. Tools are always the newest release, so a
+floor never holds a newer one back: it makes a machine whose compiler is older
+update it, and a range that does not admit the newest release is reported. A
+compiler named with `--compiler` or `GHUL_COMPILER` below the floor is used,
+with a warning. A tool a manifest does not name is the newest release, and no
+tool is ever an error for lacking a floor.
+
 `ghul build` builds the project in the current directory into
 `out/<target>/`. `ghul run` builds it and then runs it, passing the arguments
 after `--` to the program; `ghul run <script>` still runs a script, project
@@ -248,7 +270,7 @@ A project that lists one target builds that one. Where it lists several,
 environment. Otherwise `ghul` takes the first target in order that the
 machine can build:
 - wasm, which needs nothing at build time; the run finds something to run
-  the module under, as the hosts section below describes
+  the module under, as the engines section below describes
 
 A manifest's `prefer`, such as `"prefer": ["wasm"]`, puts the targets it
 names first, and every one it names has to be among `targets`. When `ghul`
@@ -256,20 +278,22 @@ passes over a target it cannot build, it says what it built for instead in one
 line; choosing the first in order, it says nothing. Where no listed target
 can be built, it says why for each and builds nothing.
 
-## hosts and global defaults
+## engines and global defaults
 
-A wasm program needs something to run the module: the wasmtime host, or
-Node.js through the loader the compiler writes. Which one is chosen in three
-steps, each filling only what the one before leaves unset.
+A wasm program needs an engine to run the module: wasmtime, or Node.js
+through the loader the compiler writes. (The host is the machine `ghul` runs
+on.) Which engine is chosen in three steps, each filling only what the one
+before leaves unset.
 
-1. The project manifest names it: `"host": { "wasm": "wasmtime" }` or
-   `"host": { "wasm": "node" }`.
+1. The project manifest names it: `"engine": { "wasm": "wasmtime" }` or
+   `"engine": { "wasm": "node" }`. The key was once `host`, which is refused
+   with a message.
 2. The machine's global configuration file,
    `~/.config/ghul/config.json`, names a default for every project that
    does not choose:
 
    ```json
-   { "defaults": { "host": { "wasm": "wasmtime" } } }
+   { "defaults": { "engine": { "wasm": "wasmtime" } } }
    ```
 
 3. Nothing said anywhere, the built-in default is node, which runs these
@@ -279,7 +303,7 @@ steps, each filling only what the one before leaves unset.
    and is fetched where it is missing. A host named by the manifest or the
    global file is honoured rather than swapped.
 
-A project that names a host itself is never overridden by the global file.
+A project that names an engine itself is never overridden by the global file.
 The built-in order a build follows is wasm; llvm is never chosen
 automatically.
 
@@ -320,7 +344,11 @@ to date.
 Any other entry in `dependencies` names a source library a wasm build compiles
 in after those two: a directory holding a `ghul-project.json` that lists
 `wasm` among its targets, declared by `path` or as a `git` repository at a
-`tag`, and fetched into the same cache. A library's own dependencies are
+`version`, and fetched into the same cache. A `version` is a bare release
+(exactly that one), `^1.2.3` (at least that, below the next major), `~1.2.3`
+(at least that, below the next minor) or `>=1.2.3`, and resolves to the newest
+matching release, listed on every build, with the one used last where GitHub
+cannot be reached. A `tag` is the older spelling of an exact version. A library's own dependencies are
 compiled in too, each before the libraries that use it, and a `path` in a
 library's manifest is relative to that library.
 

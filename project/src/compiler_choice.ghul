@@ -1,33 +1,6 @@
 namespace Ghul.Project is
-    /// Which compiler a project build uses.
-    union CompilerChoice is
-        /// The newest installed, or the newest release where none is.
-        INSTALLED;
-
-        /// The newest release, installed if need be, because the newest
-        /// installed is too old for the build.
-        NEWEST(installed: string);
-    si
-
-    /// Chooses the compiler for a build from what is installed. A build for
-    /// a target with a minimum compiler needs at least that one; a dotnet
-    /// build takes any.
+    /// Compares compiler versions.
     class COMPILER_CHOICE is
-        /// The compiler a build of `target` uses.
-        ///
-        /// - target: the target being built
-        /// - mode: how the build is made
-        /// - installed: the newest installed version, or null when none is
-        choose(target: BuildTarget, mode: BUILD_MODE, installed: string?) -> CompilerChoice static is
-            let minimum = BUILD_TARGETS.minimum_compiler(target, mode)
-
-            if minimum? /\ installed? /\ is_older_than(installed!, minimum) then
-                return CompilerChoice.NEWEST(installed!)
-            fi
-
-            return CompilerChoice.INSTALLED
-        si
-
         /// Whether `version` is a release older than `minimum`. A version
         /// that does not parse is a build of the compiler rather than a
         /// release, and is taken to be current.
