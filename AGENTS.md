@@ -236,7 +236,7 @@ looks for them.
   a dependency refused for the dotnet target, an unlisted target, a missing manifest, the
   `--library` and `--compiler` overrides and the wasm compiler minimum. It
   then runs `tests/projects` with ghul-test against the CLI it built.
-- `tests/projects/` — ghul-test project tests (`--use-ghul-cli`): programs
+- `tests/projects/` — ghul-test project tests (a `ghul-cli` build configuration; `tests/projects/ghul-project.json` marks the directory a collection so the fixtures are not one project): programs
   for dotnet and wasm, one depending on the source library in
   `tests/libraries`, and a build that fails, each with the output or
   diagnostics expected of it.

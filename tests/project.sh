@@ -9,7 +9,8 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 scratch="$(mktemp -d)"
-trap 'rm -rf "$scratch"' EXIT
+config="$repo_root/ghul-test.json"
+trap 'rm -rf "$scratch" "$config"' EXIT
 
 dotnet build -nologo -c Debug "$repo_root/cli/ghul-cli.ghulproj" -o "$scratch/build" >&2
 cli="$scratch/build/ghul-cli.dll"
@@ -279,7 +280,17 @@ fi
 [[ "$err" == *"cannot list the ghul-llvm releases: file://$scratch/no-releases does not exist"* ]] || fail "unexpected message for a missing ghul-llvm release: $err"
 
 echo "project: the programs under tests/projects build and print what they should..." >&2
-(cd "$repo_root" && dotnet tool restore >/dev/null && dotnet ghul-test --use-ghul-cli --ghul "dotnet $cli" tests/projects) >&2 \
+# The runner takes its build from a configuration; this one names the CLI
+# just built, which only this script knows the path of.
+cat > "$config" <<JSON
+{
+    "default": "cli",
+    "configurations": {
+        "cli": { "build": "ghul-cli", "ghul": "dotnet $cli" }
+    }
+}
+JSON
+(cd "$repo_root" && dotnet tool restore >/dev/null && dotnet ghul-test tests/projects) >&2 \
     || fail "a project under tests/projects failed"
 
 echo "project: all checks passed" >&2
