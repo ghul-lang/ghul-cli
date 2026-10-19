@@ -458,7 +458,7 @@ namespace Ghul.Cli is
             fetched.add((path = file.name, bytes = read!))
         od
 
-        let manifest = Ghul.Project.ROSETTA_TASK.manifest_text(name, part, part.targets, found!.raster_version)
+        let manifest = Ghul.Project.ROSETTA_TASK.manifest_text(name, part, part.targets, found!.raster_version, new_project_libraries())
         let check = Ghul.Project.MANIFEST_READER.read(manifest, Path.join([directory, Ghul.Project.MANIFEST_LOCATION.FILE_NAME]))
 
         if let problems: Ghul.Project.ReadOutcome.PROBLEMS = check then

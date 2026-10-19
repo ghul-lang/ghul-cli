@@ -121,16 +121,24 @@ namespace Ghul.Project is
         /// - part: the solution
         /// - targets: the targets the project builds for
         /// - raster_version: the ghul.raster release to compile in, or null
-        manifest_text(name: string, part: ROSETTA_PART, targets: Collections.List[BuildTarget], raster_version: string?) -> string static is
+        /// - libraries: the oldest release of ghul-core and ghul-runtime the project is written with, as `ghul new` writes them
+        manifest_text(name: string, part: ROSETTA_PART, targets: Collections.List[BuildTarget], raster_version: string?, libraries: Collections.List[(tool: string, version: string)]) -> string static is
             let raster = raster_release(raster_version, targets)
             let quoted = string.join(", ", targets |> map(t => "\"{BUILD_TARGETS.name(t)}\""))
 
+            let entries = LIST[string]()
+
+            for library in libraries do
+                entries.add("\"{library.tool}\": {{ \"version\": \">={library.version}\" }}")
+            od
+
+            if part.raster then
+                entries.add("\"ghul-raster\": {{ \"git\": \"https://github.com/ghul-lang/ghul-raster\", \"tag\": \"v{raster}\" }}")
+            fi
+
             let dependencies =
-                if part.raster then
-                    ",\n"
-                    "    \"dependencies\": {{\n"
-                    "        \"ghul-raster\": {{ \"git\": \"https://github.com/ghul-lang/ghul-raster\", \"tag\": \"v{raster}\" }}\n"
-                    "    }}"
+                if entries.count > 0 then
+                    ",\n    \"dependencies\": {{ {string.join(", ", entries)} }}"
                 else
                     ""
                 fi
