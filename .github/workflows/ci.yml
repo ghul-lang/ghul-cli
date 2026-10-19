@@ -467,13 +467,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Windows (win-x64 on windows-latest, win-arm64 on windows-11-arm,
+        # both as .zip) builds and installs with install.ps1, but the wasm-built
+        # compiler cannot take a Windows path yet, so its archives are held.
         include:
-        - rid: win-x64
-          runner: windows-latest
-          extension: zip
-        - rid: win-arm64
-          runner: windows-11-arm
-          extension: zip
         - rid: osx-arm64
           runner: macos-latest
           extension: tar.gz
@@ -660,10 +657,6 @@ jobs:
           ./aot/ghul-cli-linux-x64.tar.gz.sha256 \
           ./aot/ghul-cli-linux-arm64.tar.gz \
           ./aot/ghul-cli-linux-arm64.tar.gz.sha256 \
-          ./aot/ghul-cli-win-x64.zip \
-          ./aot/ghul-cli-win-x64.zip.sha256 \
-          ./aot/ghul-cli-win-arm64.zip \
-          ./aot/ghul-cli-win-arm64.zip.sha256 \
           ./aot/ghul-cli-osx-arm64.tar.gz \
           ./aot/ghul-cli-osx-arm64.tar.gz.sha256 \
           ./aot/ghul-cli-install.ps1 \
