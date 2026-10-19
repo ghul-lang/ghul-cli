@@ -10,9 +10,7 @@ namespace Ghul.Project is
     /// the rest of what `Ghul` and `Ghul.Pipes` declare, from the files its
     /// `wasm-sources.rsp` lists.
     ///
-    /// A project gets the release of ghul-runtime this tool pins for the
-    /// compiler it builds with, or none with a compiler older than every
-    /// pinned release. Declaring `ghul-runtime` among the manifest's
+    /// A project gets the newest release of ghul-runtime. Declaring `ghul-runtime` among the manifest's
     /// dependencies, at a tag or as a path, uses that instead.
     class RUNTIME_LIBRARY is
         /// The library's name, which a manifest declares it under.
@@ -35,64 +33,16 @@ namespace Ghul.Project is
             return "https://github.com/ghul-lang/ghul-runtime"
         si
 
-        /// The release of ghul-runtime to build with a compiler: the newest
-        /// whose earliest compiler is no newer than `compiler_version`, or
-        /// null where the version is earlier than all of them or is not a
-        /// release number.
-        ///
-        /// - compiler_version: the `ghul.compiler` version the build uses
-        pinned_tag(compiler_version: string) -> string? static is
-            let result: string? mut = null
-            let compiler: System.Version? mut
-
-            if !System.Version.try_parse(compiler_version, compiler ref) \/ !compiler? then
-                return result
-            fi
-
-            for pin in _pins() do
-                if System.Version.parse(pin.earliest_compiler) <= compiler then
-                    result = pin.tag
-                fi
-            od
-
-            return result
-        si
-
-        // Each release of ghul-runtime that lists its wasm sources, and the
-        // earliest compiler that builds them, oldest first. A new release of
-        // either adds a line.
-        _pins() -> (earliest_compiler: string, tag: string)[] static =>
-            [
-                (earliest_compiler = "64.15.0", tag = "v25.0.3"),
-                (earliest_compiler = "64.23.1", tag = "v25.0.8"),
-                (earliest_compiler = "64.26.3", tag = "v25.0.11"),
-                (earliest_compiler = "64.28.1", tag = "v25.1.0"),
-                (earliest_compiler = "65.1.4", tag = "v25.3.0"),
-                (earliest_compiler = "65.3.2", tag = "v25.4.0"),
-                (earliest_compiler = "65.4.2", tag = "v25.5.0"),
-                (earliest_compiler = "65.4.5", tag = "v25.6.0"),
-                (earliest_compiler = "65.5.0", tag = "v25.7.0"),
-                (earliest_compiler = "65.15.0", tag = "v25.9.1"),
-                (earliest_compiler = "65.22.0", tag = "v25.10.3"),
-                (earliest_compiler = "65.30.0", tag = "v27.0.0")
-            ]
-
         /// The runtime library for `manifest`, fetching it into `cache` if it
-        /// is not there already; null where none is pinned for the compiler
-        /// and the manifest declares none.
+        /// is not there already.
         ///
         /// - manifest: the project being built
         /// - manifest_directory: the directory holding the manifest, which a
         ///   path dependency is relative to
-        /// - compiler_version: the compiler the build uses
-        /// - requirements: what the compiler declares it needs, or null for a
-        ///   compiler from before the declaration, which gets this tool's pin
         /// - cache: where fetched libraries are kept
         find(
             manifest: MANIFEST,
             manifest_directory: string,
-            compiler_version: string,
-            requirements: COMPILER_REQUIREMENTS?,
             cache: LIBRARY_CACHE
         ) -> Result[SOURCE_LIBRARY, string] static is
             let declared: DEPENDENCY mut
@@ -111,24 +61,13 @@ namespace Ghul.Project is
                 return ERROR("{NAME} must be declared with a tag or a path")
             fi
 
-            if let floor = requirements?.runtime then
-                let resolved = LIBRARY_RESOLVER(cache).resolve(NAME, repository(), floor, compiler_version)
+            let resolved = LIBRARY_RESOLVER(cache).latest(NAME, repository())
 
-                if let (problem): Result.ERROR = resolved then
-                    return ERROR(problem)
-                fi
-
-                return _fetched(cache.fetch_tag(repository(), resolved!), null, resolved!)
+            if let (problem): Result.ERROR = resolved then
+                return ERROR(problem)
             fi
 
-            if let tag = pinned_tag(compiler_version) then
-                return _fetched(cache.fetch_tag(repository(), tag), null, tag)
-            fi
-
-            // A build for a source-core target cannot go ahead without the
-            // runtime: building without it would compile, and then fail
-            // where the program first reaches for it.
-            return ERROR("no {NAME} release is known for ghul.compiler {compiler_version}; name one in the manifest's dependencies")
+            return _fetched(cache.fetch_tag(repository(), resolved!), null, resolved!)
         si
 
         _fetched(outcome: Result[(directory: string, commit: string), string], directory: string?, tag: string) -> Result[SOURCE_LIBRARY, string] static is

@@ -14,9 +14,8 @@ namespace Ghul.Cli is
     /// assembler, optimiser and linker in one executable, released with the
     /// runtime archives it links against beside it.
     ///
-    /// A build gets the release this tool pins for the compiler it builds
-    /// with, fetched once into `<root>/<tag>/` and kept there. Setting
-    /// `GHUL_LLVM` to a `ghul-llvm` executable uses that instead.
+    /// A build gets the newest release, fetched once into `<root>/<tag>/`
+    /// and kept there. Setting `GHUL_LLVM` to a `ghul-llvm` executable uses that instead.
     ///
     /// - root: where fetched releases are kept
     /// - releases: the release download base, which `GHUL_LLVM_RELEASES`
@@ -179,54 +178,17 @@ namespace Ghul.Cli is
         _uri() -> System.Uri? =>
             if System.Uri.is_well_formed_uri_string(releases, System.UriKind.ABSOLUTE) then System.Uri(releases) else null fi
 
-        /// The release of `ghul-llvm` to link with for a compiler that
-        /// declares none: the newest pin whose earliest compiler is no newer
-        /// than `compiler_version`, or null where the version is earlier than
-        /// all of them or is not a release number.
-        ///
-        /// - compiler_version: the `ghul.compiler` version the build uses
-        pinned_tag(compiler_version: string) -> string? static is
-            let result: string? mut = null
-            let compiler: System.Version? mut
-
-            if !System.Version.try_parse(compiler_version, compiler ref) \/ !compiler? then
-                return result
-            fi
-
-            for pin in _pins() do
-                if System.Version.parse(pin.earliest_compiler) <= compiler then
-                    result = pin.tag
-                fi
-            od
-
-            return result
-        si
-
-        // Each release of ghul-llvm and the earliest compiler that links
-        // with it, oldest first. A release that changes what the compiler
-        // and the runtime archives agree on adds a line.
-        _pins() -> (earliest_compiler: string, tag: string)[] static =>
-            [
-                (earliest_compiler = "65.5.0", tag = "v0.6.0"),
-                (earliest_compiler = "65.8.0", tag = "v0.12.0"),
-                (earliest_compiler = "65.20.0", tag = "v0.14.0")
-            ]
-
         /// The name of the archive a release publishes for `triple`.
         ///
         /// - triple: the platform, as `triple()` gives it
         archive_name(triple: string) -> string static =>
             "ghul-llvm-{triple}.tar.gz"
 
-        /// The `ghul-llvm` executable to link with for `compiler_version`,
-        /// fetching its release first if it is not already kept, or the
-        /// reason there is none: the newest release at or above the one the
-        /// compiler declares that admits the compiler, or this tool's pin for
-        /// a compiler that declares none.
-        ///
-        /// - compiler_version: the compiler the build uses
-        /// - requirements: what the compiler declares it needs, or null
-        executable(compiler_version: string, requirements: Ghul.Project.COMPILER_REQUIREMENTS?) -> Result[string, string] is
+        /// The `ghul-llvm` executable to link with, fetching the newest
+        /// release first if it is not already kept, or the reason there is
+        /// none. Where the releases cannot be listed, the newest release
+        /// already kept is used.
+        executable() -> Result[string, string] is
             let named = System.Environment.get_environment_variable("GHUL_LLVM")
 
             if named? /\ named.length > 0 then
@@ -239,35 +201,23 @@ namespace Ghul.Cli is
                 return ERROR("the llvm target builds only on Linux x64 and arm64")
             fi
 
-            let tag = chosen_tag(compiler_version, requirements)
+            let tag = latest_tag()
 
             if let (problem): ERROR = tag then
+                if let kept = highest_kept(platform!) then
+                    return executable(kept, platform!)
+                fi
+
                 return ERROR(problem)
             fi
 
             return executable(tag!, platform!)
         si
 
-        /// The release of `ghul-llvm` `compiler_version` links with: the
-        /// newest release at or above the one the compiler declares that
-        /// admits the compiler, or this tool's pin for a compiler that
-        /// declares none. Nothing is fetched.
-        ///
-        /// - compiler_version: the compiler the build uses
-        /// - requirements: what the compiler declares it needs, or null
-        chosen_tag(compiler_version: string, requirements: Ghul.Project.COMPILER_REQUIREMENTS?) -> Result[string, string] is
-            if let declared = requirements?.llvm then
-                return release_tag(declared, compiler_version)
-            fi
-
-            let tag = pinned_tag(compiler_version)
-
-            if !tag? then
-                return ERROR("no ghul-llvm release is pinned for ghul.compiler {compiler_version}, which the llvm target needs {Ghul.Project.BUILD_TARGETS.minimum_compiler(Ghul.Project.BuildTarget.LLVM)} or newer for")
-            fi
-
-            return OK(tag!)
-        si
+        /// The newest release of `ghul-llvm`, or the one used last where the
+        /// releases cannot be listed. Nothing is fetched.
+        latest_tag() -> Result[string, string] =>
+            Ghul.Project.LIBRARY_RESOLVER.latest_of(Path.join([root, "latest"]), "ghul-llvm", releases, () => _release_tags())
 
         /// Whether release `tag` for `triple` is in the cache.
         ///
@@ -275,21 +225,6 @@ namespace Ghul.Cli is
         /// - triple: the platform
         is_kept(tag: string, triple: string) -> bool =>
             File.exists(Path.join([root, tag, triple, "bin", "ghul-llvm"]))
-
-        /// The release of `ghul-llvm` to link with for `compiler_version`:
-        /// the newest at or above `floor` whose `requirements.json` admits
-        /// the compiler, chosen as the libraries' releases are.
-        ///
-        /// - floor: the oldest release the compiler links with, as `x.y.z`
-        /// - compiler_version: the compiler the build uses
-        release_tag(floor: string, compiler_version: string) -> Result[string, string] is
-            let needs = (tag: string) -> Result[System.Version?, string] => _minimum_compiler(tag)
-
-            return Ghul.Project.LIBRARY_RESOLVER.kept_or_chosen(
-                Path.join([root, "chosen", "{compiler_version}-{floor}"]),
-                () -> Result[Collections.List[(tag: string, version: System.Version)], string] => _release_tags(),
-                tags => Ghul.Project.LIBRARY_RESOLVER.newest_meeting("ghul-llvm", releases, floor, compiler_version, tags, needs))
-        si
 
         // The release tags, newest first: the release directories of a
         // file:// base, or the repository's tags otherwise.
@@ -324,44 +259,6 @@ namespace Ghul.Cli is
             fi
 
             return OK(Ghul.Project.LIBRARY_RESOLVER.release_tags(listed.output))
-        si
-
-        // The oldest compiler release `tag` declares it links with, null
-        // where it publishes no requirements.json.
-        _minimum_compiler(tag: string) -> Result[System.Version?, string] is
-            let url = "{releases}/{tag}/{Ghul.Project.LIBRARY_RESOLVER.FILE_NAME}"
-
-            if url.starts_with("file://") then
-                let path = System.Uri(url).local_path
-
-                if !File.exists(path) then
-                    return OK(null)
-                fi
-
-                return OK(Ghul.Project.LIBRARY_RESOLVER.minimum_compiler_in(File.read_all_text(path)))
-            fi
-
-            let client = System.Net.Http.HttpClient()
-
-            try
-                client.default_request_headers.user_agent.parse_add("ghul-cli")
-
-                let response = client.get_async(url).result
-
-                if response.status_code == System.Net.HttpStatusCode.NOT_FOUND then
-                    return OK(null)
-                fi
-
-                if !response.is_success_status_code then
-                    return ERROR("{url} answered HTTP {cast int(response.status_code)}")
-                fi
-
-                return OK(Ghul.Project.LIBRARY_RESOLVER.minimum_compiler_in(response.content.read_as_string_async().result))
-            catch e: Ghul.Exception
-                return ERROR("{url} could not be read ({e.get_type().name})")
-            finally
-                client.dispose()
-            yrt
         si
 
         /// The `ghul-llvm` executable of release `tag` for `triple`,

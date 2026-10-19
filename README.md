@@ -94,8 +94,7 @@ there is none, so the machine needs Node, and `ghul install node` brings one in.
 
 Which machines that covers follows from the builds that exist. `ghul` is a
 .NET tool except as its Linux x64 native archive, so a machine with no .NET at
-all is Linux x64 or arm64. `ghul` builds for wasm and, on Linux x64, llvm
-(`ghul-llvm` is not released for arm64); it does not
+all is Linux x64 or arm64. `ghul` builds for wasm and, on Linux x64 and arm64, llvm; it does not
 build for .NET, which is the .NET SDK's job, with a `.ghulproj` and `dotnet build`.
 
 A script, `ghul script.ghul`, a `#!/usr/bin/env ghul` script or one read from
@@ -173,8 +172,7 @@ installed. `GHUL_COMPILER_FEED` names a different feed to download from, for a
 mirror or an offline network.
 
 `ghul install llvm` installs the ghul-llvm tool the llvm target links with. It
-needs no compiler: with one installed it takes the newest release that
-compiler admits, and with none the newest release. `--version` names one. It
+needs no compiler: it takes the newest release. `--version` names one. It
 is released for Linux on x64 and arm64. `ghul install wasmtime`
 installs the wasmtime host that runs wasm programs where there is no Node.js;
 a run that needs it and finds it missing downloads the latest release first.
@@ -313,12 +311,11 @@ the built-in types their members, and then ghul-runtime, which supplies the
 pipes and the rest of `Ghul`. Declaring `ghul-core` or `ghul-runtime` in the
 manifest's `dependencies`, at a `tag` or a `path`, uses that instead.
 
-A compiler declares the oldest release of each library it works with in the
-`requirements.json` beside it, and each library release declares the oldest
-compiler that builds it in a `requirements.json` of its own. A build uses the
-newest release that satisfies both, and keeps the choice for a day; where no
-release does, the build stops with a message naming both versions. A compiler
-from before the declaration gets the release this tool pins for it.
+A build uses the newest release of each library. The releases are listed on
+every build; where GitHub cannot be reached, the release used last is used
+again. A library that needs a newer compiler than the installed one fails to
+compile with the compiler's own error, and `ghul update` brings the compiler up
+to date.
 
 Any other entry in `dependencies` names a source library a wasm build compiles
 in after those two: a directory holding a `ghul-project.json` that lists
@@ -335,8 +332,7 @@ version named by `GHUL_COMPILER_VERSION`.
 Two options override the manifest for one build, which is how a repository
 tests its own checkout. `--compiler <command>` builds with the command given,
 such as `dotnet /path/to/publish/ghul.dll`, in place of an installed compiler;
-the libraries for it are chosen from the `requirements.json` beside it, or by
-the version it prints when run with no arguments where there is none. `--library <name>=<path>`, which can be given more than once,
+the libraries are the newest releases, as for any build. `--library <name>=<path>`, which can be given more than once,
 compiles the source library `name` (`ghul-core` or `ghul-runtime`) from the
 directory at `path`. Both work with `build`, `run` and `ghul project
 response-file`, and `--compiler` with `ghul project compiler`.
@@ -398,7 +394,7 @@ A project that lists the `llvm` target builds a native executable for Linux
 x86-64 into `out/llvm/`, and `ghul run --target llvm` runs it directly. With
 ghul.compiler 65.8.0 or newer the executable needs an x86-64-v3 CPU (AVX2 and
 BMI2, from about 2013 on). The
-first such build also fetches the `ghul-llvm` release pinned for the compiler,
+first such build also fetches the newest `ghul-llvm` release,
 the linker and runtime it links with, into the same cache; setting `GHUL_LLVM`
 to a `ghul-llvm` executable uses that one instead. The compiler's code
 generation for this target is in its early stages, and a build reports what it

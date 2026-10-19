@@ -56,19 +56,6 @@ namespace Ghul.Cli.Tests is
 
         _targets(targets: BuildTarget[]) -> Collections.List[BuildTarget] => LIST[BuildTarget](targets)
 
-        // A compiler older than any runtime this tool knows, and declaring
-        // none, gets no runtime at all: the build is refused rather than
-        // made without one.
-        @Test()
-        a_build_with_no_runtime_to_compile_in_is_refused() is
-            let project = _project(ManifestKind.PROGRAM, BuildTarget.WASM)
-            let cache = LIBRARY_CACHE(IO.Path.combine(IO.Path.get_temp_path(), "ghul-unused-cache"))
-            let found = RUNTIME_LIBRARY.find(project.manifest, project.directory, "60.0.0", null, cache)
-
-            assert !found? else "expected the build to be refused"
-            assert (cast Result.ERROR(found)).error.contains("no ghul-runtime release is known for ghul.compiler 60.0.0")
-        si
-
         @Test()
         the_only_target_is_taken_when_none_is_named() is
             let chosen = PROJECT_LOADER.choose_target(_targets([BuildTarget.WASM]), null)
@@ -206,76 +193,6 @@ namespace Ghul.Cli.Tests is
             _same("r g wasm", "{parsed.output} {parsed.source_globs} {parsed.target}")
         si
 
-        @Test()
-        the_core_library_tag_follows_the_compiler_version() is
-            _same("v0.3.0", CORE_LIBRARY.pinned_tag("64.11.0"))
-            _same("v0.3.0", CORE_LIBRARY.pinned_tag("64.12.4"))
-            _same("v0.6.1", CORE_LIBRARY.pinned_tag("64.13.0"))
-            _same("v0.6.1", CORE_LIBRARY.pinned_tag("64.13.3"))
-            _same("v0.13.0", CORE_LIBRARY.pinned_tag("64.13.4"))
-            _same("v0.13.0", CORE_LIBRARY.pinned_tag("64.26.2"))
-            _same("v0.20.0", CORE_LIBRARY.pinned_tag("64.26.3"))
-            _same("v0.20.0", CORE_LIBRARY.pinned_tag("64.28.0"))
-            _same("v0.27.0", CORE_LIBRARY.pinned_tag("64.28.1"))
-            _same("v0.27.0", CORE_LIBRARY.pinned_tag("65.0.0"))
-            _same("v0.34.0", CORE_LIBRARY.pinned_tag("65.0.1"))
-            _same("v0.35.0", CORE_LIBRARY.pinned_tag("65.1.0"))
-            _same("v0.35.0", CORE_LIBRARY.pinned_tag("65.1.3"))
-            _same("v0.36.0", CORE_LIBRARY.pinned_tag("65.1.4"))
-            _same("v0.36.0", CORE_LIBRARY.pinned_tag("65.3.0"))
-            _same("v0.37.0", CORE_LIBRARY.pinned_tag("65.3.1"))
-            _same("v0.37.0", CORE_LIBRARY.pinned_tag("65.4.1"))
-            _same("v0.38.0", CORE_LIBRARY.pinned_tag("65.4.2"))
-            _same("v0.39.0", CORE_LIBRARY.pinned_tag("65.4.3"))
-            _same("v0.39.0", CORE_LIBRARY.pinned_tag("65.4.4"))
-            _same("v0.40.0", CORE_LIBRARY.pinned_tag("65.4.5"))
-            _same("v0.40.0", CORE_LIBRARY.pinned_tag("65.8.0"))
-            _same("v0.45.0", CORE_LIBRARY.pinned_tag("65.8.1"))
-            _same("v0.45.0", CORE_LIBRARY.pinned_tag("65.15.0"))
-            _same("v0.45.0", CORE_LIBRARY.pinned_tag("65.21.9"))
-            _same("v0.55.0", CORE_LIBRARY.pinned_tag("65.22.0"))
-            _same("v0.67.2", CORE_LIBRARY.pinned_tag("65.30.0"))
-            _same("v0.67.2", CORE_LIBRARY.pinned_tag("70.0.0"))
-        si
-
-        @Test()
-        a_compiler_older_than_every_pin_or_not_a_release_takes_the_oldest() is
-            _same("v0.3.0", CORE_LIBRARY.pinned_tag("1.0.0"))
-            _same("v0.3.0", CORE_LIBRARY.pinned_tag("0.0.0-local-x.1"))
-        si
-
-        @Test()
-        the_runtime_library_tag_follows_the_compiler_version() is
-            _same("v25.0.3", RUNTIME_LIBRARY.pinned_tag("64.15.0") ?? "none")
-            _same("v25.0.3", RUNTIME_LIBRARY.pinned_tag("64.23.0") ?? "none")
-            _same("v25.0.8", RUNTIME_LIBRARY.pinned_tag("64.23.1") ?? "none")
-            _same("v25.0.8", RUNTIME_LIBRARY.pinned_tag("64.26.2") ?? "none")
-            _same("v25.0.11", RUNTIME_LIBRARY.pinned_tag("64.26.3") ?? "none")
-            _same("v25.0.11", RUNTIME_LIBRARY.pinned_tag("64.28.0") ?? "none")
-            _same("v25.1.0", RUNTIME_LIBRARY.pinned_tag("64.28.1") ?? "none")
-            _same("v25.1.0", RUNTIME_LIBRARY.pinned_tag("65.1.3") ?? "none")
-            _same("v25.3.0", RUNTIME_LIBRARY.pinned_tag("65.1.4") ?? "none")
-            _same("v25.3.0", RUNTIME_LIBRARY.pinned_tag("65.3.1") ?? "none")
-            _same("v25.4.0", RUNTIME_LIBRARY.pinned_tag("65.3.2") ?? "none")
-            _same("v25.4.0", RUNTIME_LIBRARY.pinned_tag("65.4.1") ?? "none")
-            _same("v25.5.0", RUNTIME_LIBRARY.pinned_tag("65.4.2") ?? "none")
-            _same("v25.5.0", RUNTIME_LIBRARY.pinned_tag("65.4.4") ?? "none")
-            _same("v25.6.0", RUNTIME_LIBRARY.pinned_tag("65.4.5") ?? "none")
-            _same("v25.6.0", RUNTIME_LIBRARY.pinned_tag("65.4.9") ?? "none")
-            _same("v25.7.0", RUNTIME_LIBRARY.pinned_tag("65.5.0") ?? "none")
-            _same("v25.7.0", RUNTIME_LIBRARY.pinned_tag("65.14.9") ?? "none")
-            _same("v25.9.1", RUNTIME_LIBRARY.pinned_tag("65.15.0") ?? "none")
-            _same("v25.9.1", RUNTIME_LIBRARY.pinned_tag("65.21.9") ?? "none")
-            _same("v25.10.3", RUNTIME_LIBRARY.pinned_tag("65.22.0") ?? "none")
-            _same("v27.0.0", RUNTIME_LIBRARY.pinned_tag("65.30.0") ?? "none")
-            _same("v27.0.0", RUNTIME_LIBRARY.pinned_tag("70.0.0") ?? "none")
-        si
-
-        @Test()
-        a_compiler_older_than_every_runtime_pin_or_not_a_release_takes_no_runtime() is
-            _same("none", RUNTIME_LIBRARY.pinned_tag("64.14.1") ?? "none")
-            _same("none", RUNTIME_LIBRARY.pinned_tag("0.0.0-local-x.1") ?? "none")
-        si
 
         @Test()
         a_run_names_the_project_with_no_script_or_a_project_option() is

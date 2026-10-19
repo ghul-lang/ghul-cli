@@ -60,20 +60,16 @@ namespace Ghul.Project is
         /// to `say`, where any of them cannot be found.
         ///
         /// - project: the project being built
-        /// - compiler_version: the compiler the build uses
-        /// - requirements: what the compiler declares it needs, or null
         /// - cache: where fetched libraries are kept
         /// - say: where a problem is reported
         libraries(
             project: LOADED_PROJECT,
-            compiler_version: string,
-            requirements: COMPILER_REQUIREMENTS?,
             cache: LIBRARY_CACHE,
             say: (string) -> void
         ) -> Collections.List[SOURCE_LIBRARY]? static is
             let result = LIST[SOURCE_LIBRARY]()
 
-            let found = CORE_LIBRARY.find(project.manifest, project.directory, compiler_version, requirements, cache)
+            let found = CORE_LIBRARY.find(project.manifest, project.directory, cache)
 
             if let (problem): Result.ERROR = found then
                 say(problem)
@@ -82,7 +78,7 @@ namespace Ghul.Project is
 
             result.add(found!)
 
-            let runtime = RUNTIME_LIBRARY.find(project.manifest, project.directory, compiler_version, requirements, cache)
+            let runtime = RUNTIME_LIBRARY.find(project.manifest, project.directory, cache)
 
             if let (problem): Result.ERROR = runtime then
                 say(problem)
@@ -187,7 +183,7 @@ namespace Ghul.Project is
             extra: Collections.List[string],
             quiet: bool
         ) -> int static is
-            let compiled_in = libraries(project, compiler_version, COMPILER_REQUIREMENTS.read(compiler.directory), cache, say)
+            let compiled_in = libraries(project, cache, say)
 
             if !compiled_in? then
                 return 1

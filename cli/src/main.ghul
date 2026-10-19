@@ -852,7 +852,6 @@ namespace Ghul.Cli is
 
         let compiler_version = ensured!
         let compiler = _built_compiler(store, compiler_version).compiler
-        let requirements = Ghul.Project.COMPILER_REQUIREMENTS.read(compiler.directory)
         let cache = Ghul.Project.LIBRARY_CACHE.for_this_user()
         let mode = Ghul.Project.BUILD_MODE(false, null)
 
@@ -865,7 +864,7 @@ namespace Ghul.Cli is
                 Collections.LIST[Ghul.Project.BuildTarget](), null)
 
         let libraries = Ghul.Project.PROJECT_BUILD.libraries(
-            Ghul.Project.LOADED_PROJECT(manifest, cache_root(), target), compiler_version, requirements, cache, say)
+            Ghul.Project.LOADED_PROJECT(manifest, cache_root(), target), cache, say)
 
         if !libraries? then
             return (exit_code = 1, project = null, output = "")
@@ -885,7 +884,7 @@ namespace Ghul.Cli is
         let linker: string? mut = null
 
         if target == Ghul.Project.BuildTarget.LLVM then
-            let found = LLVM_TOOLCHAIN.for_this_user().executable(compiler_version, requirements)
+            let found = LLVM_TOOLCHAIN.for_this_user().executable()
 
             if let (error): ERROR = found then
                 say(error)
@@ -1237,12 +1236,10 @@ namespace Ghul.Cli is
             let linker: string? mut = null
 
             // A program for the llvm target is linked by the compiler, with
-            // the ghul-llvm release pinned for it.
+            // the newest ghul-llvm release.
             if project.target == Ghul.Project.BuildTarget.LLVM /\ project.manifest.kind == Ghul.Project.ManifestKind.PROGRAM then
                 let found =
-                    LLVM_TOOLCHAIN.for_this_user().executable(
-                        compiler_version,
-                        Ghul.Project.COMPILER_REQUIREMENTS.read(compiler.directory))
+                    LLVM_TOOLCHAIN.for_this_user().executable()
 
                 if let (error): ERROR = found then
                     say(error)
@@ -1686,8 +1683,6 @@ namespace Ghul.Cli is
 
             if Ghul.Project.EDITOR_FILES.write(
                 project,
-                compiler_version,
-                Ghul.Project.COMPILER_REQUIREMENTS.read(compiler.directory),
                 Ghul.Project.LIBRARY_CACHE.for_this_user(),
                 options.output!,
                 options.source_globs,
