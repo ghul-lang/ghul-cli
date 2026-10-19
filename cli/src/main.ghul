@@ -453,16 +453,105 @@ namespace Ghul.Cli is
         elif thing =~ "node" then
             return cmd_install_node(version)
         elif thing =~ "llvm" then
-            let llvm_rest = Collections.LIST[string](["--llvm"])
-            for argument in others do
-                llvm_rest.add(argument)
-            od
-
-            return cmd_install_compiler(llvm_rest)
+            return cmd_install_llvm(version)
         fi
 
         Std.error.write_line("ghul: unknown thing '{thing}'; install compiler, wasmtime, node or llvm")
         return 1
+    si
+
+    // Installs the ghul-llvm tool the llvm target links with, into the
+    // cache: the release the installed compiler declares it needs, or the
+    // release `version` names. A build for the llvm target fetches it for
+    // itself when it is missing; this brings it in beforehand.
+    cmd_install_llvm(version: string?) -> int is
+        let platform = LLVM_TOOLCHAIN.triple()
+
+        if !platform? then
+            Std.error.write_line("ghul: the llvm target builds only on Linux x64 and arm64")
+            return 1
+        fi
+
+        let toolchain = LLVM_TOOLCHAIN.for_this_user()
+
+        if let wanted: string = version then
+            return _report_llvm(toolchain.executable("v{wanted}", platform!))
+        fi
+
+        let host = _host_store()
+
+        if let problem: string = host.problem then
+            Std.error.write_line("ghul: {problem}")
+            return 1
+        fi
+
+        let store = host.store ?? Host.COMPILER_STORE.for_this_user()
+        let compiler = store.highest_version()
+
+        if !compiler? then
+            Std.error.write_line("ghul: no ghul.compiler is installed to choose a ghul-llvm for (ghul install compiler brings one in)")
+            return 1
+        fi
+
+        return _report_llvm(
+            toolchain.executable(
+                compiler!,
+                Ghul.Project.COMPILER_REQUIREMENTS.read(store.directory(compiler!))))
+    si
+
+    _report_llvm(found: Result[string, string]) -> int is
+        if let (error): ERROR = found then
+            Std.error.write_line("ghul: {error}")
+            Std.error.write_line("ghul: failed to install ghul-llvm")
+            return 1
+        fi
+
+        Std.error.write_line("ghul: ghul-llvm is installed at {found!}")
+        return 0
+    si
+
+    // Refreshes the ghul-llvm tool to the newest release the installed
+    // compiler admits, or with `check_only` says whether there is one.
+    // Nothing is said of a tool that was never installed beyond how to
+    // install it.
+    _update_llvm(check_only: bool) -> int is
+        let platform = LLVM_TOOLCHAIN.triple()
+        let toolchain = LLVM_TOOLCHAIN.for_this_user()
+
+        if !platform? \/ !toolchain.has_any(platform!) then
+            Std.error.write_line("ghul: ghul-llvm is not installed (ghul install llvm brings it in)")
+            return 0
+        fi
+
+        let host = _host_store()
+        let store = host.store ?? Host.COMPILER_STORE.for_this_user()
+        let compiler = store.highest_version()
+
+        if !compiler? then
+            return 0
+        fi
+
+        let requirements = Ghul.Project.COMPILER_REQUIREMENTS.read(store.directory(compiler!))
+        let tag = toolchain.chosen_tag(compiler!, requirements)
+
+        if let (error): ERROR = tag then
+            Std.error.write_line("ghul: ghul-llvm: {error}")
+            return 1
+        fi
+
+        if toolchain.is_kept(tag!, platform!) then
+            Std.error.write_line("ghul: ghul-llvm {tag!} is the latest")
+            return 0
+        fi
+
+        if check_only then
+            Std.error.write_line("ghul: ghul-llvm has {tag!} available")
+            return 0
+        fi
+
+        Std.error.write_line("ghul: updating ghul-llvm to {tag!}...")
+
+        return _report_llvm(toolchain.executable(compiler!, requirements))
     si
 
     // Installs the newest LTS Node.js release that runs the wasm target,
@@ -775,10 +864,10 @@ namespace Ghul.Cli is
         // The compilers: the store builds use, and every other store that
         // holds a compiler.
         for store in _compiler_stores(host.store) do
-            let kind = if store.is_llvm then "ghul-llvm toolchain" else "ghul.compiler ({Path.get_file_name(store.root)})" fi
+            let kind = if store.is_llvm then "ghul.compiler (llvm-built)" else "ghul.compiler ({Path.get_file_name(store.root)})" fi
 
             if !store.highest_version()? then
-                Std.error.write_line("ghul: {kind} is not installed (ghul install {if store.is_llvm then "llvm" else "compiler" fi} brings it in)")
+                Std.error.write_line("ghul: {kind} is not installed (ghul install compiler{if store.is_llvm then " --llvm" else "" fi} brings it in)")
                 continue
             fi
 
@@ -815,6 +904,11 @@ namespace Ghul.Cli is
                 Std.error.write_line("ghul: {kind} updated to {updated!}")
             fi
         od
+
+        // The ghul-llvm tool, where one is in the cache already.
+        if _update_llvm(check_only) != 0 then
+            status = 1
+        fi
 
         // The wasmtime host: the refresh and its tag handling are the
         // download's own, shared with the run path that fetches on first
@@ -2003,7 +2097,7 @@ namespace Ghul.Cli is
         let rest = items[1..<0]
 
         if verb =~ "install-compiler" then
-            Std.error.write_line("ghul: 'ghul install-compiler' is now 'ghul install compiler' (or 'ghul install llvm' for the llvm toolchain)")
+            Std.error.write_line("ghul: 'ghul install-compiler' is now 'ghul install compiler' (or 'ghul install compiler --llvm' for the llvm-built compiler)")
             return cmd_install_compiler(rest)
         fi
 
