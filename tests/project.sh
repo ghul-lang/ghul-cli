@@ -217,6 +217,8 @@ fi
 echo "project: ghul new creates a project that builds and runs on wasm..." >&2
 (cd "$scratch" && dotnet "$cli" new scaffolded --target wasm,llvm 2>/dev/null) || fail "ghul new failed"
 [[ -f "$scratch/scaffolded/.gitignore" ]] || fail "ghul new wrote no .gitignore"
+grep -q '"compiler": ">=' "$scratch/scaffolded/ghul-project.json" || fail "ghul new wrote no compiler floor"
+grep -q '"ghul-llvm": ">=' "$scratch/scaffolded/ghul-project.json" || fail "ghul new wrote no ghul-llvm floor for a project with an llvm target"
 out="$(cd "$scratch/scaffolded" && dotnet "$cli" run --target wasm 2>/dev/null)" || fail "ghul run of a new project failed on wasm"
 check "$out" "hello" "new project output on wasm"
 
@@ -240,9 +242,22 @@ if err="$(cd "$old_wasm" && dotnet "$cli" build --target wasm 2>&1)"; then
 fi
 [[ "$err" == *"the compiler version cannot be pinned"* ]] || fail "unexpected message for a compiler version: $err"
 
+echo "project: a manifest with a host key is refused in favour of engine..." >&2
+old_host="$scratch/old-host"
+mkdir -p "$old_host/src"
+cat > "$old_host/ghul-project.json" <<'JSON'
+{ "name": "old-host", "targets": ["wasm"], "host": { "wasm": "node" } }
+JSON
+cp "$old_wasm/src/main.ghul" "$old_host/src/main.ghul"
+if err="$(cd "$old_host" && dotnet "$cli" build --target wasm 2>&1)"; then
+    fail "expected a manifest with a host key to fail"
+fi
+[[ "$err" == *"host is now engine"* ]] || fail "unexpected message for a host key: $err"
+
 echo "project: an llvm build fetches the ghul-llvm release chosen for its compiler..." >&2
 (cd "$scratch" && dotnet "$cli" new native --target llvm 2>/dev/null) || fail "ghul new --target llvm failed"
 grep -q '"targets": \["llvm"\]' "$scratch/native/ghul-project.json" || fail "ghul new --target llvm wrote no llvm target"
+grep -q '"ghul-llvm": ">=' "$scratch/native/ghul-project.json" || fail "ghul new --target llvm wrote no ghul-llvm floor"
 if err="$(cd "$scratch/native" && GHUL_LLVM_RELEASES="file://$scratch/no-releases" dotnet "$cli" build 2>&1)"; then
     fail "expected an llvm build with no ghul-llvm release to fail"
 fi

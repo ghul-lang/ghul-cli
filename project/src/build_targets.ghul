@@ -36,39 +36,5 @@ namespace Ghul.Project is
         /// What a manifest, `--target` or `GHUL_TARGET` naming dotnet is told.
         DOTNET_UNSUPPORTED: string static =>
             "ghul does not build for dotnet; for .NET, use the .NET SDK with a .ghulproj and dotnet build"
-
-        /// The earliest compiler that builds for `target`, or null where any
-        /// compiler does. An llvm build at a chosen optimisation level needs
-        /// one that takes --optimise, and a debug build one that emits debug
-        /// information.
-        ///
-        /// - target: the target being built
-        /// - mode: how the build is made
-        minimum_compiler(target: BuildTarget, mode: BUILD_MODE) -> string? static =>
-            if target != BuildTarget.LLVM then minimum_compiler(target)
-            elif mode.optimise? then "65.16.0"
-            elif mode.debug then "65.14.0"
-            else minimum_compiler(target) fi
-
-        /// What about a build of `mode` for `target` needs a newer compiler,
-        /// for a message: "a debug build for ", or nothing where the mode
-        /// asks for nothing the target does not already need.
-        ///
-        /// - target: the target being built
-        /// - mode: how the build is made
-        build_kind(target: BuildTarget, mode: BUILD_MODE) -> string static =>
-            if target != BuildTarget.LLVM then ""
-            elif mode.optimise? then "a build at a chosen optimisation level for "
-            elif mode.debug then "a debug build for "
-            else "" fi
-
-        /// The earliest compiler that builds for `target` at all.
-        ///
-        /// - target: the target being built
-        minimum_compiler(target: BuildTarget) -> string? static =>
-            case target
-            when BuildTarget.WASM then CORE_LIBRARY.MINIMUM_COMPILER
-            when BuildTarget.LLVM then "65.5.0"
-            esac
     si
 si

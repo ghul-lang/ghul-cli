@@ -290,6 +290,46 @@ namespace Ghul.Cli is
         return if named? /\ named.length > 0 then named else null fi
     si
 
+    // The oldest release of each tool a new project is written with, which is
+    // the release in use: the compiler always, and ghul-llvm where the project
+    // builds for llvm. A tool with no release installed takes the newest
+    // release, and one that cannot be found out leaves no floor.
+    new_project_floors(targets: Collections.List[Ghul.Project.BuildTarget]) -> Collections.List[(tool: string, version: string)] is
+        let floors = Collections.LIST[(tool: string, version: string)]()
+        let machine = MACHINE.this_machine()
+
+        let compiler = COMPONENTS.installed_compiler(machine)
+        let compiler_version: string? mut = null
+
+        if let installed = compiler then
+            compiler_version = installed.version
+        else
+            let newest = Host.COMPILER_DOWNLOAD.of(COMPILER_PLAN.store(COMPILER_PLAN.order(machine, null, false)![0])).latest_release()
+
+            if newest? then
+                compiler_version = newest!
+            fi
+        fi
+
+        if let version = compiler_version then
+            floors.add((tool = Ghul.Project.PROJECT_TOOLS.COMPILER, version = version))
+        fi
+
+        if targets |> Ghul.Pipes.any(t => t == Ghul.Project.BuildTarget.LLVM) then
+            let toolchain = LLVM_TOOLCHAIN.for_this_user()
+            let platform = toolchain.triple()
+            let kept = if platform? then toolchain.highest_kept(platform!) else null fi
+            let latest = if kept? then null else toolchain.latest_tag(null) fi
+            let tag: string? = kept ?? (if latest? then latest! else null fi)
+
+            if let held = tag then
+                floors.add((tool = Ghul.Project.PROJECT_TOOLS.LLVM, version = held.substring(1)))
+            fi
+        fi
+
+        return floors
+    si
+
     // Creates a project to build and run: `ghul new <name> [--target ...]`.
     cmd_new(rest: Collections.List[string]) -> int is
         let parsed = Ghul.Project.PROJECT_SCAFFOLD.parse(rest, Ghul.Project.TARGET_CHOICE.ORDER)
@@ -301,7 +341,7 @@ namespace Ghul.Cli is
         fi
 
         let command_line = parsed!
-        let created = Ghul.Project.PROJECT_SCAFFOLD.create(command_line)
+        let created = Ghul.Project.PROJECT_SCAFFOLD.create(command_line, new_project_floors(command_line.targets))
 
         if let (problem): ERROR = created then
             LOG.say("{problem}")
@@ -844,7 +884,7 @@ namespace Ghul.Cli is
                 Collections.LIST[Ghul.Project.BuildTarget]([target]), Collections.LIST[string](["script.ghul"]),
                 Ghul.Project.MANIFEST_OPTIONS(null, false, Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), null),
                 Collections.MAP[string, Ghul.Project.DEPENDENCY](), Ghul.Project.CompilerBuild.DEFAULT,
-                Collections.LIST[Ghul.Project.BuildTarget](), null)
+                Collections.LIST[Ghul.Project.BuildTarget](), null, Collections.MAP[string, Ghul.Project.VERSION_RANGE]())
 
         let libraries = Ghul.Project.PROJECT_BUILD.libraries(
             Ghul.Project.LOADED_PROJECT(manifest, cache_root(), target), cache, say)
@@ -867,7 +907,7 @@ namespace Ghul.Cli is
         let linker: string? mut = null
 
         if target == Ghul.Project.BuildTarget.LLVM then
-            let found = LLVM_TOOLCHAIN.for_this_user().executable()
+            let found = LLVM_TOOLCHAIN.for_this_user().executable(null)
 
             if let (error): ERROR = found then
                 say(error)
@@ -903,9 +943,7 @@ namespace Ghul.Cli is
 
                     let extra = Collections.LIST[string]()
 
-                    if wants_implicit_default_use(compiler_version) then
-                        extra.add("--implicit-default-use")
-                    fi
+                    extra.add("--implicit-default-use")
 
                     let exit_code =
                         Ghul.Project.PROJECT_BUILD.build(
@@ -964,33 +1002,6 @@ namespace Ghul.Cli is
 
         return (items = list, no_cache = false)
     si
-
-    // The oldest compiler the session can be built on: `--submission`,
-    // which names the cell's namespace and answers with the value it
-    // ended on, `--check-complete`, which says whether what has been
-    // typed is finished, and `--compile-server`, which keeps one compiler
-    // running for the session, answers that same question, and imports
-    // a type whose base is in another cell.
-    MINIMUM_REPL_COMPILER: string => "59.8.0"
-
-    // Whether what is installed is old enough to be missing something
-    // the session needs.
-    is_too_old_for_repl(version: string) -> bool => is_older_than(version, MINIMUM_REPL_COMPILER)
-
-    // The oldest compiler that takes `--implicit-default-use`, which gives
-    // a script with no namespace of its own the default imports, as the
-    // REPL has them. An older one compiles scripts as it always did.
-    MINIMUM_IMPLICIT_DEFAULT_USE_COMPILER: string => "60.2.0"
-
-    wants_implicit_default_use(version: string) -> bool =>
-        !is_older_than(version, MINIMUM_IMPLICIT_DEFAULT_USE_COMPILER)
-
-    // The oldest compiler that completes a partly typed member with the
-    // cursor at its end. An older one is asked at the start of the name.
-    MINIMUM_COMPLETION_AT_CURSOR_COMPILER: string => "60.2.2"
-
-    completes_at_cursor(version: string) -> bool =>
-        !is_older_than(version, MINIMUM_COMPLETION_AT_CURSOR_COMPILER)
 
     // Whether `version` is a release older than `minimum`. A version that
     // does not parse is a build of the compiler rather than a release, and
@@ -1072,15 +1083,6 @@ namespace Ghul.Cli is
 
         let store = Host.COMPILER_STORE.for_this_user()
 
-        if let installed: string = store.highest_version() /\ is_too_old_for_repl(installed) then
-            Std.error.write_line(
-                "ghul: the session needs ghul.compiler {MINIMUM_REPL_COMPILER} or newer; {installed} is installed")
-
-            LOG.say("run ghul install-compiler to update it")
-
-            return 1
-        fi
-
         let ensured = ensure_compiler_installed(store, null, true)
 
         if let (error): ERROR = ensured then
@@ -1103,7 +1105,7 @@ namespace Ghul.Cli is
                     say)
 
             let terminal =
-                Repl.TERMINAL(make_session, options.want_default_use, options.theme, completes_at_cursor(ensured!))
+                Repl.TERMINAL(make_session, options.want_default_use, options.theme)
 
             return run_closing_on_signal(terminal)
 
@@ -1222,7 +1224,7 @@ namespace Ghul.Cli is
             // the newest ghul-llvm release.
             if project.target == Ghul.Project.BuildTarget.LLVM /\ project.manifest.kind == Ghul.Project.ManifestKind.PROGRAM then
                 let found =
-                    LLVM_TOOLCHAIN.for_this_user().executable()
+                    LLVM_TOOLCHAIN.for_this_user().executable(_tool_range(project.manifest, Ghul.Project.PROJECT_TOOLS.LLVM))
 
                 if let (error): ERROR = found then
                     say(error)
@@ -1288,19 +1290,10 @@ namespace Ghul.Cli is
         if let named: Ghul.Project.CompilerRequest.COMMAND = request then
             let given = command_compiler(named.command)
 
-            // A compiler given as a command is used as it stands, so a mode
-            // it cannot honour is only reported. A command whose version could
-            // not be read is 0.0.0, and says nothing.
-            let kind = Ghul.Project.BUILD_TARGETS.build_kind(project.target, mode)
-
-            if kind.length > 0 /\ given.version !~ "0.0.0" then
-                let minimum = Ghul.Project.BUILD_TARGETS.minimum_compiler(project.target, mode)
-
-                if minimum? /\ Ghul.Project.COMPILER_CHOICE.is_older_than(given.version, minimum) then
-                    say(
-                        "ghul.compiler {given.version} is too old for {kind}the "
-                        "{Ghul.Project.BUILD_TARGETS.name(project.target)} target, which needs {minimum} or newer")
-                fi
+            // A compiler given as a command is used as it stands, so a floor
+            // it is below is only reported.
+            if let problem = Ghul.Project.TOOL_FLOOR.problem(project.manifest.tools, Ghul.Project.PROJECT_TOOLS.COMPILER, given.version) then
+                say(problem)
             fi
 
             return given
@@ -1449,12 +1442,6 @@ namespace Ghul.Cli is
             return null
         fi
 
-        if store.is_wasm /\ Ghul.Project.COMPILER_CHOICE.is_older_than(installed!, WASM_ANALYSIS_MINIMUM) then
-            Std.error.write_line(
-                "ghul: the wasm-built ghul.compiler {installed!} cannot serve analysis, which needs {WASM_ANALYSIS_MINIMUM} or newer")
-            return null
-        fi
-
         let (compiler, version, runtime_assembly) = _built_compiler(store, installed!)
 
         return (_absolute(compiler), version, runtime_assembly)
@@ -1473,9 +1460,6 @@ namespace Ghul.Cli is
 
         return compiler
     si
-
-    // The oldest wasm-built compiler that serves analysis requests.
-    WASM_ANALYSIS_MINIMUM: string static => "66.1.0"
 
     // What a compiler command prints as its version when run with no
     // arguments, or null where it prints none or cannot be run.
@@ -1512,21 +1496,34 @@ namespace Ghul.Cli is
         yrt
     si
 
-    // The release a build of `project` uses: the newest installed, checked against the target's minimum
-    // compiler, and installed if need be.
+    // The range a manifest names for a tool, or null where it names none.
+    _tool_range(manifest: Ghul.Project.MANIFEST, tool: string) -> Ghul.Project.VERSION_RANGE? is
+        let range: Ghul.Project.VERSION_RANGE mut
+
+        return if manifest.tools.try_get_value(tool, range ref) then range else null fi
+    si
+
+    // The release a build of `project` uses: the newest installed, installed
+    // if there is none, and the newest release where the installed one is
+    // outside what the manifest's `tools` accepts for the compiler.
     project_compiler(
         store: Host.COMPILER_STORE,
         project: Ghul.Project.LOADED_PROJECT,
         mode: Ghul.Project.BUILD_MODE,
         say: (string) -> void
     ) -> string? is
-        let choice =
-            Ghul.Project.COMPILER_CHOICE.choose(project.target, mode, store.highest_version())
+        let version = ensure_compiler_installed(store, null, true)
 
-        if let newest: Ghul.Project.CompilerChoice.NEWEST = choice then
-            say(
-                "ghul.compiler {newest.installed} is too old for {Ghul.Project.BUILD_TARGETS.build_kind(project.target, mode)}the {Ghul.Project.BUILD_TARGETS.name(project.target)} target, "
-                "which needs {Ghul.Project.BUILD_TARGETS.minimum_compiler(project.target, mode)} or newer; installing the newest")
+        if let (error): ERROR = version then
+            say(error)
+            say("could not install ghul.compiler")
+            return null
+        fi
+
+        let tools = project.manifest.tools
+
+        if Ghul.Project.TOOL_FLOOR.problem(tools, Ghul.Project.PROJECT_TOOLS.COMPILER, version!)? then
+            say("ghul.compiler {version!} is outside what the project names in tools; installing the newest")
 
             let updated = update_compiler_to_latest(store)
 
@@ -1535,15 +1532,12 @@ namespace Ghul.Cli is
                 return null
             fi
 
+            if let problem = Ghul.Project.TOOL_FLOOR.problem(tools, Ghul.Project.PROJECT_TOOLS.COMPILER, updated!) then
+                say(problem)
+                return null
+            fi
+
             return updated!
-        fi
-
-        let version = ensure_compiler_installed(store, null, true)
-
-        if let (error): ERROR = version then
-            say(error)
-            say("could not install ghul.compiler")
-            return null
         fi
 
         return version!

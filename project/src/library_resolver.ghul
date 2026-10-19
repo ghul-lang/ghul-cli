@@ -16,11 +16,20 @@ namespace Ghul.Project is
         ///
         /// - name: the library, for messages
         /// - url: its repository
-        latest(name: string, url: string) -> Result[string, string] =>
+        latest(name: string, url: string) -> Result[string, string] => matching(name, url, null)
+
+        /// The newest release tag of `name` the range admits, or the newest
+        /// where there is no range, or why there is none.
+        ///
+        /// - name: the library, for messages
+        /// - url: its repository
+        /// - range: the versions the project accepts, or null for any
+        matching(name: string, url: string, range: VERSION_RANGE?) -> Result[string, string] =>
             latest_of(
-                Path.join([cache.root, LIBRARY_CACHE.repository_directory_name(url), "latest"]),
+                Path.join([cache.root, LIBRARY_CACHE.repository_directory_name(url), "chosen", if range? then file_name(range!) else "latest" fi]),
                 name,
                 url,
+                range,
                 () -> Result[Collections.List[(tag: string, version: System.Version)], string] is
                     let listed = GIT.run(LIST[string](["ls-remote", "--tags", "--refs", url]), null)
 
@@ -38,11 +47,13 @@ namespace Ghul.Project is
         /// - record: where the choice is kept
         /// - name: the library, for messages
         /// - source: where the releases come from, for messages
+        /// - range: the versions accepted, or null for any
         /// - list: the release tags, newest first, or why they cannot be had
         latest_of(
             record: string,
             name: string,
             source: string,
+            range: VERSION_RANGE?,
             list: () -> Result[Collections.List[(tag: string, version: System.Version)], string]
         ) -> Result[string, string] static is
             let listed = list()
@@ -55,16 +66,26 @@ namespace Ghul.Project is
                 return ERROR(problem)
             fi
 
-            if listed!.count == 0 then
-                return ERROR("{name}: {source} has no release")
+            for candidate in listed! do
+                if !range? \/ range!.admits(candidate.version) then
+                    keep_choice(record, candidate.tag)
+
+                    return OK(candidate.tag)
+                fi
+            od
+
+            if range? then
+                return ERROR("{name}: {source} has no release in {range!}")
             fi
 
-            let tag = listed![0].tag
-
-            keep_choice(record, tag)
-
-            return OK(tag)
+            return ERROR("{name}: {source} has no release")
         si
+
+        /// The name a range is recorded under.
+        ///
+        /// - range: the range
+        file_name(range: VERSION_RANGE) -> string static =>
+            range.to_string().replace("^", "caret-").replace("~", "tilde-").replace(">=", "atleast-")
 
         /// The release tags in `ls-remote` output, as `vX.Y.Z` with their
         /// versions, newest first. Anything else is left out.

@@ -8,6 +8,7 @@ namespace Ghul.Cli.Tests is
     use Ghul.Project.COMPILER_ARGUMENTS
     use Ghul.Project.DEPENDENCY
     use Ghul.Project.MANIFEST
+    use Ghul.Project.VERSION_RANGE
     use Ghul.Project.MANIFEST_OPTIONS
     use Ghul.Project.ManifestKind
     use Ghul.Project.SOURCE_LIBRARY
@@ -49,7 +50,7 @@ namespace Ghul.Cli.Tests is
                 LIST[string](["src/**/*.ghul"]),
                 options,
                 MAP[string, DEPENDENCY](),
-                CompilerBuild.DEFAULT, LIST[BuildTarget](), null)
+                CompilerBuild.DEFAULT, LIST[BuildTarget](), null, MAP[string, VERSION_RANGE]())
 
         _no_libraries() -> Collections.List[SOURCE_LIBRARY] => LIST[SOURCE_LIBRARY]()
 

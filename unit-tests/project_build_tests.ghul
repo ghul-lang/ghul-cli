@@ -11,6 +11,7 @@ namespace Ghul.Cli.Tests is
     use Ghul.Project.DEPENDENCY
     use Ghul.Project.LOADED_PROJECT
     use Ghul.Project.MANIFEST
+    use Ghul.Project.VERSION_RANGE
     use Ghul.Project.MANIFEST_OPTIONS
     use Ghul.Project.ManifestKind
     use Ghul.Project.PROJECT_BUILD
@@ -49,7 +50,7 @@ namespace Ghul.Cli.Tests is
                     LIST[string](["src/**/*.ghul"]),
                     MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](), null),
                     MAP[string, DEPENDENCY](),
-                    CompilerBuild.DEFAULT, LIST[BuildTarget](), host_wasm),
+                    CompilerBuild.DEFAULT, LIST[BuildTarget](), host_wasm, MAP[string, VERSION_RANGE]()),
                 IO.Path.combine("/", "project"),
                 target)
 

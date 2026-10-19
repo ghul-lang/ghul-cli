@@ -121,8 +121,7 @@ namespace Ghul.Cli.Repl is
     class TERMINAL(
         _make_session: () -> HOSTED_SESSION,
         _want_default_use: bool,
-        _theme: ThemeChoice,
-        _completes_at_cursor: bool
+        _theme: ThemeChoice
     ) is
         _display: CELL_DISPLAY
 
@@ -466,8 +465,7 @@ namespace Ghul.Cli.Repl is
             let line_text = if line >= 1 /\ line <= lines.count then lines[line - 1] else "" fi
             let typed = COMPLETION_QUERY.prefix(line_text, column - 1)
 
-            let asked_at = if _completes_at_cursor then column else column - typed.length fi
-            let offered = _current?.complete(text, line, asked_at)
+            let offered = _current?.complete(text, line, column)
 
             if !offered? then
                 return null

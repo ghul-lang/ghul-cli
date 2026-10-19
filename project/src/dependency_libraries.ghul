@@ -151,6 +151,20 @@ namespace Ghul.Project is
             return OK(_)
         si
 
+        // The release a git dependency is read at: its tag, or the newest
+        // release its version range admits.
+        _tag(name: string, git: DEPENDENCY.GIT) -> Result[string, string] is
+            if let range = git.version then
+                return LIBRARY_RESOLVER(_cache).matching(name, git.url, range)
+            fi
+
+            if let tag = git.tag then
+                return OK(tag)
+            fi
+
+            return ERROR("{name} must be declared with a version, a tag or a path")
+        si
+
         // The directory a dependency's library is in, fetching it where it is
         // declared at a git tag, and the version its tag gives it.
         _locate(name: string, declared: DEPENDENCY, directory: string) -> Result[(root: string, version: string), string] is
@@ -160,11 +174,13 @@ namespace Ghul.Project is
 
             let git = cast DEPENDENCY.GIT(declared)
 
-            if !git.tag? then
-                return ERROR("{name} must be declared with a tag or a path")
+            let resolved = _tag(name, git)
+
+            if let (problem): Result.ERROR = resolved then
+                return ERROR(problem)
             fi
 
-            let tag = git.tag
+            let tag = resolved!
             let fetched = _cache.fetch_tag(git.url, tag)
 
             if let (problem): Result.ERROR = fetched then

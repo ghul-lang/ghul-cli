@@ -13,7 +13,8 @@ namespace Ghul.Project is
         dependencies: Collections.Map[string, DEPENDENCY],
         compiler_build: CompilerBuild,
         prefer: Collections.List[BuildTarget],
-        host_wasm: string?
+        host_wasm: string?,
+        tools: Collections.Map[string, VERSION_RANGE]
     ) is
         /// Whether a program's manifest lists dotnet beside the targets ghul
         /// builds for, which ghul leaves out of its targets.
@@ -60,7 +61,7 @@ namespace Ghul.Project is
     // or a directory already on disk. A dependency with both a `git` and
     // a `path` is a problem rather than a third form of this.
     union DEPENDENCY is
-        GIT(url: string, tag: string?, branch: string?, directory: string?);
+        GIT(url: string, tag: string?, branch: string?, directory: string?, version: VERSION_RANGE?);
         PATH(path: string);
     si
 si

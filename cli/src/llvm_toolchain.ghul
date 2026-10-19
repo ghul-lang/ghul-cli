@@ -188,7 +188,7 @@ namespace Ghul.Cli is
         /// release first if it is not already kept, or the reason there is
         /// none. Where the releases cannot be listed, the newest release
         /// already kept is used.
-        executable() -> Result[string, string] is
+        executable(range: Ghul.Project.VERSION_RANGE?) -> Result[string, string] is
             let named = System.Environment.get_environment_variable("GHUL_LLVM")
 
             if named? /\ named.length > 0 then
@@ -201,10 +201,10 @@ namespace Ghul.Cli is
                 return ERROR("the llvm target builds only on Linux x64 and arm64")
             fi
 
-            let tag = latest_tag()
+            let tag = latest_tag(range)
 
             if let (problem): ERROR = tag then
-                if let kept = highest_kept(platform!) then
+                if let kept = highest_kept(platform!) /\ _admitted(range, kept) then
                     return executable(kept, platform!)
                 fi
 
@@ -214,10 +214,25 @@ namespace Ghul.Cli is
             return executable(tag!, platform!)
         si
 
-        /// The newest release of `ghul-llvm`, or the one used last where the
-        /// releases cannot be listed. Nothing is fetched.
-        latest_tag() -> Result[string, string] =>
-            Ghul.Project.LIBRARY_RESOLVER.latest_of(Path.join([root, "latest"]), "ghul-llvm", releases, () => _release_tags())
+        /// The newest release of `ghul-llvm` the range admits, or the one used
+        /// last where the releases cannot be listed. Nothing is fetched.
+        ///
+        /// - range: the versions the project accepts, or null for any
+        latest_tag(range: Ghul.Project.VERSION_RANGE?) -> Result[string, string] =>
+            Ghul.Project.LIBRARY_RESOLVER.latest_of(
+                Path.join([root, "chosen", if range? then Ghul.Project.LIBRARY_RESOLVER.file_name(range!) else "latest" fi]),
+                "ghul-llvm", releases, range, () => _release_tags())
+
+        // Whether the release `tag` is one the range admits.
+        _admitted(range: Ghul.Project.VERSION_RANGE?, tag: string) -> bool is
+            let version: System.Version? mut
+
+            if !range? then
+                return true
+            fi
+
+            return System.Version.try_parse(tag.substring(1), version ref) /\ version? /\ range!.admits(version)
+        si
 
         /// Whether release `tag` for `triple` is in the cache.
         ///

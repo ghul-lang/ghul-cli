@@ -37,6 +37,7 @@ namespace Ghul.Project is
             let compiler_build = _compiler_build(root)
             let prefer = _prefer(root, targets, kind)
             let host_wasm = _host_wasm(root)
+            let tools = _tools(root)
             let options = _options(root)
             let dependencies = _dependencies(root)
 
@@ -47,7 +48,7 @@ namespace Ghul.Project is
                 return null
             fi
 
-            let manifest = MANIFEST(name, version, kind, targets, sources, options, dependencies, compiler_build, prefer, host_wasm)
+            let manifest = MANIFEST(name, version, kind, targets, sources, options, dependencies, compiler_build, prefer, host_wasm, tools)
 
             manifest.ignores_dotnet = _ignored_dotnet
 
@@ -247,13 +248,51 @@ namespace Ghul.Project is
             _problems.add(MANIFEST_PROBLEM(key, message))
         si
 
-        // The compiler is always the newest release, as ghul-core, ghul-runtime
-        // and ghul-llvm are, so a manifest has no way to name a version of any.
+        // The tools a project needs, each as the versions it accepts. The
+        // compiler is always the newest release; a range here is checked
+        // against it, and a floor (`>=`) is what `ghul new` writes.
+        _tools(root: JsonElement) -> Collections.Map[string, VERSION_RANGE] is
+            let tools = MAP[string, VERSION_RANGE]()
+            let value: JsonElement mut
+
+            if !root.try_get_property("tools", value ref) then
+                return tools
+            fi
+
+            if value.value_kind != JsonValueKind.OBJECT then
+                _report("tools", "the value is not an object")
+                return tools
+            fi
+
+            for member in value.enumerate_object() do
+                if member.name !~ PROJECT_TOOLS.COMPILER /\ member.name !~ PROJECT_TOOLS.LLVM then
+                    _report("tools.{member.name}", "not a tool a project can name: the tools are {PROJECT_TOOLS.COMPILER} and {PROJECT_TOOLS.LLVM}")
+                    continue
+                fi
+
+                if member.value.value_kind != JsonValueKind.STRING then
+                    _report("tools.{member.name}", "the value is not a string")
+                    continue
+                fi
+
+                let range = VERSION_RANGE.parse(member.value.get_string() ?? "")
+
+                if let (problem): Result.ERROR = range then
+                    _report("tools.{member.name}", problem)
+                else
+                    tools.add(member.name, range!)
+                fi
+            od
+
+            return tools
+        si
+
+        // The compiler version is named under `tools`, as a range.
         _reject_tool_pins(root: JsonElement) is
             let value: JsonElement mut
 
             if root.try_get_property("compiler", value ref) then
-                _report("compiler", "the compiler version cannot be pinned: ghul always uses the newest release")
+                _report("compiler", "the compiler version cannot be pinned here: name a floor under tools")
             fi
         si
 
@@ -332,6 +371,7 @@ namespace Ghul.Project is
             keys.add("directory")
             keys.add("git")
             keys.add("tag")
+            keys.add("version")
 
             return keys
         si
@@ -345,21 +385,40 @@ namespace Ghul.Project is
             fi
 
             let tag = _dependency_string(name, entry, "tag")
+            let version_text = _dependency_string(name, entry, "version")
 
-            if (name =~ "ghul-core" \/ name =~ "ghul-runtime") /\ tag? then
-                _report("dependencies.{name}", "{name} is the compiler's library and always the newest release: it cannot be pinned to a tag")
+            if (name =~ "ghul-core" \/ name =~ "ghul-runtime") /\ (tag? \/ version_text?) then
+                _report("dependencies.{name}", "{name} is the compiler's library and always the newest release: it cannot be pinned")
                 return null
+            fi
+
+            let version: VERSION_RANGE? mut = null
+
+            if let text = version_text then
+                if tag? then
+                    _report("dependencies.{name}", "a git dependency has both tag and version")
+                    return null
+                fi
+
+                let range = VERSION_RANGE.parse(text)
+
+                if let (problem): Result.ERROR = range then
+                    _report("dependencies.{name}.version", problem)
+                    return null
+                fi
+
+                version = range!
             fi
 
             let branch = _dependency_string(name, entry, "branch")
             let directory = _dependency_string(name, entry, "directory")
 
-            if !tag? /\ !branch? then
-                _report("dependencies.{name}", "a git dependency has neither tag nor branch")
+            if !tag? /\ !branch? /\ !version? then
+                _report("dependencies.{name}", "a git dependency has none of version, tag and branch")
                 return null
             fi
 
-            return DEPENDENCY.GIT(git_value.get_string()!, tag, branch, directory)
+            return DEPENDENCY.GIT(git_value.get_string()!, tag, branch, directory, version)
         si
 
         _dependency_string(name: string, entry: JsonElement, key: string) -> string? is
@@ -491,7 +550,12 @@ namespace Ghul.Project is
         _host_wasm(root: JsonElement) -> string? is
             let host: JsonElement mut
 
-            if !root.try_get_property("host", host ref) then
+            if root.try_get_property("host", host ref) then
+                _report("host", "host is now engine: write \"engine\": {{ \"wasm\": \"node\" }} or wasmtime")
+                return null
+            fi
+
+            if !root.try_get_property("engine", host ref) then
                 return null
             fi
 
@@ -502,7 +566,7 @@ namespace Ghul.Project is
             fi
 
             if value.value_kind != JsonValueKind.STRING then
-                _report("host", "wasm is not a string")
+                _report("engine", "wasm is not a string")
                 return null
             fi
 
@@ -512,7 +576,7 @@ namespace Ghul.Project is
                 return name
             fi
 
-            _report("host", "wasm is neither wasmtime nor node")
+            _report("engine", "wasm is neither wasmtime nor node")
 
             return null
         si
@@ -589,6 +653,7 @@ namespace Ghul.Project is
             keys.add("compiler")
             keys.add("compiler-build")
             keys.add("dependencies")
+            keys.add("engine")
             keys.add("host")
             keys.add("kind")
             keys.add("name")
@@ -596,6 +661,7 @@ namespace Ghul.Project is
             keys.add("prefer")
             keys.add("sources")
             keys.add("targets")
+            keys.add("tools")
             keys.add("version")
 
             return keys

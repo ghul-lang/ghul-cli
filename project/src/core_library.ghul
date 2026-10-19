@@ -27,11 +27,6 @@ namespace Ghul.Project is
             return "https://github.com/ghul-lang/ghul-core"
         si
 
-        /// The earliest compiler that builds a project for the wasm target:
-        /// one that compiles the libraries. Raised when a library needs a
-        /// compiler fix.
-        MINIMUM_COMPILER: string static => "64.15.0"
-
         /// The core library for `manifest`, fetching it into `cache` if it
         /// is not there already.
         ///
