@@ -583,6 +583,18 @@ jobs:
       shell: pwsh
       run: ./tests/smoke-install.ps1 -Archives dist -Rid ${{ matrix.rid }} -Version ${{ needs.version.outputs.package }}
 
+    # `ghul update` takes its update path only in the Native AOT build, against
+    # a release mirror on the file system.
+    - name: Test ghul update, on macOS
+      if: ${{ matrix.rid == 'osx-arm64' }}
+      shell: bash
+      run: ./tests/update.sh build/ghul
+
+    - name: Test ghul update, on Windows
+      if: ${{ startsWith(matrix.rid, 'win-') }}
+      shell: pwsh
+      run: ./tests/update.ps1 -Executable (Resolve-Path build/ghul.exe) -Rid ${{ matrix.rid }}
+
     - uses: actions/upload-artifact@v7
       with:
         name: aot-archive-${{ matrix.rid }}

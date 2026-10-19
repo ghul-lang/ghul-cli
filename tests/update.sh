@@ -24,10 +24,15 @@ fail() {
     exit 1
 }
 
-case "$(uname -m)" in
-    aarch64 | arm64) rid="linux-arm64" ;;
+case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64) rid="osx-arm64" ;;
+    Linux-aarch64 | Linux-arm64) rid="linux-arm64" ;;
     *) rid="linux-x64" ;;
 esac
+
+sha256() {
+    if command -v sha256sum > /dev/null 2>&1; then sha256sum "$@"; else shasum -a 256 "$@"; fi
+}
 
 running="$("$aot" version | head -n 1 | cut -d' ' -f2)"
 running="${running%%+*}"
@@ -61,8 +66,8 @@ release() {
 
     (
         cd "$release_dir"
-        sha256sum "ghul-cli-$rid.tar.gz" > "ghul-cli-$rid.tar.gz.sha256"
-        sha256sum ghul-cli-install.sh > ghul-cli-install.sh.sha256
+        sha256 "ghul-cli-$rid.tar.gz" > "ghul-cli-$rid.tar.gz.sha256"
+        sha256 ghul-cli-install.sh > ghul-cli-install.sh.sha256
     )
 }
 
