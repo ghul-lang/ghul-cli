@@ -72,6 +72,18 @@ fi
 cat "$scratch/build.out" >&2
 find . -maxdepth 4 -not -path "./.git/*" >&2
 
+if [ ! -f out/wasm/hello.mjs ]; then
+    echo "smoke-install: the build wrote no hello.mjs; what the tool would have run:" >&2
+    run ghul project compiler >&2 || true
+    run ghul project response-file --output "$scratch/diag.rsp" >&2 || true
+    head -c 3000 "$scratch/diag.rsp" >&2 || true
+    echo >&2
+    compiler_command="$(run ghul project compiler 2>/dev/null | head -n 1)"
+    echo "running: $compiler_command @$scratch/diag.rsp" >&2
+    run sh -c "$compiler_command @$scratch/diag.rsp" >&2 || echo "compiler exit code $?" >&2
+    find . -maxdepth 4 -not -path "./.git/*" >&2
+fi
+
 out="$(run ghul run 2>"$scratch/run.err")" || { cat "$scratch/run.err" >&2; fail "ghul run failed"; }
 cat "$scratch/run.err" >&2
 echo "$out" >&2
