@@ -173,6 +173,12 @@ namespace Ghul.Cli is
                 return ERROR(error)
             fi
 
+            if is_newest then
+                // The installers waiting on the lock read the window from
+                // when this install finished, not from when it began.
+                store.record_resolution(wanted!)
+            fi
+
             return OK(wanted)
         finally
             lock_stream.close()
