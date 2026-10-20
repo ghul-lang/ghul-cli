@@ -260,5 +260,50 @@ namespace Ghul.Cli.Tests is
                 _delete(root)
             yrt
         si
+
+        // Concurrent installers can be told different newest versions by a
+        // feed that has just been updated; the first to hold the lock decides.
+        @Test()
+        concurrent_installers__settle_on_the_first_resolution() is
+            let (store, root) = _store([])
+
+            try
+                assert store.settle_newest("2.0.0", 30) =~ "2.0.0";
+                assert store.settle_newest("2.0.1", 30) =~ "2.0.0";
+                assert store.settle_newest("2.0.1", 30) =~ "2.0.0";
+            finally
+                Directory.delete(root, true)
+            yrt
+        si
+
+        @Test()
+        a_resolution_older_than_the_window__is_not_adopted() is
+            let (store, root) = _store([])
+
+            try
+                store.record_resolution("2.0.0")
+
+                File.set_last_write_time_utc(Path.join([root, ".newest"]), System.DateTime.utc_now.add_seconds(-120.0))
+
+                assert store.recent_resolution(30) == null;
+                assert store.settle_newest("2.0.1", 30) =~ "2.0.1";
+            finally
+                Directory.delete(root, true)
+            yrt
+        si
+
+        @Test()
+        a_resolution_is_not_counted_as_an_installed_version() is
+            let (store, root) = _store(["1.0.0"])
+
+            try
+                store.record_resolution("2.0.0")
+
+                assert store.versions().count == 1;
+                assert store.highest_version() =~ "1.0.0";
+            finally
+                Directory.delete(root, true)
+            yrt
+        si
     si
 si

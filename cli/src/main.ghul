@@ -118,6 +118,10 @@ namespace Ghul.Cli is
         return store.highest_version()
     si
 
+    // How long a concurrent installer's choice of the newest version binds
+    // the others, in seconds.
+    NEWEST_RESOLUTION_WINDOW_SECONDS: int => 30
+
     // Double-checked: a cheap unlocked look first (the overwhelmingly
     // common case is "already installed and matches"), then the same
     // check again once the lock is held, since another process may have
@@ -126,7 +130,7 @@ namespace Ghul.Cli is
     // Progress goes to `say`, which the explicit `install-compiler` wires
     // to standard error and a script run leaves quiet; a failure is
     // returned to the caller whatever `say` does with the chatter.
-    ensure_compiler_installed(store: Host.COMPILER_STORE, version: string?, show_output: bool) -> Result[string, string] is
+    ensure_compiler_installed(store: Host.COMPILER_STORE, version: string?, show_output: bool, is_newest: bool) -> Result[string, string] is
         if let current: string = usable_installed_version(store, version) then
             return OK(current)
         fi
@@ -154,6 +158,15 @@ namespace Ghul.Cli is
                 fi
 
                 wanted = newest!
+            elif is_newest then
+                // The caller resolved this as the newest before the lock was
+                // held; a concurrent installer holding it first has settled
+                // which version that is.
+                wanted = store.settle_newest(wanted!, NEWEST_RESOLUTION_WINDOW_SECONDS)
+
+                if store.is_installed(wanted!) then
+                    return OK(wanted)
+                fi
             fi
 
             if let (error): ERROR = install_compiler(store, wanted!, show_output) then
@@ -995,7 +1008,7 @@ namespace Ghul.Cli is
             fi
         fi
 
-        let ensured = ensure_compiler_installed(store, null, true)
+        let ensured = ensure_compiler_installed(store, null, true, false)
 
         if let (error): ERROR = ensured then
             say(error)
@@ -1249,7 +1262,7 @@ namespace Ghul.Cli is
 
         let store = COMPILER_PLAN.store(CompilerKind.MANAGED)
 
-        let ensured = ensure_compiler_installed(store, null, true)
+        let ensured = ensure_compiler_installed(store, null, true, false)
 
         if let (error): ERROR = ensured then
             LOG.say("{error}")
@@ -1309,7 +1322,7 @@ namespace Ghul.Cli is
                 fi
             fi
 
-            let ensured = ensure_compiler_installed(store, null, true)
+            let ensured = ensure_compiler_installed(store, null, true, false)
 
             if let (error): ERROR = ensured then
                 say(error)
@@ -1695,7 +1708,7 @@ namespace Ghul.Cli is
 
         let store = planned![0]
 
-        let installed = ensure_compiler_installed(store, null, false)
+        let installed = ensure_compiler_installed(store, null, false, false)
 
         if let (error): ERROR = installed then
             LOG.say("{error}")
@@ -1773,7 +1786,7 @@ namespace Ghul.Cli is
         mode: Ghul.Project.BUILD_MODE,
         say: (string) -> void
     ) -> string? is
-        let version = ensure_compiler_installed(store, null, true)
+        let version = ensure_compiler_installed(store, null, true, false)
 
         if let (error): ERROR = version then
             say(error)

@@ -62,7 +62,7 @@ namespace Ghul.Cli is
                 fi
             fi
 
-            let installed = ensure_compiler_installed(COMPILER_PLAN.store(_kind), version, false)
+            let installed = ensure_compiler_installed(COMPILER_PLAN.store(_kind), version, false, true)
 
             if let (error): ERROR = installed then
                 return ERROR(error)
