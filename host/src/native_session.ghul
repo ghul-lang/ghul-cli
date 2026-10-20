@@ -126,6 +126,18 @@ namespace Ghul.Repl.Host is
 
         close() is
             try
+                if let server = _server then
+                    server.standard_input.write_line("quit")
+                    server.standard_input.flush()
+
+                    if !server.wait_for_exit(2000) then
+                        server.kill()
+                    fi
+                fi
+            catch e: System.Exception
+            yrt
+
+            try
                 _commands?.write_line("quit")
                 _commands?.flush()
                 _commands?.dispose()
@@ -217,6 +229,105 @@ namespace Ghul.Repl.Host is
 
         _source_path(name: string) -> string => IO.Path.join([_directory, "{name}.ghul"])
 
+        // Whether the compiler can keep running between cells: only a .NET
+        // compiler can, and only until one fails to, after which each cell
+        // starts the compiler afresh.
+        _server: System.Diagnostics.Process?
+        _server_failed: bool
+        _served: int
+
+        // Compiles with `arguments`, in the compiler kept running between
+        // cells where there is one, and in a process of its own otherwise.
+        // Whether the build succeeded.
+        _build(arguments: Collections.List[string], diagnostics: Collections.LIST[CELL_DIAGNOSTIC]) -> bool is
+            if !_server_failed /\ _compiler.assembly? then
+                let served = _build_served(arguments, diagnostics)
+
+                if served? then
+                    return served!
+                fi
+
+                _server_failed = true
+            fi
+
+            let spawned = Collections.LIST[string](_compiler.leading_arguments())
+
+            spawned.add_range(arguments)
+
+            return _run_process(_compiler.file_name, spawned, diagnostics)
+        si
+
+        // Null when the server cannot be used: it did not start, or it ended
+        // before answering.
+        _build_served(arguments: Collections.List[string], diagnostics: Collections.LIST[CELL_DIAGNOSTIC]) -> bool? is
+            try
+                if !_server? then
+                    let start_info = System.Diagnostics.ProcessStartInfo()
+
+                    start_info.file_name = _compiler.file_name
+
+                    for argument in _compiler.leading_arguments() do
+                        start_info.argument_list.add(argument)
+                    od
+
+                    start_info.argument_list.add("--build-server")
+                    start_info.use_shell_execute = false
+                    start_info.redirect_standard_input = true
+                    start_info.redirect_standard_output = true
+                    start_info.redirect_standard_error = true
+                    start_info.working_directory = _directory
+                    start_info.environment["DOTNET_TieredPGO"] = "0"
+
+                    let started = System.Diagnostics.Process.start(start_info)
+
+                    _server = started
+
+                    // Nothing is written to standard output; draining it keeps
+                    // the server from ever blocking on it.
+                    if started? then
+                        let _ = started.standard_output.read_to_end_async()
+                    fi
+                fi
+
+                let server = _server
+
+                if !server? then
+                    return null
+                fi
+
+                _served = _served + 1
+
+                let request = IO.Path.join([_directory, "build-{_served}.rsp"])
+
+                IO.File.write_all_text(request, "{string.join("\n", arguments)}\n")
+
+                server.standard_input.write_line(request)
+                server.standard_input.flush()
+
+                let mark = "\u0001build-done "
+
+                do
+                    let line = server.standard_error.read_line()
+
+                    if !line? then
+                        return null
+                    fi
+
+                    if line.starts_with(mark) then
+                        return int.parse(line.substring(mark.length)) == 0
+                    fi
+
+                    let trimmed = line.trim()
+
+                    if trimmed.length > 0 /\ !trimmed.starts_with("***") /\ !trimmed.starts_with("!!!") then
+                        diagnostics.add(CELL_DIAGNOSTIC.parse(trimmed))
+                    fi
+                od
+            catch e: System.Exception
+                return null
+            yrt
+        si
+
         // What compiling one cell produced: the shared object, the names a
         // later cell can import, and the compiler's diagnostics.
         _compile(request: CELL_REQUEST) -> NATIVE_COMPILE is
@@ -228,7 +339,7 @@ namespace Ghul.Repl.Host is
 
             IO.File.write_all_text(_source_path(name), request.source)
 
-            let arguments = Collections.LIST[string](_compiler.leading_arguments())
+            let arguments = Collections.LIST[string]()
 
             arguments.add_range(["--target", "llvm", "--cell-link", "{_cell_files.count}"])
             arguments.add_range(["--suppress", "impure-function-argument"])
@@ -237,7 +348,7 @@ namespace Ghul.Repl.Host is
             arguments.add(_source_path(name))
             arguments.add("@{_libraries_file()}")
 
-            let compiled = _run_process(_compiler.file_name, arguments, diagnostics)
+            let compiled = _build(arguments, diagnostics)
 
             if !compiled \/ !IO.File.exists(module) then
                 return NATIVE_COMPILE(null, Collections.LIST[string](), diagnostics)
@@ -290,6 +401,7 @@ namespace Ghul.Repl.Host is
             start_info.redirect_standard_output = true
             start_info.redirect_standard_error = true
             start_info.working_directory = _directory
+            start_info.environment["DOTNET_TieredPGO"] = "0"
 
             for argument in arguments do
                 start_info.argument_list.add(argument)
