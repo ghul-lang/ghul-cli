@@ -34,8 +34,16 @@ namespace Ghul.Cli is
         /// `say`, or answers why it could not.
         ///
         /// - version: the version to install
+        /// - is_newest: whether `version` is what `latest` answered rather
+        ///   than a version the caller named
         /// - say: where progress goes
-        install(version: string, say: (string) -> void) -> Result[unit, string]
+        install(version: string, is_newest: bool, say: (string) -> void) -> Result[unit, string]
+
+        /// The version an install of `requested` left held, which is a
+        /// different one where a concurrent install settled the newest first.
+        ///
+        /// - requested: the version that was asked for
+        settled(requested: string) -> string => requested
     si
 
     /// A compiler of one kind.
@@ -51,7 +59,10 @@ namespace Ghul.Cli is
 
         is_current(latest: string) -> bool => has(latest)
 
-        install(version: string, say: (string) -> void) -> Result[unit, string] is
+        settled(requested: string) -> string =>
+            COMPILER_PLAN.store(_kind).recent_resolution(NEWEST_RESOLUTION_WINDOW_SECONDS) ?? requested
+
+        install(version: string, is_newest: bool, say: (string) -> void) -> Result[unit, string] is
             // The wasm-built compiler runs under Node, so a machine with none
             // gets one first.
             if _kind == CompilerKind.WASM then
@@ -62,7 +73,7 @@ namespace Ghul.Cli is
                 fi
             fi
 
-            let installed = ensure_compiler_installed(COMPILER_PLAN.store(_kind), version, false)
+            let installed = ensure_compiler_installed(COMPILER_PLAN.store(_kind), version, false, is_newest)
 
             if let (error): ERROR = installed then
                 return ERROR(error)
@@ -97,7 +108,7 @@ namespace Ghul.Cli is
             return has(latest) /\ platform? /\ LLVM_TOOLCHAIN.for_this_user().is_host_kept(latest, platform!)
         si
 
-        install(version: string, say: (string) -> void) -> Result[unit, string] is
+        install(version: string, is_newest: bool, say: (string) -> void) -> Result[unit, string] is
             let platform = LLVM_TOOLCHAIN.triple_for(_machine.rid)
 
             if !platform? then
@@ -145,7 +156,7 @@ namespace Ghul.Cli is
             return false
         si
 
-        install(version: string, say: (string) -> void) -> Result[unit, string] =>
+        install(version: string, is_newest: bool, say: (string) -> void) -> Result[unit, string] =>
             Ghul.Project.NODE_DOWNLOAD.of(Ghul.Project.NODE_STORE.for_this_user()).install(version, say)
     si
 
@@ -174,7 +185,7 @@ namespace Ghul.Cli is
 
         is_current(latest: string) -> bool => has(latest)
 
-        install(version: string, say: (string) -> void) -> Result[unit, string] =>
+        install(version: string, is_newest: bool, say: (string) -> void) -> Result[unit, string] =>
             Ghul.Project.WASMTIME_DOWNLOAD.of(Ghul.Project.WASMTIME_STORE.for_this_user()).install(version, say)
     si
 
@@ -317,7 +328,7 @@ namespace Ghul.Cli is
 
             let shown = LOG.version(target!)
             let work = LOG.begin("installing {title} {shown}")
-            let done = component.install(target!, (line: string) -> void is si)
+            let done = component.install(target!, !version?, (line: string) -> void is si)
 
             if let (error): ERROR = done then
                 work.finish("{title} {shown} not installed: {error}")
@@ -325,7 +336,9 @@ namespace Ghul.Cli is
                 return 1
             fi
 
-            work.finish("{title} {shown} installed")
+            let held = if version? then target! else component.settled(target!) fi
+
+            work.finish("{title} {LOG.version(held)} installed")
 
             return 0
         si
@@ -362,7 +375,7 @@ namespace Ghul.Cli is
             fi
 
             let work = LOG.begin("updating {title} {held} to {shown}")
-            let done = component.install(newest!, (line: string) -> void is si)
+            let done = component.install(newest!, true, (line: string) -> void is si)
 
             if let (error): ERROR = done then
                 work.finish("{title} not updated: {error}")
@@ -370,7 +383,7 @@ namespace Ghul.Cli is
                 return 1
             fi
 
-            work.finish("{title} updated {held} to {shown}")
+            work.finish("{title} updated {held} to {LOG.version(component.settled(newest!))}")
 
             return 0
         si

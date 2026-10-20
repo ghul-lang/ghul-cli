@@ -141,6 +141,59 @@ namespace Ghul.Repl.Host is
         // as long as the returned stream stays open.
         install_lock_path() -> string => Path.join([root, ".install.lock"])
 
+        // Where the version the last installer resolved as the newest is kept.
+        _resolution_path() -> string => Path.join([root, ".newest"])
+
+        /// The version a concurrent installer resolved as the newest within
+        /// the last `window_seconds`, or null. Concurrent installers each ask
+        /// where the newest release is, and a release that has just been
+        /// published can be answered differently to each; the one holding the
+        /// install lock settles it for the others.
+        ///
+        /// - window_seconds: how recent the resolution has to be
+        recent_resolution(window_seconds: int) -> string? is
+            let path = _resolution_path()
+
+            if !File.exists(path) then
+                return null
+            fi
+
+            let age = System.DateTime.utc_now - File.get_last_write_time_utc(path)
+
+            if age.total_seconds > cast double(window_seconds) then
+                return null
+            fi
+
+            let text = File.read_all_text(path).trim()
+
+            return if text.length > 0 then text else null fi
+        si
+
+        /// Records `version` as the newest this installer resolved.
+        ///
+        /// - version: the version resolved
+        record_resolution(version: string) is
+            Directory.create_directory(root)
+
+            File.write_all_text(_resolution_path(), version)
+        si
+
+        /// The version to install: the one a concurrent installer resolved
+        /// moments ago if there is one, and otherwise `mine`, which is then
+        /// recorded for the installers that follow.
+        ///
+        /// - mine: the newest version this installer resolved
+        /// - window_seconds: how recent another installer's resolution has to be
+        settle_newest(mine: string, window_seconds: int) -> string is
+            if let theirs = recent_resolution(window_seconds) then
+                return theirs
+            fi
+
+            record_resolution(mine)
+
+            return mine
+        si
+
         // The file a native compiler is: the executable a Native AOT
         // release ships under the name of the .NET tool command it stands
         // in for, run directly with no assembly beside it.
