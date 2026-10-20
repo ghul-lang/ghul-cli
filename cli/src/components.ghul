@@ -383,7 +383,7 @@ namespace Ghul.Cli is
                 return 1
             fi
 
-            work.finish("{title} updated {held} to {shown}")
+            work.finish("{title} updated {held} to {LOG.version(component.settled(newest!))}")
 
             return 0
         si
