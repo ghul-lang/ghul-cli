@@ -1,0 +1,109 @@
+namespace Ghul.Cli.Tests is
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    use Ghul.Project.MANIFEST_EDIT
+    use Ghul.Project.MANIFEST_READER
+    use Ghul.Project.ReadOutcome
+
+    @TestClass()
+    class MANIFEST_EDIT_TESTS is
+        init() is si
+
+        _URL: string static => "https://github.com/acme/parsing"
+
+        _added(text: string) -> string is
+            let result = MANIFEST_EDIT.add_dependency(text, "parsing", _URL, "^1.2.0")
+
+            assert result?;
+
+            return result!
+        si
+
+        // The edited text is still a manifest, and says what was asked.
+        _has_parsing_pin(text: string) is
+            let outcome = MANIFEST_READER.read(text, "ghul-project.json")
+
+            if let ok: ReadOutcome.OK = outcome then
+                assert ok.manifest.dependencies.contains_key("parsing");
+            else
+                assert false;
+            fi
+        si
+
+        @Test()
+        add_dependency__adds_to_an_existing_dependencies_object_keeping_the_rest() is
+            let text = "{{\n    // kept\n    \"name\": \"app\",\n    \"targets\": [\"wasm\"],\n    \"dependencies\": {{\n        \"ghul-core\": {{ \"version\": \">=0.0.0\" }},\n    }},\n}}\n"
+
+            let edited = _added(text)
+
+            assert edited.contains("// kept");
+            assert edited.contains("\"ghul-core\": {{ \"version\": \">=0.0.0\" }},");
+            assert edited.contains("\"parsing\": {{ \"git\": \"https://github.com/acme/parsing\", \"version\": \"^1.2.0\" }}");
+            _has_parsing_pin(edited);
+        si
+
+        @Test()
+        add_dependency__adds_a_dependencies_object_when_there_is_none() is
+            let text = "{{\n    \"name\": \"app\",\n    \"targets\": [\"wasm\"]\n}}\n"
+
+            let edited = _added(text)
+
+            assert edited.contains("\"dependencies\": {{");
+            _has_parsing_pin(edited);
+        si
+
+        @Test()
+        add_dependency__fills_an_empty_dependencies_object() is
+            let edited = _added("{{ \"name\": \"app\", \"targets\": [\"wasm\"], \"dependencies\": {{}} }}")
+
+            _has_parsing_pin(edited);
+        si
+
+        @Test()
+        add_dependency__moves_the_pin_of_a_dependency_already_there_and_keeps_its_other_keys() is
+            let text = "{{ \"name\": \"app\", \"targets\": [\"wasm\"], \"dependencies\": {{ \"parsing\": {{ \"git\": \"https://github.com/acme/parsing\", \"directory\": \"lib\", \"version\": \"^1.0.0\" }} }} }}"
+
+            let edited = _added(text)
+
+            assert edited.contains("\"directory\": \"lib\"");
+            assert edited.contains("\"^1.2.0\"");
+            assert !edited.contains("^1.0.0");
+        si
+
+        @Test()
+        add_dependency__replaces_a_dependency_on_a_tag_or_at_another_url() is
+            let on_tag = "{{ \"name\": \"app\", \"targets\": [\"wasm\"], \"dependencies\": {{ \"parsing\": {{ \"git\": \"https://github.com/acme/parsing\", \"tag\": \"v1.0.0\" }} }} }}"
+            let elsewhere = "{{ \"name\": \"app\", \"targets\": [\"wasm\"], \"dependencies\": {{ \"parsing\": {{ \"path\": \"../parsing\" }} }} }}"
+
+            for text in [on_tag, elsewhere] do
+                let edited = _added(text)
+
+                assert !edited.contains("\"tag\"");
+                assert !edited.contains("\"path\"");
+                _has_parsing_pin(edited);
+            od
+        si
+
+        @Test()
+        add_dependency__adding_twice_changes_nothing_the_second_time() is
+            let once = _added("{{ \"name\": \"app\", \"targets\": [\"wasm\"] }}")
+            let twice = _added(once)
+
+            assert once =~ twice;
+        si
+
+        @Test()
+        add_dependency__refuses_text_that_is_not_an_object() is
+            assert !MANIFEST_EDIT.add_dependency("[]", "parsing", _URL, "^1.2.0")?;
+            assert !MANIFEST_EDIT.add_dependency("", "parsing", _URL, "^1.2.0")?;
+        si
+
+        @Test()
+        add_dependency__quotes_what_it_writes() is
+            let edited = MANIFEST_EDIT.add_dependency("{{ \"name\": \"app\", \"targets\": [\"wasm\"] }}", "parsing", "https://x/y\"z", "^1.2.0")!
+
+            assert edited.contains("https://x/y\\\"z");
+        si
+    si
+si

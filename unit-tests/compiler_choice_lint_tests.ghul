@@ -6,16 +6,18 @@ namespace Ghul.Cli.Tests is
     // machine and what it holds. A command that picks a store itself runs
     // a compiler the plan would not have chosen, and fetches the wrong one:
     // no .NET and no Native AOT compiler for the platform is a machine the
-    // plan hands the wasm-built compiler to.
+    // plan hands the wasm-built compiler to. The Jupyter kernel is the one
+    // exception, deliberately: it loads each cell into its own process, so
+    // only the managed compiler will do.
     @TestClass()
     class COMPILER_CHOICE_LINT_TESTS is
         init() is si
 
-        _cli_sources() -> string static is
+        _sources(project: string) -> string static is
             let directory: string? mut = IO.Path.get_directory_name(System.Reflection.Assembly.get_executing_assembly().location)
 
             while directory? do
-                let candidate = IO.Path.combine(directory, "cli", "src")
+                let candidate = IO.Path.combine(directory, project, "src")
 
                 if IO.Directory.exists(candidate) then
                     return candidate
@@ -27,31 +29,50 @@ namespace Ghul.Cli.Tests is
             return ""
         si
 
-        @Test()
-        no_command_picks_a_compiler_store_except_through_the_plan() is
-            let root = _cli_sources()
-
-            if root.length == 0 then
-                // Run from a copy without the sources beside it.
-                return
-            fi
-
-            let allowed = ["compiler_plan.ghul", "machine.ghul"]
+        // The stores a source tree names without going through the plan.
+        _offenders(root: string, allowed_files: Collections.List[string], allowed_names: Collections.List[string]) -> Collections.List[string] static is
             let offenders = Collections.LIST[string]()
 
             for path in IO.Directory.get_files(root, "*.ghul", IO.SearchOption.ALL_DIRECTORIES) do
-                if allowed |> Ghul.Pipes.any(name => name =~ IO.Path.get_file_name(path)) then
+                if allowed_files |> Ghul.Pipes.any(name => name =~ IO.Path.get_file_name(path)) then
                     continue
                 fi
 
                 let text = IO.File.read_all_text(path)
 
                 for name in ["COMPILER_STORE.for_this_user", "managed_for_this_user", "native_for_this_user", "wasm_for_this_user", "llvm_for_this_user"] do
-                    if text.contains(name) then
+                    if text.contains(name) /\ !(allowed_names |> Ghul.Pipes.any(allowed => allowed =~ name)) then
                         offenders.add("{IO.Path.get_file_name(path)}: {name}")
                     fi
                 od
             od
+
+            return offenders
+        si
+
+        @Test()
+        no_command_picks_a_compiler_store_except_through_the_plan() is
+            let root = _sources("cli")
+
+            if root.length == 0 then
+                // Run from a copy without the sources beside it.
+                return
+            fi
+
+            let offenders = _offenders(root, ["compiler_plan.ghul", "machine.ghul"], Collections.LIST[string]())
+
+            assert offenders.count == 0;
+        si
+
+        @Test()
+        the_jupyter_kernel_asks_only_for_the_managed_compiler() is
+            let root = _sources("jupyter")
+
+            if root.length == 0 then
+                return
+            fi
+
+            let offenders = _offenders(root, Collections.LIST[string](), ["managed_for_this_user"])
 
             assert offenders.count == 0;
         si
