@@ -103,12 +103,16 @@ target `GHUL_TARGET` names. A script is cached, by the script, the target,
 the compiler and the libraries and `ghul-llvm` it was built with, so it
 compiles once. A script that compiles says nothing.
 
-What does not work without .NET, today: **the REPL and the Jupyter kernel.**
-Each cell is compiled to a .NET assembly and run inside the tool, which the
-native build cannot do.
+The REPL works without .NET on Linux x64 and arm64. With no .NET to host the
+cells, `ghul repl` starts the native session, as `ghul repl --target llvm`
+does: each cell is compiled natively and run in a host process that keeps every
+earlier cell loaded, in about one to two seconds a cell. It needs `ghul-llvm`,
+which `ghul` fetches the first time. Ctrl-C ends a running cell and keeps the
+session, and completion and hover work.
 
-The REPL on wasm is planned in
-[ghul-lang/ghul#3480](https://github.com/ghul-lang/ghul/issues/3480).
+What does not work without .NET, today: **the Jupyter kernel.** Each cell is
+compiled to a .NET assembly and run inside the tool, which the native build
+cannot do.
 
 A wasm program can use only what the wasm target supports, which is much less
 than .NET:
