@@ -8,7 +8,7 @@ namespace Ghul.Cli.Repl is
     use Ghul.Repl.Host.Completeness
     use Ghul.Repl.Host.CELL_END
     use Ghul.Repl.Host.CellStep
-    use Ghul.Repl.Host.HOSTED_SESSION
+    use Ghul.Repl.Host.CellSession
     use Ghul.Repl.Host.SUBMIT_RESULT
 
     // The lines of the cell being entered, and when it ends. Completeness
@@ -119,7 +119,7 @@ namespace Ghul.Cli.Repl is
     // from SESSION, so a notebook or the playground can take its place
     // without any of this.
     class TERMINAL(
-        _make_session: () -> HOSTED_SESSION,
+        _make_session: () -> CellSession,
         _want_default_use: bool,
         _theme: ThemeChoice
     ) is
@@ -127,7 +127,7 @@ namespace Ghul.Cli.Repl is
 
         // Whether a value is shown with its type, as `:types` sets it.
         _show_types: bool
-        _current: HOSTED_SESSION?
+        _current: CellSession?
 
         // What code and diagnostics are coloured with at a terminal.
         _colours: PALETTE?
@@ -278,7 +278,7 @@ namespace Ghul.Cli.Repl is
         // An earlier cell's text, to be the cell edited at the next prompt.
         _pending_edit: string?
 
-        _edit(session: HOSTED_SESSION, argument: string) is
+        _edit(session: CellSession, argument: string) is
             let number mut = 0
 
             if !int.try_parse(argument, number ref) then
@@ -305,7 +305,7 @@ namespace Ghul.Cli.Repl is
         // `:rerun N` submits cell N again; `:rerun N..` submits N and every
         // later cell that ran to the end, in order, stopping at the first
         // that does not.
-        _rerun(session: HOSTED_SESSION, argument: string) is
+        _rerun(session: CellSession, argument: string) is
             let is_from = argument.ends_with("..")
             let digits = if is_from then argument.substring(0, argument.length - 2).trim() else argument fi
             let number mut = 0
@@ -427,10 +427,10 @@ namespace Ghul.Cli.Repl is
         // How a cell's value is shown, run on the cell's own thread after the
         // cell, so Ctrl-C stops a value that never finishes showing itself
         // as it stops the cell.
-        _presenter(session: HOSTED_SESSION) -> (object?) -> object? =>
+        _presenter(session: CellSession) -> (object?) -> object? =>
             value => (_display.use_runtime(session.runtime); _display.format(value))
 
-        _report(session: HOSTED_SESSION, result: SUBMIT_RESULT, want_value: bool, number: int, source: string) is
+        _report(session: CellSession, result: SUBMIT_RESULT, want_value: bool, number: int, source: string) is
             for line in Ghul.Repl.DIAGNOSTIC_VIEW.lines(result.diagnostics, "cell-{number}", source, _diagnostic_colours()) do
                 Std.error.write_line(line)
             od
@@ -444,7 +444,7 @@ namespace Ghul.Cli.Repl is
             fi
 
             if result.was_interrupted then
-                Std.error.write_line("ghul: {SUBMIT_RESULT.INTERRUPTED_NOTE}")
+                Std.error.write_line("ghul: {session.interrupted_note}")
 
                 return
             fi
@@ -481,7 +481,7 @@ namespace Ghul.Cli.Repl is
         si
 
         // What could follow some text, one name to a line.
-        _complete(session: HOSTED_SESSION, text: string) is
+        _complete(session: CellSession, text: string) is
             if let names = _names(text, 1, text.length + 1) then
                 for name in names do
                     Std.write_line(name)
@@ -492,7 +492,7 @@ namespace Ghul.Cli.Repl is
         si
 
         // An assembly file, referenced by the cells after it.
-        _reference(session: HOSTED_SESSION, path: string) is
+        _reference(session: CellSession, path: string) is
             if path.length == 0 then
                 Std.write_line("usage: :ref FILE")
 
@@ -504,7 +504,7 @@ namespace Ghul.Cli.Repl is
 
         // A NuGet package, `NAME` or `NAME VERSION`, and what it depends on,
         // referenced by the cells after it.
-        _package(session: HOSTED_SESSION, argument: string) is
+        _package(session: CellSession, argument: string) is
             let parts = argument.split([' '], System.StringSplitOptions.REMOVE_EMPTY_ENTRIES)
 
             if parts.count < 1 \/ parts.count > 2 then
@@ -533,7 +533,7 @@ namespace Ghul.Cli.Repl is
         // A value the cell ended on, after the type of the expression it
         // ended on where the analyser can say what that is. The expression
         // is asked about as `:type` asks, so it is not run again.
-        _with_type(session: HOSTED_SESSION, source: string, shown: string) -> string is
+        _with_type(session: CellSession, source: string, shown: string) -> string is
             if !_show_types then
                 return shown
             fi
@@ -567,7 +567,7 @@ namespace Ghul.Cli.Repl is
         si
 
         // The type of an expression, which is compiled but not run.
-        _type(session: HOSTED_SESSION, expression: string) is
+        _type(session: CellSession, expression: string) is
             if expression.trim().length == 0 then
                 Std.write_line("usage: :type EXPRESSION")
 
@@ -590,7 +590,7 @@ namespace Ghul.Cli.Repl is
         si
 
         // The cells that ran to the end, written to a file `:load` reads.
-        _save(session: HOSTED_SESSION, path: string) is
+        _save(session: CellSession, path: string) is
             if path.length == 0 then
                 Std.write_line("usage: :save FILE")
 
@@ -612,7 +612,7 @@ namespace Ghul.Cli.Repl is
 
         // A file's cells submitted in order, each shown as if typed,
         // stopping at the first that does not run to the end.
-        _load(session: HOSTED_SESSION, path: string) is
+        _load(session: CellSession, path: string) is
             if path.length == 0 then
                 Std.write_line("usage: :load FILE")
 
@@ -647,7 +647,7 @@ namespace Ghul.Cli.Repl is
         si
 
         // The declaration the last character of some text belongs to.
-        _hover(session: HOSTED_SESSION, text: string) is
+        _hover(session: CellSession, text: string) is
             if let shown = session.hover(text, 1, text.length) then
                 Std.write_line(shown)
             elif session.is_analysis_available then

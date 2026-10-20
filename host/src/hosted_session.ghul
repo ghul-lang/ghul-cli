@@ -91,7 +91,7 @@ namespace Ghul.Repl.Host is
     // session, and run once it has been accepted. It writes nothing to the
     // console itself; what a cell writes goes wherever the console points
     // while it runs.
-    class HOSTED_SESSION(_backend: CompileBackend, _probe_directory: string?, _want_default_use: bool) is
+    class HOSTED_SESSION(_backend: CompileBackend, _probe_directory: string?, _want_default_use: bool): CellSession is
         _session: SESSION
         _context: SESSION_LOAD_CONTEXT
 

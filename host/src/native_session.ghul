@@ -1,0 +1,608 @@
+namespace Ghul.Repl.Host is
+    use Result.*
+    use IO.Std
+
+    use Ghul.Repl.CELL_DIAGNOSTIC
+    use Ghul.Repl.CELL_REPLY
+    use Ghul.Repl.CELL_REQUEST
+    use Ghul.Repl.LOADED_CELL
+    use Ghul.Repl.SESSION
+    use System.Reflection.Assembly
+
+    /// A session whose cells run in a native host process of their own. Each
+    /// cell is compiled for the llvm target as the next cell of a linked
+    /// session, written as a shared object, and handed to one long-running
+    /// `ghul-host`, which loads it beside the cells before it and runs it, so
+    /// everything an earlier cell defined or held is still there.
+    ///
+    /// - _compiler: the compiler that writes each cell's LLVM module
+    /// - _tool: the `ghul-llvm` executable that turns the module into a shared object
+    /// - _host_path: the `ghul-host` executable that runs the cells
+    /// - _library_arguments: the compiler arguments naming the libraries every cell is compiled against
+    /// - _want_default_use: whether cells start with `use default`
+    class NATIVE_SESSION(
+        _compiler: COMPILER_COMMAND,
+        _tool: string,
+        _host_path: string,
+        _library_arguments: Collections.List[string],
+        _want_default_use: bool
+    ): CellSession is
+        // What the host writes after a cell has run, and before the value
+        // the cell ended on.
+        DONE_MARK: char static => '\u0001'
+        VALUE_MARK: char static => '\u0002'
+
+        _session: SESSION
+        _directory: string
+        _submissions: Collections.LIST[CELL_RECORD]
+
+        // The files of the cells the session holds, in the order they ran.
+        _cell_files: Collections.LIST[string]
+
+        _host: System.Diagnostics.Process?
+        _commands: IO.StreamWriter?
+        _is_running: bool
+        _fallback: COMPLETENESS_CHECK
+        _analysis: ANALYSIS_SESSION
+
+        init(..) is
+            _session = SESSION(_want_default_use)
+            _directory = HOST_SESSIONS.new_session_directory()
+            _submissions = Collections.LIST[CELL_RECORD]()
+            _cell_files = Collections.LIST[string]()
+            _fallback = COMPLETENESS_CHECK(_compiler, IO.Path.join([_directory, "check"]))
+
+            IO.Directory.create_directory(_directory)
+
+            let analysis_directory = IO.Path.join([_directory, "analysis"])
+
+            _analysis = ANALYSIS_SESSION(() => _start_analyser(analysis_directory), _session, (line: string) => Std.error.write_line(line))
+            _analysis.companions = () => _cell_sources()
+
+            IO.File.write_all_text(_libraries_file(), _response_text(_library_arguments))
+        si
+
+        // The analyser sees the libraries the cells are compiled against, and
+        // gets the cells themselves with each text it is asked about.
+        _start_analyser(directory: string) -> AnalyserConnection? is
+            try
+                IO.Directory.create_directory(directory)
+
+                return ANALYSER_PROCESS(_compiler, directory, Collections.LIST[string](["--target", "llvm", "--cells", "@{_libraries_file()}"]))
+            catch e: System.Exception
+                return null
+            yrt
+        si
+
+        _cell_sources() -> Collections.List[(path: string, source: string)] is
+            let result = Collections.LIST[(path: string, source: string)]()
+
+            for path in _cell_files do
+                result.add((path = path, source = IO.File.read_all_text(path)))
+            od
+
+            return result
+        si
+
+        _libraries_file() -> string => IO.Path.join([_directory, "libraries.rsp"])
+
+        // One argument a line, quoted where it holds white space, as the
+        // compiler reads a response file.
+        _response_text(arguments: Collections.List[string]) -> string static is
+            let text = Text.STRING_BUILDER()
+
+            for argument in arguments do
+                if argument.length == 0 \/ (argument |> Ghul.Pipes.any(c => char.is_white_space(c))) then
+                    text.append("\"{argument}\"")
+                else
+                    text.append(argument)
+                fi
+
+                text.append('\n')
+            od
+
+            return text.to_string()
+        si
+
+        submissions: Collections.List[CELL_RECORD] => _submissions
+
+        next_cell_number: int => _session.next_index
+
+        references: Collections.List[string] => Collections.LIST[string]()
+
+        runtime: Assembly? => null
+
+        is_running: bool => _is_running
+
+        is_analysis_available: bool => _analysis.is_available
+
+        submit(source: string) -> SUBMIT_RESULT => _submit_recorded(source, null)
+
+        submit(source: string, present: (object?) -> object?) -> SUBMIT_RESULT => _submit_recorded(source, null)
+
+        rerun(number: int, present: ((object?) -> object?)?) -> SUBMIT_RESULT? is
+            for record in _submissions do
+                if record.number == number then
+                    return _submit_recorded(record.source, number)
+                fi
+            od
+
+            return null
+        si
+
+        // Ends the cell running in the host, which takes SIGINT as the end of
+        // that cell and not of the session. False while no cell is in the
+        // host: a build in progress is not stopped.
+        interrupted_note: string => "interrupted; the cell was ended and its earlier definitions are kept"
+
+        interrupt() -> bool is
+            if !_in_host then
+                return false
+            fi
+
+            if let host = _host then
+                try
+                    let start_info = System.Diagnostics.ProcessStartInfo()
+
+                    start_info.file_name = "kill"
+                    start_info.use_shell_execute = false
+                    start_info.argument_list.add("-INT")
+                    start_info.argument_list.add("{host.id}")
+
+                    System.Diagnostics.Process.start(start_info)?.wait_for_exit()
+
+                    return true
+                catch e: System.Exception
+                    return false
+                yrt
+            fi
+
+            return false
+        si
+
+        _in_host: bool
+
+        set_display_sink(sink: Ghul.DisplaySink) is si
+
+        add_reference(path: string) -> ADDED_REFERENCES =>
+            ADDED_REFERENCES(Collections.LIST[string](), "references are not supported on the llvm target yet")
+
+        add_package(package: string, version: string?) -> ADDED_REFERENCES =>
+            ADDED_REFERENCES(Collections.LIST[string](), "packages are not supported on the llvm target yet")
+
+        complete(text: string, line: int, column: int) -> Collections.List[ANALYSIS_COMPLETION]? => _analysis.complete(text, line, column)
+
+        hover(text: string, line: int, column: int) -> string? => _analysis.hover(text, line, column)
+
+        diagnostics(text: string) -> Collections.List[string]? => _analysis.diagnostics(text)
+
+        check(text: string) -> Completeness => _fallback.check(text)
+
+        check_ending(text: string) -> CHECK_ANSWER => CHECK_ANSWER(check(text), null)
+
+        close() is
+            _analysis.close()
+
+            try
+                if let server = _server then
+                    server.standard_input.write_line("quit")
+                    server.standard_input.flush()
+
+                    if !server.wait_for_exit(2000) then
+                        server.kill()
+                    fi
+                fi
+            catch e: System.Exception
+            yrt
+
+            try
+                _commands?.write_line("quit")
+                _commands?.flush()
+                _commands?.dispose()
+            catch e: System.Exception
+            yrt
+
+            if let host = _host then
+                if !host.wait_for_exit(2000) then
+                    host.kill()
+                fi
+            fi
+
+            _host = null
+            _commands = null
+
+            try
+                if IO.Directory.exists(_directory) then
+                    IO.Directory.delete(_directory, true)
+                fi
+            catch e: System.Exception
+            yrt
+        si
+
+        _submit_recorded(source: string, rerun_of: int?) -> SUBMIT_RESULT is
+            _is_running = true
+
+            try
+                let request = _session.prepare(source)
+                let result = _submit(source, request)
+
+                let status =
+                    if !result.is_accepted then
+                        CellStatus.FAILED
+                    elif result.run_error? then
+                        CellStatus.THREW
+                    else
+                        CellStatus.OK
+                    fi
+
+                _submissions.add(CELL_RECORD(request.index, source, status, rerun_of))
+
+                return result
+            finally
+                _is_running = false
+            yrt
+        si
+
+        _submit(source: string, first: CELL_REQUEST) -> SUBMIT_RESULT is
+            let timing = System.Environment.get_environment_variable("GHUL_REPL_TIMING")?
+            let started = System.Diagnostics.Stopwatch.start_new()
+
+            let request mut = first
+            let compiled mut = _compile(request)
+
+            if !compiled.shared_object? then
+                let dropped = _session.drop_failed_imports(request, compiled.diagnostics)
+
+                if dropped.count > 0 then
+                    request = _session.prepare(source)
+                    compiled = _compile(request)
+                fi
+            fi
+
+            let compile_time = started.elapsed_milliseconds
+
+            let loaded =
+                if compiled.shared_object? then
+                    LOADED_CELL(compiled.exports, null)
+                else
+                    null
+                fi
+
+            let outcome = _session.accept(request, CELL_REPLY(compiled.diagnostics, loaded))
+
+            if !outcome.is_accepted \/ !loaded? \/ !compiled.shared_object? then
+                return SUBMIT_RESULT(false, outcome.diagnostics, null, null, false)
+            fi
+
+            _cell_files.add(_source_path(request.name))
+
+            let run = _run(compiled.shared_object!)
+
+            if timing then
+                Std.error.write_line("[{request.name}: compile {compile_time:F0} ms, load and run {started.elapsed_milliseconds - compile_time:F0} ms]")
+            fi
+
+            let interrupted = run.error =~ "interrupted"
+
+            return SUBMIT_RESULT(true, outcome.diagnostics, run.value, if interrupted then null else run.error fi, interrupted)
+        si
+
+        _source_path(name: string) -> string => IO.Path.join([_directory, "{name}.ghul"])
+
+        // Whether the compiler can keep running between cells: only a .NET
+        // compiler can, and only until one fails to, after which each cell
+        // starts the compiler afresh.
+        _server: System.Diagnostics.Process?
+        _server_failed: bool
+        _served: int
+
+        // Compiles with `arguments`, in the compiler kept running between
+        // cells where there is one, and in a process of its own otherwise.
+        // Whether the build succeeded.
+        _build(arguments: Collections.List[string], diagnostics: Collections.LIST[CELL_DIAGNOSTIC]) -> bool is
+            if !_server_failed /\ _compiler.assembly? then
+                let served = _build_served(arguments, diagnostics)
+
+                if served? then
+                    return served!
+                fi
+
+                _server_failed = true
+            fi
+
+            let spawned = Collections.LIST[string](_compiler.leading_arguments())
+
+            spawned.add_range(arguments)
+
+            return _run_process(_compiler.file_name, spawned, diagnostics)
+        si
+
+        // Null when the server cannot be used: it did not start, or it ended
+        // before answering.
+        _build_served(arguments: Collections.List[string], diagnostics: Collections.LIST[CELL_DIAGNOSTIC]) -> bool? is
+            try
+                if !_server? then
+                    let start_info = System.Diagnostics.ProcessStartInfo()
+
+                    start_info.file_name = _compiler.file_name
+
+                    for argument in _compiler.leading_arguments() do
+                        start_info.argument_list.add(argument)
+                    od
+
+                    start_info.argument_list.add("--build-server")
+                    start_info.use_shell_execute = false
+                    start_info.redirect_standard_input = true
+                    start_info.redirect_standard_output = true
+                    start_info.redirect_standard_error = true
+                    start_info.working_directory = _directory
+                    start_info.environment["DOTNET_TieredPGO"] = "0"
+
+                    let started = System.Diagnostics.Process.start(start_info)
+
+                    _server = started
+
+                    // Nothing is written to standard output; draining it keeps
+                    // the server from ever blocking on it.
+                    if started? then
+                        let _ = started.standard_output.read_to_end_async()
+                    fi
+                fi
+
+                let server = _server
+
+                if !server? then
+                    return null
+                fi
+
+                _served = _served + 1
+
+                let request = IO.Path.join([_directory, "build-{_served}.rsp"])
+
+                IO.File.write_all_text(request, "{string.join("\n", arguments)}\n")
+
+                server.standard_input.write_line(request)
+                server.standard_input.flush()
+
+                let mark = "\u0001build-done "
+
+                do
+                    let line = server.standard_error.read_line()
+
+                    if !line? then
+                        return null
+                    fi
+
+                    if line.starts_with(mark) then
+                        return int.parse(line.substring(mark.length)) == 0
+                    fi
+
+                    let trimmed = line.trim()
+
+                    if trimmed.length > 0 /\ !trimmed.starts_with("***") /\ !trimmed.starts_with("!!!") then
+                        diagnostics.add(CELL_DIAGNOSTIC.parse(trimmed))
+                    fi
+                od
+            catch e: System.Exception
+                return null
+            yrt
+        si
+
+        // What compiling one cell produced: the shared object, the names a
+        // later cell can import, and the compiler's diagnostics.
+        _compile(request: CELL_REQUEST) -> NATIVE_COMPILE is
+            let diagnostics = Collections.LIST[CELL_DIAGNOSTIC]()
+            let name = request.name
+            let module = IO.Path.join([_directory, "{name}.ll"])
+            let output = IO.Path.join([_directory, "{name}.out"])
+            let shared_object = IO.Path.join([_directory, "{name}.so"])
+
+            IO.File.write_all_text(_source_path(name), request.source)
+
+            let arguments = Collections.LIST[string]()
+
+            arguments.add_range(["--target", "llvm", "--cell-link", "{_cell_files.count}"])
+            arguments.add_range(["--suppress", "impure-function-argument"])
+            arguments.add_range(["--llvm-output", module, "--llvm-no-link", "-o", output])
+            arguments.add_range(_cell_files)
+            arguments.add(_source_path(name))
+            arguments.add("@{_libraries_file()}")
+
+            let compiled = _build(arguments, diagnostics)
+
+            if !compiled \/ !IO.File.exists(module) then
+                return NATIVE_COMPILE(null, Collections.LIST[string](), diagnostics)
+            fi
+
+            let emit_arguments = Collections.LIST[string](["--emit=cell", "-O0", module, "-o", shared_object])
+
+            if !_run_process(_tool, emit_arguments, diagnostics) \/ !IO.File.exists(shared_object) then
+                return NATIVE_COMPILE(null, Collections.LIST[string](), diagnostics)
+            fi
+
+            return NATIVE_COMPILE(shared_object, _exports(IO.Path.join([_directory, "{name}.cells.json"]), name), diagnostics)
+        si
+
+        // The names cell `name` declares that a later cell can import, as the
+        // compiler's export report gives them.
+        _exports(report: string, name: string) -> Collections.List[string] is
+            let names = Collections.LIST[string]()
+
+            if !IO.File.exists(report) then
+                return names
+            fi
+
+            let document = System.Text.Json.JsonDocument.parse(IO.File.read_all_text(report), _)
+
+            for cell in document.root_element.get_property("cells").enumerate_array() do
+                if cell.get_property("cell").get_string() =~ name then
+                    for export in cell.get_property("exports").enumerate_array() do
+                        if let exported = export.get_string() then
+                            names.add(exported)
+                        fi
+                    od
+                fi
+            od
+
+            return names
+        si
+
+        // Runs a tool to the end, its output lines parsed as diagnostics.
+        // Whether it exited with success.
+        _run_process(
+            file_name: string,
+            arguments: Collections.List[string],
+            diagnostics: Collections.LIST[CELL_DIAGNOSTIC]
+        ) -> bool is
+            let start_info = System.Diagnostics.ProcessStartInfo()
+
+            start_info.file_name = file_name
+            start_info.use_shell_execute = false
+            start_info.redirect_standard_output = true
+            start_info.redirect_standard_error = true
+            start_info.working_directory = _directory
+            start_info.environment["DOTNET_TieredPGO"] = "0"
+
+            for argument in arguments do
+                start_info.argument_list.add(argument)
+            od
+
+            if let process = System.Diagnostics.Process.start(start_info) then
+                let out_task = process.standard_output.read_to_end_async()
+                let err_task = process.standard_error.read_to_end_async()
+
+                process.wait_for_exit()
+
+                for line in "{err_task.result}{out_task.result}".split(['\n']) do
+                    let trimmed = line.trim()
+
+                    if trimmed.length > 0 /\ !trimmed.starts_with("***") /\ !trimmed.starts_with("!!!") then
+                        diagnostics.add(CELL_DIAGNOSTIC.parse(trimmed))
+                    fi
+                od
+
+                return process.exit_code == 0
+            fi
+
+            diagnostics.add(CELL_DIAGNOSTIC.parse("ghul: failed to start {file_name}"))
+
+            return false
+        si
+
+        // Starts the host the first time a cell is to run. Its commands come
+        // through a named pipe, so a cell reading standard input reads the
+        // terminal's.
+        _start_host() -> Result[unit, string] is
+            if _host? then
+                return OK(_)
+            fi
+
+            let commands = IO.Path.join([_directory, "commands"])
+
+            let made = System.Diagnostics.ProcessStartInfo()
+
+            made.file_name = "mkfifo"
+            made.use_shell_execute = false
+            made.argument_list.add(commands)
+
+            let maker = System.Diagnostics.Process.start(made)
+
+            if !maker? then
+                return ERROR("ghul: cannot start mkfifo")
+            fi
+
+            maker!.wait_for_exit()
+
+            let start_info = System.Diagnostics.ProcessStartInfo()
+
+            start_info.file_name = _host_path
+            start_info.use_shell_execute = false
+            start_info.redirect_standard_output = true
+            start_info.argument_list.add("--serve")
+            start_info.argument_list.add(commands)
+
+            let host = System.Diagnostics.Process.start(start_info)
+
+            if !host? then
+                return ERROR("ghul: cannot start {_host_path}")
+            fi
+
+            _host = host
+            _commands = IO.StreamWriter(IO.FileStream(commands, IO.FileMode.OPEN, IO.FileAccess.READ_WRITE))
+
+            return OK(_)
+        si
+
+        // Loads and runs one cell in the host, relaying what it prints as it
+        // comes, and reads back the value it ended on.
+        _run(shared_object: string) -> NATIVE_RUN is
+            if let (problem): ERROR = _start_host() then
+                return NATIVE_RUN(null, problem)
+            fi
+
+            _in_host = true
+
+            let commands = _commands!
+
+            commands.write_line(shared_object)
+            commands.flush()
+
+            let output = _host!.standard_output
+            let text = Text.STRING_BUILDER()
+
+            let value: string? mut = null
+            let status mut = -1
+
+            while true do
+                let c = output.read()
+
+                if c < 0 then
+                    _in_host = false
+                    Std.out.write(text.to_string())
+
+                    return NATIVE_RUN(null, "ghul: the cell host ended unexpectedly")
+                fi
+
+                let ch = cast char(c)
+
+                if ch == DONE_MARK \/ ch == VALUE_MARK then
+                    Std.out.write(text.to_string())
+                    text.clear()
+
+                    let line = output.read_line() ?? ""
+
+                    if ch == VALUE_MARK then
+                        value = line
+                    else
+                        status = int.parse(line.substring("cell-done ".length).trim())
+
+                        break
+                    fi
+                else
+                    text.append(ch)
+
+                    if ch == '\n' then
+                        Std.out.write(text.to_string())
+                        text.clear()
+                    fi
+                fi
+            od
+
+            _in_host = false
+
+            Std.out.flush()
+
+            return NATIVE_RUN(value, if status == 0 then null elif status == 130 then "interrupted" else "ghul: the cell ended with status {status}" fi)
+        si
+    si
+
+    // What compiling one cell for the native host produced.
+    class NATIVE_COMPILE(
+        shared_object: string?,
+        exports: Collections.List[string],
+        diagnostics: Collections.List[CELL_DIAGNOSTIC]
+    );
+
+    // What running one cell in the native host produced.
+    class NATIVE_RUN(value: string?, error: string?);
+si

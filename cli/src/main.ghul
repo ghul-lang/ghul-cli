@@ -1056,12 +1056,13 @@ namespace Ghul.Cli is
     si
 
     // What `ghul repl` was asked for.
-    class REPL_OPTIONS(want_server: bool, want_default_use: bool, theme: Repl.ThemeChoice) is
+    class REPL_OPTIONS(want_server: bool, want_default_use: bool, theme: Repl.ThemeChoice, want_llvm: bool) is
         // Null when an argument is not one the session takes.
         parse(args: Collections.List[string]) -> REPL_OPTIONS? static is
             let want_server mut = true
             let want_default_use mut = true
             let theme mut = Repl.ThemeChoice.AUTO
+            let want_llvm mut = false
             let i mut = 0
 
             while i < args.count do
@@ -1070,6 +1071,21 @@ namespace Ghul.Cli is
                     want_server = false
                 when "--no-default-use" then
                     want_default_use = false
+                when "--target" then
+                    i = i + 1
+
+                    if i >= args.count then
+                        return null
+                    fi
+
+                    case args[i]
+                    when "llvm" then
+                        want_llvm = true
+                    when "dotnet" then
+                        want_llvm = false
+                    else
+                        return null
+                    esac
                 when "--theme" then
                     i = i + 1
 
@@ -1094,7 +1110,7 @@ namespace Ghul.Cli is
                 i = i + 1
             od
 
-            return REPL_OPTIONS(want_server, want_default_use, theme)
+            return REPL_OPTIONS(want_server, want_default_use, theme, want_llvm)
         si
     si
 
@@ -1102,9 +1118,13 @@ namespace Ghul.Cli is
         let options = REPL_OPTIONS.parse(args)
 
         if !options? then
-            Std.error.write_line("usage: ghul repl [--no-server] [--no-default-use] [--theme dark|light|none]")
+            Std.error.write_line("usage: ghul repl [--target dotnet|llvm] [--no-server] [--no-default-use] [--theme dark|light|none]")
 
             return 1
+        fi
+
+        if options.want_llvm then
+            return cmd_repl_llvm(options!)
         fi
 
         // A session loads each cell's assembly into this process, which the
@@ -1131,7 +1151,7 @@ namespace Ghul.Cli is
 
             let say = (line: string) -> void => LOG.say(line)
 
-            let make_session = () -> Host.HOSTED_SESSION =>
+            let make_session = () -> Host.CellSession =>
                 Host.HOST_SESSIONS.start(
                     compiler,
                     runtime_assembly,
@@ -1145,6 +1165,78 @@ namespace Ghul.Cli is
             return run_closing_on_signal(terminal)
 
         return 1
+    si
+
+    // `ghul repl --target llvm`: each cell is compiled natively and run in a
+    // host process that keeps every earlier cell loaded. `GHUL_REPL_COMPILER`
+    // names a ghul.dll to compile with in place of the installed compiler.
+    cmd_repl_llvm(options: REPL_OPTIONS) -> int is
+        let say = (line: string) -> void => LOG.say(line)
+
+        let named = System.Environment.get_environment_variable("GHUL_REPL_COMPILER")
+
+        let compiler: Host.COMPILER_COMMAND mut
+
+        if named? /\ named.length > 0 then
+            compiler = Host.COMPILER_COMMAND("dotnet", named)
+        else
+            let store = Host.COMPILER_STORE.for_this_user()
+            let ensured = ensure_compiler_installed(store, null, true)
+
+            if let (error): ERROR = ensured then
+                say(error)
+                return 1
+            fi
+
+            compiler = store.command(ensured!)
+        fi
+
+        let toolchain = LLVM_TOOLCHAIN.for_this_user()
+        let tool = toolchain.executable(null)
+
+        if let (error): ERROR = tool then
+            say(error)
+            return 1
+        fi
+
+        let host = toolchain.host_executable(tool!)
+
+        if let (error): ERROR = host then
+            say(error)
+            return 1
+        fi
+
+        let cache = Ghul.Project.LIBRARY_CACHE.for_this_user()
+
+        let manifest =
+            Ghul.Project.MANIFEST(
+                "repl", null, Ghul.Project.ManifestKind.PROGRAM,
+                Collections.LIST[Ghul.Project.BuildTarget]([Ghul.Project.BuildTarget.LLVM]), Collections.LIST[string](["repl.ghul"]),
+                Ghul.Project.MANIFEST_OPTIONS(null, false, Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), null),
+                script_dependencies(), Ghul.Project.CompilerBuild.DEFAULT,
+                Collections.LIST[Ghul.Project.BuildTarget](), null, Collections.MAP[string, Ghul.Project.VERSION_RANGE]())
+
+        let libraries = Ghul.Project.PROJECT_BUILD.libraries(
+            Ghul.Project.LOADED_PROJECT(manifest, cache_root(), Ghul.Project.BuildTarget.LLVM), cache, say)
+
+        if !libraries? then
+            return 1
+        fi
+
+        let library_arguments = Collections.LIST[string]()
+
+        for library in libraries do
+            library_arguments.add("--library-source")
+            library_arguments.add("{library.name}@{library.version}={library.root}")
+            library_arguments.add_range(library.files)
+        od
+
+        let make_session = () -> Host.CellSession =>
+            Host.NATIVE_SESSION(compiler, tool!, host!, library_arguments, options.want_default_use)
+
+        let terminal = Repl.TERMINAL(make_session, options.want_default_use, options.theme)
+
+        return run_closing_on_signal(terminal)
     si
 
     // The compile server also ends by itself once this process has gone
