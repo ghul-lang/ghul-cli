@@ -316,8 +316,11 @@ namespace Ghul.Cli is
         // Downloads the release archive, checks it against its published
         // SHA-256, unpacks it into a scratch directory beside the final one
         // and renames it into place.
-        _fetch_into(tag: string, triple: string, directory: string) -> Result[unit, string] is
-            let url = "{releases}/{tag}/{archive_name(triple)}"
+        _fetch_into(tag: string, triple: string, directory: string) -> Result[unit, string] =>
+            _fetch_archive(tag, archive_name(triple), directory, "ghul-llvm")
+
+        _fetch_archive(tag: string, archive_file: string, directory: string, tool: string) -> Result[unit, string] is
+            let url = "{releases}/{tag}/{archive_file}"
 
             let archive = fetch(url)
 
@@ -347,7 +350,7 @@ namespace Ghul.Cli is
                     return ERROR(error)
                 fi
 
-                _make_executable(Path.join([unpacked!, "bin", "ghul-llvm"]))
+                _make_executable(Path.join([unpacked!, "bin", tool]))
 
                 try
                     Directory.move(unpacked!, directory)
@@ -363,6 +366,57 @@ namespace Ghul.Cli is
                 if Directory.exists(scratch) then
                     Directory.delete(scratch, true)
                 fi
+            yrt
+        si
+
+        /// The cell host that goes with the `ghul-llvm` at `tool`, from the
+        /// same release: a glibc executable that loads the cells
+        /// `ghul-llvm --emit=cell` writes. `GHUL_HOST` names one to use
+        /// instead. Fetched into the release's directory on first use.
+        ///
+        /// - tool: the `ghul-llvm` executable of the release
+        host_executable(tool: string) -> Result[string, string] is
+            let named = System.Environment.get_environment_variable("GHUL_HOST")
+
+            if named? /\ named.length > 0 then
+                return OK(named)
+            fi
+
+            let platform = triple()
+
+            if !platform? then
+                return ERROR("the native REPL runs only on Linux x64 and arm64")
+            fi
+
+            // <root>/<tag>/<triple>/bin/ghul-llvm
+            let tag_directory = Path.get_directory_name(Path.get_directory_name(Path.get_directory_name(tool)!)!)!
+            let tag = Path.get_file_name(tag_directory) ?? ""
+            let host_triple = platform.replace("-musl", "-gnu")
+            let directory = Path.join([tag_directory, "host-{host_triple}"])
+            let binary = Path.join([directory, "bin", "ghul-host"])
+
+            if File.exists(binary) then
+                return OK(binary)
+            fi
+
+            let lock = FILE_LOCK.acquire(Path.join([root, ".lock"]), "ghul: waiting for another ghul process to fetch the cell host {tag}...")
+
+            try
+                if File.exists(binary) then
+                    return OK(binary)
+                fi
+
+                if let (error): ERROR = _fetch_archive(tag, "ghul-llvm-host-{host_triple}.tar.gz", directory, "ghul-host") then
+                    return ERROR(error)
+                fi
+
+                if !File.exists(binary) then
+                    return ERROR("the cell host {tag} has no bin/ghul-host")
+                fi
+
+                return OK(binary)
+            finally
+                lock.close()
             yrt
         si
 

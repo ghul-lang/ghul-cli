@@ -1,0 +1,80 @@
+namespace Ghul.Repl.Host is
+    use System.Reflection.Assembly
+
+    /// What a front end asks of a session of cells: submit text, list what has
+    /// been submitted, interrupt a cell, and the questions an editor asks of
+    /// text not yet submitted. A session that hosts its cells in this process
+    /// and one that hands them to a native host both answer it.
+    trait CellSession open is
+        /// Every submission so far, oldest first, whether or not it compiled.
+        submissions: Collections.List[CELL_RECORD];
+
+        /// The number the next submission will take.
+        next_cell_number: int;
+
+        /// The assemblies and packages added with `add_reference` and
+        /// `add_package`.
+        references: Collections.List[string];
+
+        /// The runtime the cells run against, where there is a runtime
+        /// assembly to read, null where the cells run in a process of their
+        /// own.
+        runtime: Assembly?;
+
+        /// Whether a cell is in progress now, being compiled or running.
+        is_running: bool;
+
+        /// Whether completion, hover and diagnostics can still be answered.
+        is_analysis_available: bool;
+
+        /// A cell, compiled and run.
+        ///
+        /// - source: the text of the cell
+        submit(source: string) -> SUBMIT_RESULT;
+
+        /// A cell, with a way to present the value it ends on.
+        ///
+        /// - source: the text of the cell
+        /// - present: shows the value the cell ends on
+        submit(source: string, present: (object?) -> object?) -> SUBMIT_RESULT;
+
+        /// The text of an earlier cell submitted again, or null where there
+        /// is no such cell.
+        ///
+        /// - number: the earlier cell
+        /// - present: shows the value the cell ends on, or null
+        rerun(number: int, present: ((object?) -> object?)?) -> SUBMIT_RESULT?;
+
+        /// Stops the cell in progress. False when no cell is in progress.
+        interrupt() -> bool;
+
+        /// Where the cells show things while they run.
+        set_display_sink(sink: Ghul.DisplaySink);
+
+        /// An assembly file, referenced by every later cell.
+        add_reference(path: string) -> ADDED_REFERENCES;
+
+        /// A NuGet package and what it depends on, referenced by every later
+        /// cell.
+        add_package(package: string, version: string?) -> ADDED_REFERENCES;
+
+        /// What could be written at a line and column of text not yet
+        /// submitted, both from 1, or null when that cannot be answered.
+        complete(text: string, line: int, column: int) -> Collections.List[ANALYSIS_COMPLETION]?;
+
+        /// The declaration at a line and column of text not yet submitted.
+        hover(text: string, line: int, column: int) -> string?;
+
+        /// What compiling text not yet submitted would report.
+        diagnostics(text: string) -> Collections.List[string]?;
+
+        /// Whether typed text is complete.
+        check(text: string) -> Completeness;
+
+        /// As check, and what complete text ends on where that is known.
+        check_ending(text: string) -> CHECK_ANSWER;
+
+        /// Ends the session.
+        close();
+    si
+si
