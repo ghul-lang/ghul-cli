@@ -3,6 +3,7 @@ namespace Ghul.Repl.Host is
     use IO.Std
 
     use Ghul.Repl.CELL_DIAGNOSTIC
+    use Ghul.Repl.COMPILER_REFUSAL
     use Ghul.Repl.CELL_REPLY
     use Ghul.Repl.CELL_REQUEST
     use Ghul.Repl.LOADED_CELL
@@ -308,6 +309,7 @@ namespace Ghul.Repl.Host is
                 fi
 
                 _server_failed = true
+                _refusal = null
             fi
 
             let spawned = Collections.LIST[string](_compiler.leading_arguments())
@@ -377,11 +379,7 @@ namespace Ghul.Repl.Host is
                         return int.parse(line.substring(mark.length)) == 0
                     fi
 
-                    let trimmed = line.trim()
-
-                    if trimmed.length > 0 /\ !trimmed.starts_with("***") /\ !trimmed.starts_with("!!!") then
-                        diagnostics.add(CELL_DIAGNOSTIC.parse(trimmed))
-                    fi
+                    _note(line, diagnostics)
                 od
             catch e: System.Exception
                 return null
@@ -408,7 +406,17 @@ namespace Ghul.Repl.Host is
             arguments.add(_source_path(name))
             arguments.add("@{_libraries_file()}")
 
+            _refusal = null
+
             let compiled = _build(arguments, diagnostics)
+
+            if let unknown = _refusal then
+                let refused = Collections.LIST[CELL_DIAGNOSTIC]()
+
+                refused.add(CELL_DIAGNOSTIC.parse("ghul: {COMPILER_REFUSAL.message(unknown)}"))
+
+                return NATIVE_COMPILE(null, Collections.LIST[string](), refused)
+            fi
 
             if !compiled \/ !IO.File.exists(module) then
                 return NATIVE_COMPILE(null, Collections.LIST[string](), diagnostics)
@@ -447,6 +455,30 @@ namespace Ghul.Repl.Host is
             return names
         si
 
+        // The option the compiler last said it does not know, which a cell is
+        // not built with: what it went on to say is not worth showing.
+        _refusal: string?
+        _refusal_is_option: bool
+
+        _note(line: string, diagnostics: Collections.LIST[CELL_DIAGNOSTIC]) is
+            let trimmed = line.trim()
+
+            if trimmed.length == 0 \/ trimmed.starts_with("***") \/ trimmed.starts_with("!!!") then
+                return
+            fi
+
+            if let unknown = COMPILER_REFUSAL.unknown_in(trimmed) then
+                if !_refusal? \/ (COMPILER_REFUSAL.is_option(trimmed) /\ !_refusal_is_option) then
+                    _refusal = unknown
+                    _refusal_is_option = COMPILER_REFUSAL.is_option(trimmed)
+                fi
+
+                return
+            fi
+
+            diagnostics.add(CELL_DIAGNOSTIC.parse(trimmed))
+        si
+
         // Runs a tool to the end, its output lines parsed as diagnostics.
         // Whether it exited with success.
         _run_process(
@@ -474,11 +506,7 @@ namespace Ghul.Repl.Host is
                 process.wait_for_exit()
 
                 for line in "{err_task.result}{out_task.result}".split(['\n']) do
-                    let trimmed = line.trim()
-
-                    if trimmed.length > 0 /\ !trimmed.starts_with("***") /\ !trimmed.starts_with("!!!") then
-                        diagnostics.add(CELL_DIAGNOSTIC.parse(trimmed))
-                    fi
+                    _note(line, diagnostics)
                 od
 
                 return process.exit_code == 0

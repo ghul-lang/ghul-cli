@@ -234,6 +234,13 @@ namespace Ghul.Cli is
             return System.Version.try_parse(tag.substring(1), version ref) /\ version? /\ range!.admits(version)
         si
 
+        /// Whether the cell host of release `tag` is in the cache for `triple`.
+        ///
+        /// - tag: the release
+        /// - triple: the platform
+        is_host_kept(tag: string, triple: string) -> bool =>
+            File.exists(Path.join([root, tag, "host-{triple.replace("-musl", "-gnu")}", "bin", "ghul-host"]))
+
         /// Whether release `tag` for `triple` is in the cache.
         ///
         /// - tag: the release

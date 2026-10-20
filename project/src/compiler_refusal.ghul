@@ -1,0 +1,36 @@
+namespace Ghul.Project is
+    /// Recognises a compiler declining an option or argument it was given,
+    /// so a front end can say so in one line rather than showing what a
+    /// compiler that did not understand it went on to do.
+    class COMPILER_REFUSAL is
+        /// The option or argument a line of compiler output says it does not
+        /// know, or null where the line says no such thing. Current
+        /// compilers end the build with an error; earlier ones warned and
+        /// carried on.
+        ///
+        /// - line: a line the compiler wrote
+        unknown_in(line: string) -> string? static is
+            for prefix in ["error: unknown option: ", "warning: ignoring unknown option: ", "error: unrecognized argument: ", "warning: ignoring unrecognized argument: "] do
+                if line.starts_with(prefix) then
+                    return line.substring(prefix.length).trim()
+                fi
+            od
+
+            return null
+        si
+
+        /// Whether `line` says the compiler does not know an option, as
+        /// opposed to a stray argument.
+        ///
+        /// - line: a line the compiler wrote
+        is_option(line: string) -> bool static =>
+            line.starts_with("error: unknown option: ") \/ line.starts_with("warning: ignoring unknown option: ")
+
+        /// What to tell the user when the installed compiler does not know
+        /// something a command needs.
+        ///
+        /// - unknown: the option or argument the compiler named
+        message(unknown: string) -> string static =>
+            "the installed ghul.compiler does not support {unknown}; run 'ghul update'"
+    si
+si

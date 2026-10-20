@@ -1,0 +1,45 @@
+namespace Ghul.Cli.Tests is
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    use Ghul.Repl.COMPILER_REFUSAL
+
+    @TestClass()
+    class COMPILER_REFUSAL_TESTS is
+        init() is si
+
+        @Test()
+        unknown_in__reads_the_error_a_current_compiler_writes() is
+            assert COMPILER_REFUSAL.unknown_in("error: unknown option: --cell-link") =~ "--cell-link";
+            assert COMPILER_REFUSAL.unknown_in("error: unrecognized argument: 0") =~ "0";
+        si
+
+        @Test()
+        unknown_in__reads_the_warning_an_earlier_compiler_wrote() is
+            assert COMPILER_REFUSAL.unknown_in("warning: ignoring unknown option: --build-server") =~ "--build-server";
+            assert COMPILER_REFUSAL.unknown_in("warning: ignoring unrecognized argument: 0") =~ "0";
+        si
+
+        @Test()
+        unknown_in__ignores_other_lines() is
+            assert !COMPILER_REFUSAL.unknown_in("cell1.ghul: 1,1..1,2: error: symbol not found: x")?;
+            assert !COMPILER_REFUSAL.unknown_in("warning: ignoring garbled --cell-link value: x")?;
+        si
+
+        @Test()
+        is_option__tells_an_option_from_an_argument() is
+            assert COMPILER_REFUSAL.is_option("error: unknown option: --x");
+            assert COMPILER_REFUSAL.is_option("warning: ignoring unknown option: --x");
+            assert !COMPILER_REFUSAL.is_option("error: unrecognized argument: x");
+        si
+
+        @Test()
+        message__names_what_is_unsupported_and_the_fix() is
+            let line = COMPILER_REFUSAL.message("--cell-link");
+
+            assert line.contains("--cell-link");
+            assert line.contains("ghul update");
+            assert !line.contains("\n");
+        si
+    si
+si

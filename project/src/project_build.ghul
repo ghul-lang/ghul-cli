@@ -252,7 +252,7 @@ namespace Ghul.Project is
             start_info.file_name = compiler.file_name
             start_info.use_shell_execute = false
             start_info.redirect_standard_output = true
-            start_info.redirect_standard_error = quiet
+            start_info.redirect_standard_error = true
             start_info.working_directory = directory
 
             if let path: string = linker then
@@ -268,12 +268,16 @@ namespace Ghul.Project is
             if let process: System.Diagnostics.Process = System.Diagnostics.Process.start(start_info) then
                 let copied = process.standard_output.base_stream.copy_to_async(IO.Std.open_standard_error())
 
-                if quiet then
-                    _pass_on_all_but_success(process.standard_error)
-                fi
+                let refused = _pass_on(process.standard_error, quiet)
 
                 process.wait_for_exit()
                 copied.wait()
+
+                if let unknown = refused then
+                    IO.Std.error.write_line("ghul: {COMPILER_REFUSAL.message(unknown)}")
+
+                    return if process.exit_code == 0 then 1 else process.exit_code fi
+                fi
 
                 return process.exit_code
             fi
@@ -287,13 +291,23 @@ namespace Ghul.Project is
         SUCCESS_LINE: string static => "*** succeeded ***"
 
         // Copies what the compiler writes to standard error to this
-        // process's, a line at a time, leaving out its success line.
-        _pass_on_all_but_success(reader: IO.TextReader) static is
+        // process's, a line at a time, leaving out its success line when
+        // `quiet`. Once the compiler says it does not know an option nothing
+        // more is copied, and the option is returned.
+        _pass_on(reader: IO.TextReader, quiet: bool) -> string? static is
+            let refused: string? mut = null
+
             while let line = reader.read_line() do
-                if line !~ SUCCESS_LINE then
-                    IO.Std.error.write_line(line)
+                if !refused? then
+                    if let unknown = COMPILER_REFUSAL.unknown_in(line) then
+                        refused = unknown
+                    elif (line !~ SUCCESS_LINE) \/ !quiet then
+                        IO.Std.error.write_line(line)
+                    fi
                 fi
             od
+
+            return refused
         si
     si
 
