@@ -36,6 +36,12 @@ namespace Ghul.Cli is
         /// - version: the version to install
         /// - say: where progress goes
         install(version: string, say: (string) -> void) -> Result[unit, string]
+
+        /// The version an install of `requested` left held, which is a
+        /// different one where a concurrent install settled the newest first.
+        ///
+        /// - requested: the version that was asked for
+        settled(requested: string) -> string => requested
     si
 
     /// A compiler of one kind.
@@ -50,6 +56,9 @@ namespace Ghul.Cli is
         has(version: string) -> bool => COMPILER_PLAN.store(_kind).is_installed(version)
 
         is_current(latest: string) -> bool => has(latest)
+
+        settled(requested: string) -> string =>
+            COMPILER_PLAN.store(_kind).recent_resolution(NEWEST_RESOLUTION_WINDOW_SECONDS) ?? requested
 
         install(version: string, say: (string) -> void) -> Result[unit, string] is
             // The wasm-built compiler runs under Node, so a machine with none
@@ -325,7 +334,9 @@ namespace Ghul.Cli is
                 return 1
             fi
 
-            work.finish("{title} {shown} installed")
+            let held = if version? then target! else component.settled(target!) fi
+
+            work.finish("{title} {LOG.version(held)} installed")
 
             return 0
         si
