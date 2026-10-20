@@ -284,6 +284,8 @@ compilers="$fresh_home/.cache/ghul-cli/compilers"
 installed_versions="$(ls -d "$compilers"/*/*/ 2>/dev/null | wc -l)"
 if [[ "$installed_versions" != "1" ]]; then
     echo "smoke: expected exactly one compiler version after concurrent installs, found $installed_versions under $compilers" >&2
+    ls -d "$compilers"/*/*/ >&2
+    cat "$install_outs"/*.err >&2
     exit 1
 fi
 
