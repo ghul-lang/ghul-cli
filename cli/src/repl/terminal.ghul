@@ -444,7 +444,7 @@ namespace Ghul.Cli.Repl is
             fi
 
             if result.was_interrupted then
-                Std.error.write_line("ghul: {SUBMIT_RESULT.INTERRUPTED_NOTE}")
+                Std.error.write_line("ghul: {session.interrupted_note}")
 
                 return
             fi

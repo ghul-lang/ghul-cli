@@ -48,6 +48,9 @@ namespace Ghul.Repl.Host is
         /// Stops the cell in progress. False when no cell is in progress.
         interrupt() -> bool;
 
+        /// What a front end tells the user when a cell it submitted was interrupted.
+        interrupted_note: string => SUBMIT_RESULT.INTERRUPTED_NOTE;
+
         /// Where the cells show things while they run.
         set_display_sink(sink: Ghul.DisplaySink);
 

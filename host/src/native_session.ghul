@@ -105,6 +105,8 @@ namespace Ghul.Repl.Host is
         // Ends the cell running in the host, which takes SIGINT as the end of
         // that cell and not of the session. False while no cell is in the
         // host: a build in progress is not stopped.
+        interrupted_note: string => "interrupted; the cell was ended and its earlier definitions are kept"
+
         interrupt() -> bool is
             if !_in_host then
                 return false
@@ -496,7 +498,7 @@ namespace Ghul.Repl.Host is
             fi
 
             _host = host
-            _commands = IO.StreamWriter(IO.FileStream(commands, IO.FileMode.OPEN, IO.FileAccess.WRITE))
+            _commands = IO.StreamWriter(IO.FileStream(commands, IO.FileMode.OPEN, IO.FileAccess.READ_WRITE))
 
             return OK(_)
         si
