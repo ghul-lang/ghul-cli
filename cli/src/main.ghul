@@ -268,6 +268,7 @@ namespace Ghul.Cli is
         out.write_line("       ghul run [--no-cache] <script> [args...]")
         out.write_line("       ghul compile [--no-cache] <script.ghul>")
         out.write_line("       ghul new <name> [--target <target>[,<target>...]]")
+        out.write_line("       ghul add <name> <git-url>")
         out.write_line("       ghul rosetta <task>[/<part>] [<directory>]")
         out.write_line("       ghul build [--target <name>] [--debug] [--optimise <0-3>]")
         out.write_line("       ghul run [--target <name>] [--debug] [--optimise <0-3>] [-- args...]")
@@ -354,6 +355,77 @@ namespace Ghul.Cli is
     si
 
     // Creates a project to build and run: `ghul new <name> [--target ...]`.
+    // `ghul add <name> <git-url>`: depend on the newest release of the
+    // library at `git-url`, written into the manifest as `^<newest>`. Adding a
+    // library already there moves its pin to the newest release.
+    cmd_add(rest: Collections.List[string]) -> int is
+        if rest.count != 2 \/ rest[0].length == 0 \/ rest[1].length == 0 then
+            Std.error.write_line("usage: ghul add <name> <git-url>")
+
+            return 1
+        fi
+
+        let name = rest[0]
+        let url = rest[1]
+
+        let path = Ghul.Project.MANIFEST_LOCATION.find_in(Directory.get_current_directory())
+
+        if !path? then
+            LOG.say("no {Ghul.Project.MANIFEST_LOCATION.FILE_NAME} in this directory")
+
+            return 1
+        fi
+
+        let text = File.read_all_text(path!)
+
+        let outcome = Ghul.Project.MANIFEST_READER.read(text, path!)
+
+        if let problems: Ghul.Project.ReadOutcome.PROBLEMS = outcome then
+            for problem in problems.problems do
+                LOG.say(problem.describe())
+            od
+
+            return 1
+        fi
+
+        let kind = cast Ghul.Project.ReadOutcome.OK(outcome).manifest.kind
+
+        if kind == Ghul.Project.ManifestKind.WORKSPACE \/ kind == Ghul.Project.ManifestKind.COLLECTION then
+            LOG.say("a workspace or collection manifest lists no dependencies of its own; add the library to one of its projects")
+
+            return 1
+        fi
+
+        let resolver = Ghul.Project.LIBRARY_RESOLVER(Ghul.Project.LIBRARY_CACHE.for_this_user())
+        let latest = resolver.latest(name, url)
+
+        if let (problem): ERROR = latest then
+            LOG.say(problem)
+
+            return 1
+        fi
+
+        let tag = latest!
+        let version = if tag.starts_with("v") then tag.substring(1) else tag fi
+        let range = "^{version}"
+
+        let edited = Ghul.Project.MANIFEST_EDIT.add_dependency(text, name, url, range)
+
+        if let (problem): ERROR = edited then
+            LOG.say(problem)
+
+            return 1
+        fi
+
+        if edited! !~ text then
+            File.write_all_text(path!, edited!)
+        fi
+
+        LOG.say("{name} {range}")
+
+        return 0
+    si
+
     cmd_new(rest: Collections.List[string]) -> int is
         let parsed = Ghul.Project.PROJECT_SCAFFOLD.parse(rest, Ghul.Project.TARGET_CHOICE.ORDER)
 
@@ -1797,7 +1869,7 @@ namespace Ghul.Cli is
 
     // Whether `word` is one of the commands, rather than a script to run.
     is_verb(word: string) -> bool =>
-        ["run", "compile", "new", "rosetta", "build", "project", "install-compiler", "install", "update", "cache", "repl", "version"]
+        ["run", "compile", "new", "add", "rosetta", "build", "project", "install-compiler", "install", "update", "cache", "repl", "version"]
             |> any(verb => verb =~ word)
 
     entry(args: string[]) -> int is
@@ -1866,6 +1938,10 @@ namespace Ghul.Cli is
 
         if verb =~ "new" then
             return cmd_new(rest)
+        fi
+
+        if verb =~ "add" then
+            return cmd_add(rest)
         fi
 
         if verb =~ "rosetta" then

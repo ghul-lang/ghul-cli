@@ -731,4 +731,34 @@ if [[ -n "$(compile_servers)" ]]; then
     exit 1
 fi
 
+echo "smoke: 'ghul add' writes the newest release and moves the pin when run again..." >&2
+add_repo="$scratch/add-lib"
+git init -q "$add_repo"
+git -C "$add_repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m one
+git -C "$add_repo" tag v1.2.3
+add_project="$scratch/add-project"
+dotnet "$cli" new "$add_project" > /dev/null 2>&1
+(
+    cd "$add_project"
+    dotnet "$cli" add lib "file://$add_repo" > "$scratch/add.out" 2>&1 || { cat "$scratch/add.out" >&2; exit 1; }
+    grep -q '"lib": { "git": "file://'"$add_repo"'", "version": "\^1.2.3" }' ghul-project.json || {
+        echo "smoke: 'ghul add' did not write the newest release:" >&2
+        cat ghul-project.json >&2
+        exit 1
+    }
+    git -C "$add_repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m two
+    git -C "$add_repo" tag v1.3.0
+    dotnet "$cli" add lib "file://$add_repo" > "$scratch/add.out" 2>&1 || { cat "$scratch/add.out" >&2; exit 1; }
+    grep -q '"version": "\^1.3.0"' ghul-project.json || {
+        echo "smoke: adding again did not move the pin to 1.3.0:" >&2
+        cat ghul-project.json >&2
+        exit 1
+    }
+    [[ "$(grep -c '"lib"' ghul-project.json)" -eq 1 ]] || {
+        echo "smoke: adding again wrote a second entry:" >&2
+        cat ghul-project.json >&2
+        exit 1
+    }
+)
+
 echo "smoke: all checks passed" >&2

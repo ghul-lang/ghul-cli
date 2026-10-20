@@ -26,7 +26,9 @@ namespace Ghul.Jupyter is
                 return COMPILER_LOCATION(COMPILER_COMMAND(named, null), _runtime_beside(named), null)
             fi
 
-            let store = COMPILER_STORE.for_this_user()
+            // The kernel runs each cell in this process, so it needs the
+            // managed compiler whatever else the machine holds.
+            let store = COMPILER_STORE.managed_for_this_user()
 
             if let installed = store.highest_version() then
                 return COMPILER_LOCATION(store.command(installed), store.runtime_assembly(installed), installed)

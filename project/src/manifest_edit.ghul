@@ -1,0 +1,364 @@
+namespace Ghul.Project is
+    use Collections.LIST
+
+    /// A member of a JSON object in some text: its name, and where its value
+    /// starts and ends.
+    ///
+    /// - key: the member's name
+    /// - value_start: the index of the first character of its value
+    /// - value_end: the index just after its value
+    class MANIFEST_MEMBER(key: string, value_start: int, value_end: int);
+
+    /// The members of one JSON object in some text, and where it closes.
+    ///
+    /// - close: the index of its `}`
+    /// - members: its members, in order
+    class MANIFEST_OBJECT(close: int, members: Collections.List[MANIFEST_MEMBER]) is
+        /// The member called `key`, or null where there is none.
+        find(key: string) -> MANIFEST_MEMBER? is
+            for member in members do
+                if member.key =~ key then
+                    return member
+                fi
+            od
+
+            return null
+        si
+    si
+
+    /// Edits the text of a manifest in place: the member it is asked to
+    /// change changes, and everything else, the comments and trailing commas
+    /// a hand-written manifest carries included, is left as it was.
+    class MANIFEST_EDIT is
+        /// The manifest `text` with the dependency `name` set to `entry`, a
+        /// JSON object written on one line, or why it cannot be.
+        ///
+        /// - text: the manifest
+        /// - name: the dependency's name
+        /// - entry: its value
+        with_dependency(text: string, name: string, entry: string) -> Result[string, string] static is
+            let root_open = _skip_space(text, 0)
+            let root = _scan(text, root_open)
+
+            if !root? then
+                return Result.ERROR("the manifest is not a JSON object")
+            fi
+
+            if let dependencies = root.find("dependencies") then
+                let scanned = _scan(text, dependencies.value_start)
+
+                if !scanned? then
+                    return Result.ERROR("dependencies is not an object")
+                fi
+
+                return Result.OK(_set(text, dependencies.value_start, scanned!, name, entry))
+            fi
+
+            let indent = _line_indent(text, root_open)
+            let block = "{{\n{indent}        {_quote(name)}: {entry}\n{indent}    }}"
+
+            return Result.OK(_set(text, root_open, root!, "dependencies", block))
+        si
+
+        /// The `git` url of the dependency `name`, or null where it has none.
+        ///
+        /// - text: the manifest
+        /// - name: the dependency's name
+        git_url_of(text: string, name: string) -> string? static is
+            let root = _scan(text, _skip_space(text, 0))
+            let dependencies = root?.find("dependencies")
+
+            if !dependencies? then
+                return null
+            fi
+
+            let scanned = _scan(text, dependencies.value_start)
+            let found = scanned?.find(name)
+
+            if !found? then
+                return null
+            fi
+
+            let entry = _scan(text, found.value_start)
+            let git = entry?.find("git")
+
+            if !git? \/ text[git.value_start] != '"' then
+                return null
+            fi
+
+            return text.substring(git.value_start + 1, git.value_end - git.value_start - 2)
+        si
+
+        /// The manifest `text` with the `version` of the dependency `name` set,
+        /// or null where the entry names a tag or a branch as well, which a
+        /// version cannot sit beside.
+        ///
+        /// - text: the manifest
+        /// - name: the dependency
+        /// - version: the range to write
+        with_entry_version(text: string, name: string, version: string) -> string? static is
+            let root = _scan(text, _skip_space(text, 0))
+            let dependencies = root?.find("dependencies")
+
+            if !dependencies? then
+                return null
+            fi
+
+            let scanned = _scan(text, dependencies.value_start)
+            let found = scanned?.find(name)
+
+            if !found? then
+                return null
+            fi
+
+            let entry = _scan(text, found.value_start)
+
+            if !entry? \/ entry.find("tag")? \/ entry.find("branch")? then
+                return null
+            fi
+
+            return _set(text, found.value_start, entry, "version", _quote(version))
+        si
+
+        /// The manifest `text` with the git dependency `name` at `url` and
+        /// the range `version`, or why it cannot be. A dependency of that
+        /// name already at that url has only its version changed, so adding
+        /// again is how a pin is moved; one at another url, or on a tag, a
+        /// branch or a path, is replaced.
+        ///
+        /// - text: the manifest
+        /// - name: the dependency's name
+        /// - url: the repository
+        /// - version: the range to write, such as `^1.4.2`
+        add_dependency(text: string, name: string, url: string, version: string) -> Result[string, string] static is
+            if git_url_of(text, name) =~ url then
+                if let updated = with_entry_version(text, name, version) then
+                    return Result.OK(updated)
+                fi
+            fi
+
+            let entry = "{{ \"git\": {_quote(url)}, \"version\": {_quote(version)} }}"
+
+            if let existing = _replace_entry(text, name, entry) then
+                return Result.OK(existing)
+            fi
+
+            return with_dependency(text, name, entry)
+        si
+
+        // The text with the value of dependency `name` replaced by `entry`,
+        // or null where there is no such dependency.
+        _replace_entry(text: string, name: string, entry: string) -> string? static is
+            let root = _scan(text, _skip_space(text, 0))
+            let dependencies = root?.find("dependencies")
+
+            if !dependencies? then
+                return null
+            fi
+
+            let found = _scan(text, dependencies.value_start)?.find(name)
+
+            if !found? then
+                return null
+            fi
+
+            return "{text.substring(0, found.value_start)}{entry}{text.substring(found.value_end)}"
+        si
+
+        // Sets `key` in the object whose `{` is at `open`: replacing its value
+        // where it has one, and otherwise adding it after the last member,
+        // indented like the others.
+        _set(text: string, open: int, object: MANIFEST_OBJECT, key: string, value: string) -> string static is
+            if let existing = object.find(key) then
+                return "{text.substring(0, existing.value_start)}{value}{text.substring(existing.value_end)}"
+            fi
+
+            let on_one_line = !text.substring(open, object.close - open).contains('\n')
+
+            if on_one_line then
+                if object.members.count == 0 then
+                    return "{text.substring(0, open + 1)} {_quote(key)}: {value} {text.substring(object.close)}"
+                fi
+
+                let last_on_line = object.members[object.members.count - 1]
+
+                return "{text.substring(0, last_on_line.value_end)}, {_quote(key)}: {value}{text.substring(last_on_line.value_end)}"
+            fi
+
+            if object.members.count == 0 then
+                let indent = _line_indent(text, open)
+
+                return "{text.substring(0, open + 1)}\n{indent}    {_quote(key)}: {value}\n{indent}{text.substring(object.close)}"
+            fi
+
+            let last = object.members[object.members.count - 1]
+            let indent = _line_indent(text, last.value_start)
+
+            return "{text.substring(0, last.value_end)},\n{indent}{_quote(key)}: {value}{text.substring(last.value_end)}"
+        si
+
+        // The members of the object whose `{` is at `open`, or null where
+        // the text there is not a well-formed object.
+        _scan(text: string, open: int) -> MANIFEST_OBJECT? static is
+            if open < 0 \/ open >= text.length \/ text[open] != '{' then
+                return null
+            fi
+
+            let found = LIST[MANIFEST_MEMBER]()
+            let at mut = _skip_space(text, open + 1)
+
+            while at < text.length do
+                if text[at] == '}' then
+                    return MANIFEST_OBJECT(at, found)
+                fi
+
+                if text[at] == ',' then
+                    at = _skip_space(text, at + 1)
+
+                    continue
+                fi
+
+                if text[at] != '"' then
+                    return null
+                fi
+
+                let key_end = _skip_string(text, at)
+
+                if key_end < 0 then
+                    return null
+                fi
+
+                let key = text.substring(at + 1, key_end - at - 2)
+
+                at = _skip_space(text, key_end)
+
+                if at >= text.length \/ text[at] != ':' then
+                    return null
+                fi
+
+                at = _skip_space(text, at + 1)
+
+                let value_end = _skip_value(text, at)
+
+                if value_end < 0 then
+                    return null
+                fi
+
+                found.add(MANIFEST_MEMBER(key, at, value_end))
+
+                at = _skip_space(text, value_end)
+            od
+
+            return null
+        si
+
+        // The whitespace that begins the line holding `at`.
+        _line_indent(text: string, at: int) -> string static is
+            let line_start = text.last_index_of('\n', at) + 1
+            let end mut = line_start
+
+            while end < text.length /\ (text[end] == ' ' \/ text[end] == '\t') do
+                end = end + 1
+            od
+
+            return text.substring(line_start, end - line_start)
+        si
+
+        _quote(text: string) -> string static =>
+            "\"{text.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
+        // The index of the first character at or after `at` that is not white
+        // space or part of a comment.
+        _skip_space(text: string, at: int) -> int static is
+            let i mut = at
+
+            while i < text.length do
+                if char.is_white_space(text[i]) then
+                    i = i + 1
+                elif text[i] == '/' /\ i + 1 < text.length /\ text[i + 1] == '/' then
+                    while i < text.length /\ text[i] != '\n' do
+                        i = i + 1
+                    od
+                elif text[i] == '/' /\ i + 1 < text.length /\ text[i + 1] == '*' then
+                    let end = text.index_of("*/", i + 2)
+
+                    i = if end < 0 then text.length else end + 2 fi
+                else
+                    return i
+                fi
+            od
+
+            return i
+        si
+
+        // The index just after the string that starts at `at`, or -1.
+        _skip_string(text: string, at: int) -> int static is
+            let i mut = at + 1
+
+            while i < text.length do
+                if text[i] == '\\' then
+                    i = i + 2
+                elif text[i] == '"' then
+                    return i + 1
+                else
+                    i = i + 1
+                fi
+            od
+
+            return -1
+        si
+
+        // The index just after the value that starts at `at`, or -1.
+        _skip_value(text: string, at: int) -> int static is
+            if at >= text.length then
+                return -1
+            fi
+
+            if text[at] == '"' then
+                return _skip_string(text, at)
+            fi
+
+            let i mut = at
+
+            if text[at] == '{' \/ text[at] == '[' then
+                let depth mut = 0
+
+                while i < text.length do
+                    let c = text[i]
+
+                    if c == '"' then
+                        i = _skip_string(text, i)
+
+                        if i < 0 then
+                            return -1
+                        fi
+
+                        continue
+                    elif c == '/' /\ i + 1 < text.length /\ (text[i + 1] == '/' \/ text[i + 1] == '*') then
+                        i = _skip_space(text, i)
+
+                        continue
+                    elif c == '{' \/ c == '[' then
+                        depth = depth + 1
+                    elif c == '}' \/ c == ']' then
+                        depth = depth - 1
+
+                        if depth == 0 then
+                            return i + 1
+                        fi
+                    fi
+
+                    i = i + 1
+                od
+
+                return -1
+            fi
+
+            while i < text.length /\ text[i] != ',' /\ text[i] != '}' /\ text[i] != ']' /\ !char.is_white_space(text[i]) do
+                i = i + 1
+            od
+
+            return i
+        si
+    si
+si
