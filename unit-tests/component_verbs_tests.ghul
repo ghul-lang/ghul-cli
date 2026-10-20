@@ -16,12 +16,14 @@ namespace Ghul.Cli.Tests is
         newest: Result[string, string] public;
         install_error: string? public;
         installed_versions: LIST[string] public;
+        newest_flags: LIST[bool] public;
 
         init(held: string?, newest: string) is
             self.held = held
             self.newest = OK(newest)
             self.install_error = null
             self.installed_versions = LIST[string]()
+            self.newest_flags = LIST[bool]()
         si
 
         title() -> string => "thing"
@@ -34,7 +36,7 @@ namespace Ghul.Cli.Tests is
 
         is_current(latest: string) -> bool => has(latest)
 
-        install(version: string, say: (string) -> void) -> Result[unit, string] is
+        install(version: string, is_newest: bool, say: (string) -> void) -> Result[unit, string] is
             say("downloading thing {version}...")
 
             if let problem: string = install_error then
@@ -42,6 +44,7 @@ namespace Ghul.Cli.Tests is
             fi
 
             installed_versions.add(version)
+            newest_flags.add(is_newest)
             held = version
 
             return OK(_)
@@ -91,6 +94,19 @@ namespace Ghul.Cli.Tests is
 
             assert said =~ "0 | ghul: thing 2.0.0 installed" else said
             assert fake.installed_versions[0] =~ "2.0.0"
+            assert fake.newest_flags[0]
+        si
+
+        // A version named on the command line is installed as named, never
+        // swapped for a newest version a concurrent install settled on.
+        @Test()
+        installing_a_named_version__does_not_install_it_as_the_newest() is
+            let fake = FAKE_COMPONENT(null, "2.0.0")
+            let said = _run(said => COMPONENT_VERBS.install(fake, "1.5.0"))
+
+            assert said =~ "0 | ghul: thing 1.5.0 installed" else said
+            assert fake.installed_versions[0] =~ "1.5.0"
+            assert !fake.newest_flags[0]
         si
 
         @Test()
@@ -147,6 +163,7 @@ namespace Ghul.Cli.Tests is
 
             assert said =~ "0 | ghul: thing updated 1.0.0 to 2.0.0" else said
             assert fake.installed_versions[0] =~ "2.0.0"
+            assert fake.newest_flags[0]
         si
 
         @Test()
