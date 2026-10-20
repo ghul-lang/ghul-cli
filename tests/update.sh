@@ -92,21 +92,21 @@ installed="$root/ghul"
 
 echo "update: an install that is the latest says so..." >&2
 out="$("$installed" update --check 2>&1)" || fail "'ghul update --check' failed: $out"
-grep -q "is the latest release" <<< "$out" || fail "expected --check to report the latest, got: $out"
+grep -q "is up to date" <<< "$out" || fail "expected --check to report the latest, got: $out"
 
 out="$("$installed" update 2>&1)" || fail "'ghul update' failed: $out"
-grep -q "is the latest release" <<< "$out" || fail "expected update to report the latest, got: $out"
+grep -q "is up to date" <<< "$out" || fail "expected update to report the latest, got: $out"
 
 if out="$("$installed" update --version "v$running" 2>&1)"; then
     fail "expected 'ghul update --version' to be refused"
 fi
-grep -q "a version cannot be chosen" <<< "$out" || fail "expected --version to be refused with a message, got: $out"
+grep -q "update takes no version" <<< "$out" || fail "expected --version to be refused with a message, got: $out"
 
 latest "v$newer"
 
 echo "update: --check reports a newer release and changes nothing..." >&2
 out="$("$installed" update --check 2>&1)" || fail "'ghul update --check' failed: $out"
-grep -q "v$newer is the latest release" <<< "$out" || fail "expected --check to name v$newer, got: $out"
+grep -q "$newer available" <<< "$out" || fail "expected --check to name v$newer, got: $out"
 "$installed" version | grep -q "ghul $running" || fail "--check changed the installed tool"
 
 echo "update: a checksum mismatch fails and leaves the tool as it was..." >&2

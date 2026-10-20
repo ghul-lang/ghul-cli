@@ -57,7 +57,6 @@ namespace Ghul.Repl.Host is
                 Path.join([_store.root, ".download-{System.Environment.process_id}-{System.Guid.new_guid().to_string("N")}.tar.gz"])
 
             try
-                say("downloading the wasm-built compiler ghul.compiler {version}...")
 
                 let downloaded = _download(version, archive_scratch)
 
@@ -109,7 +108,7 @@ namespace Ghul.Repl.Host is
                     return ERROR("ghul.compiler {version} has no wasm-built compiler (HTTP {cast int(response.status_code)})")
                 fi
 
-                let bytes = response.content.read_as_byte_array_async().result
+                let bytes = Ghul.Project.TRANSFER.read(response.content)
 
                 File.write_all_bytes(destination, bytes)
 

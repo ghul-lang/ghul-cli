@@ -261,7 +261,6 @@ namespace Ghul.Project is
                     return OK(_)
                 fi
 
-                say("downloading ghul-wasmtime {name}")
 
                 let scratch = Path.join([
                     Path.get_temp_path(),
@@ -276,7 +275,7 @@ namespace Ghul.Project is
                         return ERROR("ghul-wasmtime {name} is not on the releases page (HTTP {cast int(response.status_code)})")
                     fi
 
-                    let bytes = response.content.read_as_byte_array_async().result
+                    let bytes = TRANSFER.read(response.content)
 
                     File.write_all_bytes(scratch, bytes)
                     _mark_executable(scratch)

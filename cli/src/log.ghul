@@ -1,10 +1,28 @@
 namespace Ghul.Cli is
     /// What ghul says about its own work, on standard error: every line
     /// begins "ghul: ", whichever part of the tool or downloader says it.
+    ///
+    /// A long operation shows a live line on a terminal: a spinner while its
+    /// length is not known and a bar once it is. Where standard error is not a
+    /// terminal nothing is drawn and the operation writes only the line that
+    /// says what was done.
     class LOG is
         PREFIX: string static => "ghul: "
 
+        /// The spinner's frames, one character each.
+        FRAMES: string static => "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+        /// How many cells wide the bar is.
+        BAR_WIDTH: int static => 20
+
         _redirected: ((string) -> void)? static;
+        _interactive: bool? static;
+        _live: PROGRESS? static;
+        _lock: object static;
+
+        init() static is
+            _lock = object()
+        si
 
         /// The line `text` is written as: the text with the prefix, or as it
         /// stands where it already has one.
@@ -13,18 +31,162 @@ namespace Ghul.Cli is
         line(text: string) -> string static =>
             if text.starts_with(PREFIX) then text else "{PREFIX}{text}" fi
 
+        /// `version` spelled as the manifests, `ghul version` and the compiler
+        /// spell a release: without a leading `v`, which release tags carry.
+        ///
+        /// - version: a version or a release tag
+        version(version: string) -> string static =>
+            if version.starts_with("v") then version.substring(1) else version fi
+
+        /// Whether a live line is drawn: standard error is a terminal, or a
+        /// test has said it is.
+        is_interactive: bool static =>
+            _interactive ?? !IO.Std.is_error_redirected
+
         /// Says `text` as a line of ghul's own output. Nothing is written
-        /// for text with nothing in it.
+        /// for text with nothing in it. A live line is cleared for it and
+        /// drawn again after.
         ///
         /// - text: what is to be said
         say(text: string) static is
             if text.trim().length > 0 then
-                if let to = _redirected then
-                    to(line(text))
-                else
-                    IO.Std.error.write_line(line(text))
-                fi
+                System.Threading.Monitor.enter(_lock)
+
+                try
+                    let live = _live
+
+                    if live? then
+                        _write(ERASE)
+                    fi
+
+                    if let to = _redirected then
+                        to(line(text))
+                    else
+                        IO.Std.error.write_line(line(text))
+                    fi
+
+                    if live? then
+                        _write(live.painted())
+                    fi
+                finally
+                    System.Threading.Monitor.exit(_lock)
+                yrt
             fi
+        si
+
+        /// Starts a long operation. On a terminal this shows a live line that
+        /// `finish` replaces; elsewhere it writes nothing.
+        ///
+        /// - label: what is being done, such as `installing ghul-llvm v1.4.0`
+        begin(label: string) -> PROGRESS static is
+            let progress = PROGRESS(label)
+
+            if is_interactive then
+                System.Threading.Monitor.enter(_lock)
+
+                try
+                    _live = progress
+                    Ghul.Project.TRANSFER.handler = (done, total) => progress.update(done, total)
+                    _write(progress.painted())
+                finally
+                    System.Threading.Monitor.exit(_lock)
+                yrt
+
+                progress.start()
+            fi
+
+            return progress
+        si
+
+        /// Draws the live line again, one spinner frame on.
+        repaint() static is
+            System.Threading.Monitor.enter(_lock)
+
+            try
+                if let live = _live then
+                    live.advance()
+                    _write(live.painted())
+                fi
+            finally
+                System.Threading.Monitor.exit(_lock)
+            yrt
+        si
+
+        /// Removes the live line, which is `progress`, from the terminal.
+        ///
+        /// - progress: the operation that has ended
+        end(progress: PROGRESS) static is
+            System.Threading.Monitor.enter(_lock)
+
+            try
+                if _live? /\ _live == progress then
+                    _write(ERASE)
+
+                    _live = null
+                    Ghul.Project.TRANSFER.handler = null
+                fi
+            finally
+                System.Threading.Monitor.exit(_lock)
+            yrt
+        si
+
+        /// Whether the live line is shown.
+        is_live: bool static => _live?
+
+        /// The text that erases the live line.
+        ERASE: string static => "\r\u001b[K"
+
+        /// The live line for an operation: the spinner frame while the length
+        /// of the work is not known, and the bar with its percentage and sizes
+        /// once it is.
+        ///
+        /// - label: what is being done
+        /// - frame: which spinner frame
+        /// - done: bytes so far
+        /// - total: bytes in all, or 0 where that is not known
+        render(label: string, frame: int, done: long, total: long) -> string static is
+            if total > 0L then
+                return "{PREFIX}{label} {bar(done, total)} {percent(done, total)}%  {size(done)} of {size(total)}"
+            fi
+
+            return "{PREFIX}{FRAMES[frame % FRAMES.length]} {label}"
+        si
+
+        /// A bar `BAR_WIDTH` cells wide, `done` of `total` filled.
+        ///
+        /// - done: bytes so far
+        /// - total: bytes in all
+        bar(done: long, total: long) -> string static is
+            let filled = cast int(cast long(BAR_WIDTH) * clamp(done, total) / total)
+
+            return "{string('━', filled)}{string('─', BAR_WIDTH - filled)}"
+        si
+
+        /// The whole percentage `done` is of `total`.
+        ///
+        /// - done: bytes so far
+        /// - total: bytes in all
+        percent(done: long, total: long) -> int static =>
+            cast int(100L * clamp(done, total) / total)
+
+        /// `bytes` as a size with a unit.
+        ///
+        /// - bytes: a count of bytes
+        size(bytes: long) -> string static is
+            if bytes < 1024L then
+                return "{bytes} B"
+            elif bytes < 1024L * 1024L then
+                return "{cast double(bytes) / 1024.0:F1} KB"
+            fi
+
+            return "{cast double(bytes) / (1024.0 * 1024.0):F1} MB"
+        si
+
+        clamp(done: long, total: long) -> long static =>
+            if done < 0L then 0L elif done > total then total else done fi
+
+        _write(text: string) static is
+            IO.Std.error.write(text)
         si
 
         /// Sends what is said to `to` instead of standard error, for a test
@@ -38,6 +200,71 @@ namespace Ghul.Cli is
         /// Sends what is said to standard error again.
         restore() static is
             _redirected = null
+            _interactive = null
+        si
+
+        /// Makes the live line drawn or not, whatever standard error is, for
+        /// a test. `restore` undoes it.
+        ///
+        /// - drawn: whether to behave as on a terminal
+        interactive(drawn: bool) static is
+            _interactive = drawn
+        si
+    si
+
+    /// A long operation. `update` gives it a length, `finish` ends it.
+    class PROGRESS(label: string) is
+        _done: long;
+        _total: long;
+        _frame: int;
+        _timer: System.Threading.Timer?;
+
+        /// Starts the spinner moving.
+        start() is
+            _timer = System.Threading.Timer(state => LOG.repaint(), null, 100, 100)
+        si
+
+        advance() is
+            _frame = _frame + 1
+        si
+
+        /// The live line as it stands.
+        painted() -> string => "\r{LOG.render(label, _frame, _done, _total)}\u001b[K"
+
+        /// Tells the operation how far it is, once the total is known.
+        ///
+        /// - done: bytes so far
+        /// - total: bytes in all
+        update(done: long, total: long) is
+            _done = done
+            _total = total
+        si
+
+        /// Ends the operation without saying anything: its caller reports.
+        discard() is
+            if let timer = _timer then
+                timer.dispose()
+
+                _timer = null
+            fi
+
+            LOG.end(self)
+        si
+
+        /// Ends the operation and says `text`, the one fact it leaves, which
+        /// is written whether or not the line was live.
+        ///
+        /// - text: what was done
+        finish(text: string) is
+            if let timer = _timer then
+                timer.dispose()
+
+                _timer = null
+            fi
+
+            LOG.end(self)
+
+            LOG.say(text)
         si
     si
 si

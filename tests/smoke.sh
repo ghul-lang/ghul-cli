@@ -115,7 +115,7 @@ check "$out" "compiled" "output of what 'ghul compile' built"
 
 echo "smoke: 'ghul install-compiler' with no version looks for the latest..." >&2
 out="$(dotnet "$cli" install-compiler 2>&1)"
-if [[ "$out" != *"is already installed"* && "$out" != *"is installed"* ]]; then
+if [[ "$out" != *"already installed"* && "$out" != *" installed"* ]]; then
     echo "smoke: expected 'ghul install-compiler' to report the latest compiler installed, got: $out" >&2
     exit 1
 fi
