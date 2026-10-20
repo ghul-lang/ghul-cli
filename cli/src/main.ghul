@@ -755,8 +755,8 @@ namespace Ghul.Cli is
             start.use_shell_execute = false
 
             // The script reports its progress on stdout, which this tool
-            // keeps for a script's own output, so it is passed on to stderr
-            // as it arrives.
+            // keeps for a script's own output, so it is read here and shown
+            // on stderr only if the update fails.
             start.redirect_standard_output = true
 
             let process = System.Diagnostics.Process.start(start)
