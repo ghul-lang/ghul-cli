@@ -645,14 +645,23 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        let script_path = Path.join([Path.get_temp_path(), "ghul-cli-install-{System.Environment.process_id}-{System.Guid.new_guid().to_string("N")}.sh"])
+        let windows = System.OperatingSystem.is_windows()
+        let extension = if windows then "ps1" else "sh" fi
+        let script_path = Path.join([Path.get_temp_path(), "ghul-cli-install-{System.Environment.process_id}-{System.Guid.new_guid().to_string("N")}.{extension}"])
 
         try
             File.write_all_bytes(script_path, script!)
 
             LOG.say("updating ghul {running} to {tag} in {install_root}...")
 
-            let start = System.Diagnostics.ProcessStartInfo("sh")
+            let start = System.Diagnostics.ProcessStartInfo(if windows then "powershell.exe" else "sh" fi)
+
+            if windows then
+                start.argument_list.add("-NoProfile")
+                start.argument_list.add("-ExecutionPolicy")
+                start.argument_list.add("Bypass")
+                start.argument_list.add("-File")
+            fi
 
             start.argument_list.add(script_path)
             start.argument_list.add("--version")
@@ -669,7 +678,7 @@ namespace Ghul.Cli is
             let process = System.Diagnostics.Process.start(start)
 
             if !process? then
-                LOG.say("cannot update: sh could not be started")
+                LOG.say("cannot update: {start.file_name} could not be started")
                 return 1
             fi
 

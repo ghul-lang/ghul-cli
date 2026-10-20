@@ -315,6 +315,8 @@ jobs:
         cp install.sh ghul-cli-install.sh
         sha256sum ghul-cli-linux-x64.tar.gz >ghul-cli-linux-x64.tar.gz.sha256
         sha256sum ghul-cli-install.sh >ghul-cli-install.sh.sha256
+        cp install.ps1 ghul-cli-install.ps1
+        sha256sum ghul-cli-install.ps1 >ghul-cli-install.ps1.sha256
 
     - uses: actions/upload-artifact@v7
       with:
@@ -324,6 +326,8 @@ jobs:
           ghul-cli-linux-x64.tar.gz.sha256
           ghul-cli-install.sh
           ghul-cli-install.sh.sha256
+          ghul-cli-install.ps1
+          ghul-cli-install.ps1.sha256
 
   # The same tool for Linux on arm64, a Raspberry Pi among them, built on a
   # native arm64 runner so that the build and the smoke test below both run
@@ -445,8 +449,158 @@ jobs:
           ghul-cli-linux-arm64.tar.gz
           ghul-cli-linux-arm64.tar.gz.sha256
 
+  # The same tool for Windows on x64 and arm64 and for macOS on arm64. Native
+  # AOT builds on the operating system it is for, so each is built on a runner
+  # of its own, and the archive is installed and used there, with no .NET on
+  # the PATH: what a user without .NET does first. The archive holds the tool
+  # alone, as the Linux ones do; ghul runs its compiler under Node and fetches
+  # both.
+  aot_release_archive_desktop:
+    name: Build the Native AOT archive for ${{ matrix.rid }}
+    needs: [version]
+    runs-on: ${{ matrix.runner }}
+
+    timeout-minutes: 45
+
+    if: ${{ github.event_name != 'pull_request' || contains(github.head_ref, 'aot-platforms') }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows (win-x64 on windows-latest, win-arm64 on windows-11-arm,
+        # both as .zip) builds and installs with install.ps1, but the wasm-built
+        # compiler cannot take a Windows path yet, so its archives are held.
+        include:
+        - rid: osx-arm64
+          runner: macos-latest
+          extension: tar.gz
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Set up .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Restore local tools
+      run: dotnet tool restore
+
+    - name: Build the tool with Native AOT
+      shell: bash
+      run: |
+        set -euo pipefail
+        dotnet publish cli/ghul-cli.ghulproj -c Release -r ${{ matrix.rid }} \
+          -p:PublishAot=true \
+          -p:Version=${{ needs.version.outputs.package }} \
+          -o build
+
+        if [ -f build/ghul-cli.exe ]; then
+          mv build/ghul-cli.exe build/ghul.exe
+        else
+          mv build/ghul-cli build/ghul
+        fi
+
+        # The native build's debug symbols, which nothing a user runs reads.
+        rm -f build/ghul-cli.dbg build/ghul-cli.pdb build/ghul.pdb
+        rm -rf build/ghul-cli.dSYM
+
+    - name: Check the tool reports this release's version
+      shell: bash
+      run: |
+        set -euo pipefail
+        tool=build/ghul
+        if [ -f build/ghul.exe ]; then tool=build/ghul.exe; fi
+
+        reported="$("${tool}" --version 2>&1 | head -n 1)"
+        echo "${reported}"
+
+        if ! printf '%s' "${reported}" | grep -q -- "${{ needs.version.outputs.package }}"; then
+          echo "the tool reports '${reported}'; expected version ${{ needs.version.outputs.package }}" >&2
+          exit 1
+        fi
+
+    # The archive holds the tool and nothing else, and on macOS the tool links
+    # no .NET runtime library.
+    - name: Check the archive is self-contained
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        expected=ghul
+        if [ -f build/ghul.exe ]; then expected=ghul.exe; fi
+
+        actual="$(cd build && find . -type f | sed 's|^\./||' | sort)"
+
+        if [ "${actual}" != "${expected}" ]; then
+          echo "the payload is not the tool alone:" >&2
+          printf '%s\n' "${actual}" >&2
+          exit 1
+        fi
+
+        if [ "${{ matrix.rid }}" = osx-arm64 ]; then
+          if otool -L build/ghul | grep -qiE 'libcoreclr|libhostfxr|libhostpolicy'; then
+            echo "build/ghul links a .NET runtime library:" >&2
+            otool -L build/ghul >&2
+            exit 1
+          fi
+
+          otool -L build/ghul
+        fi
+
+        echo "payload is exactly the tool."
+
+    - name: Pack the archive
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p dist
+
+        if [ "${{ matrix.extension }}" = zip ]; then
+          pwsh -NoProfile -Command "Compress-Archive -Path build/ghul.exe -DestinationPath dist/ghul-cli-${{ matrix.rid }}.zip"
+        else
+          tar -czf dist/ghul-cli-${{ matrix.rid }}.tar.gz -C build ghul
+        fi
+
+        cd dist
+
+        if command -v sha256sum >/dev/null 2>&1; then
+          sha256sum ghul-cli-${{ matrix.rid }}.${{ matrix.extension }} >ghul-cli-${{ matrix.rid }}.${{ matrix.extension }}.sha256
+        else
+          shasum -a 256 ghul-cli-${{ matrix.rid }}.${{ matrix.extension }} >ghul-cli-${{ matrix.rid }}.${{ matrix.extension }}.sha256
+        fi
+
+    - name: Install the archive and use it, on macOS
+      if: ${{ matrix.rid == 'osx-arm64' }}
+      shell: bash
+      run: ./tests/smoke-install.sh dist ${{ matrix.rid }} ${{ needs.version.outputs.package }}
+
+    - name: Install the archive and use it, on Windows
+      if: ${{ startsWith(matrix.rid, 'win-') }}
+      shell: pwsh
+      run: ./tests/smoke-install.ps1 -Archives dist -Rid ${{ matrix.rid }} -Version ${{ needs.version.outputs.package }}
+
+    # `ghul update` takes its update path only in the Native AOT build, against
+    # a release mirror on the file system.
+    - name: Test ghul update, on macOS
+      if: ${{ matrix.rid == 'osx-arm64' }}
+      shell: bash
+      run: ./tests/update.sh build/ghul
+
+    - name: Test ghul update, on Windows
+      if: ${{ startsWith(matrix.rid, 'win-') }}
+      shell: pwsh
+      run: ./tests/update.ps1 -Executable (Resolve-Path build/ghul.exe) -Rid ${{ matrix.rid }}
+
+    - uses: actions/upload-artifact@v7
+      with:
+        name: aot-archive-${{ matrix.rid }}
+        path: |
+          dist/ghul-cli-${{ matrix.rid }}.${{ matrix.extension }}
+          dist/ghul-cli-${{ matrix.rid }}.${{ matrix.extension }}.sha256
+
   create_release:
-    needs: [version, publish_package, aot_release_archive, aot_release_archive_arm64]
+    needs: [version, publish_package, aot_release_archive, aot_release_archive_arm64, aot_release_archive_desktop]
     name: Create release
     runs-on: ubuntu-latest
 
@@ -479,6 +633,13 @@ jobs:
         name: aot-archive-arm64
         path: aot
 
+    - name: Download the Native AOT archives for Windows and macOS
+      uses: actions/download-artifact@v8
+      with:
+        pattern: aot-archive-*
+        path: aot
+        merge-multiple: true
+
     - name: Create changelog
       run: git log -1 --format="%s%n%n%b%n%n" >changelog.txt
 
@@ -496,6 +657,10 @@ jobs:
           ./aot/ghul-cli-linux-x64.tar.gz.sha256 \
           ./aot/ghul-cli-linux-arm64.tar.gz \
           ./aot/ghul-cli-linux-arm64.tar.gz.sha256 \
+          ./aot/ghul-cli-osx-arm64.tar.gz \
+          ./aot/ghul-cli-osx-arm64.tar.gz.sha256 \
+          ./aot/ghul-cli-install.ps1 \
+          ./aot/ghul-cli-install.ps1.sha256 \
           ./aot/ghul-cli-install.sh \
           ./aot/ghul-cli-install.sh.sha256 \
           --title "${{ needs.version.outputs.tag }}" \

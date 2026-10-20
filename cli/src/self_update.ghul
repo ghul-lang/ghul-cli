@@ -20,8 +20,14 @@ namespace Ghul.Cli is
     class SELF_UPDATE(api: string, releases: string) is
         REPOSITORY: string static => "ghul-lang/ghul-cli"
 
-        /// The name the install script is published under in a release.
-        INSTALL_SCRIPT: string static => "ghul-cli-install.sh"
+        /// The name the install script is published under in a release: a
+        /// shell script, or a PowerShell script on Windows.
+        INSTALL_SCRIPT: string static =>
+            if System.OperatingSystem.is_windows() then "ghul-cli-install.ps1" else "ghul-cli-install.sh" fi
+
+        /// The name of the executable `install.sh` and `install.ps1` install.
+        EXECUTABLE: string static =>
+            if System.OperatingSystem.is_windows() then "ghul.exe" else "ghul" fi
 
         /// The command that updates ghul-cli where it was installed as a
         /// .NET tool.
@@ -55,13 +61,13 @@ namespace Ghul.Cli is
             let resolved = _resolve_link(executable)
             let root = Path.get_directory_name(resolved)
 
-            if !root? \/ Path.get_file_name(resolved) !~ "ghul" then
-                return ERROR("{resolved} was not installed by install.sh")
+            if !root? \/ Path.get_file_name(resolved) !~ EXECUTABLE then
+                return ERROR("{resolved} was not installed by an install script")
             fi
 
             for entry in Directory.get_file_system_entries(root) do
-                if Path.get_file_name(entry) !~ "ghul" then
-                    return ERROR("{root} holds more than the ghul executable, so it was not installed by install.sh")
+                if !Path.get_file_name(entry)!.starts_with("ghul") then
+                    return ERROR("{root} holds more than the ghul executable, so it was not installed by an install script")
                 fi
             od
 
