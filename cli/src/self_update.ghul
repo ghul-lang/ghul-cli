@@ -208,7 +208,7 @@ namespace Ghul.Cli is
                     return ERROR("{url} answered HTTP {cast int(response.status_code)}")
                 fi
 
-                return OK(response.content.read_as_byte_array_async().result)
+                return OK(Ghul.Project.TRANSFER.read(response.content))
             catch e: System.Exception
                 return ERROR("{url} could not be read ({e.get_type().name})")
             finally

@@ -55,14 +55,14 @@ namespace Ghul.Cli is
             // The wasm-built compiler runs under Node, so a machine with none
             // gets one first.
             if _kind == CompilerKind.WASM then
-                let node = ensure_node(say)
+                let node = ensure_node(false)
 
                 if let (error): ERROR = node then
                     return ERROR(error)
                 fi
             fi
 
-            let installed = ensure_compiler_installed(COMPILER_PLAN.store(_kind), version, true)
+            let installed = ensure_compiler_installed(COMPILER_PLAN.store(_kind), version, false)
 
             if let (error): ERROR = installed then
                 return ERROR(error)
@@ -124,7 +124,7 @@ namespace Ghul.Cli is
     class NODE_COMPONENT: Component is
         init() is si
 
-        title() -> string => "node"
+        title() -> string => "Node.js"
 
         installed() -> string? => Ghul.Project.NODE_STORE.for_this_user().highest_usable()
 
@@ -153,7 +153,7 @@ namespace Ghul.Cli is
     class WASMTIME_COMPONENT: Component is
         init() is si
 
-        title() -> string => "wasmtime"
+        title() -> string => "ghul-wasmtime"
 
         installed() -> string? is
             if let held: string = Ghul.Project.WASMTIME_STORE.for_this_user().installed() then
@@ -283,7 +283,7 @@ namespace Ghul.Cli is
     /// Install and update, for any component.
     class COMPONENT_VERBS is
         /// Installs `version` of `component`, or the newest where none is
-        /// named, saying what it does. 0 on success, 1 on failure.
+        /// named, saying what it did. 0 on success, 1 on failure.
         ///
         /// - component: what to install
         /// - version: the version, or null for the newest
@@ -293,7 +293,7 @@ namespace Ghul.Cli is
 
             if let wanted: string = version then
                 if component.has(wanted) then
-                    LOG.say("{title} {wanted} is already installed")
+                    LOG.say("{title} {LOG.version(wanted)} already installed")
 
                     return 0
                 fi
@@ -301,14 +301,13 @@ namespace Ghul.Cli is
                 let newest = component.latest()
 
                 if let (error): ERROR = newest then
-                    LOG.say(error)
-                    LOG.say("failed to install {title}")
+                    LOG.say("{title} not installed: {error}")
 
                     return 1
                 fi
 
                 if component.is_current(newest!) then
-                    LOG.say("{title} {component.installed() ?? newest!} is already installed")
+                    LOG.say("{title} {LOG.version(component.installed() ?? newest!)} already installed")
 
                     return 0
                 fi
@@ -316,18 +315,17 @@ namespace Ghul.Cli is
                 target = newest!
             fi
 
-            LOG.say("installing {title} {target!}...")
-
-            let done = component.install(target!, LOG.say)
+            let shown = LOG.version(target!)
+            let work = LOG.begin("installing {title} {shown}")
+            let done = component.install(target!, (line: string) -> void is si)
 
             if let (error): ERROR = done then
-                LOG.say(error)
-                LOG.say("failed to install {title}")
+                work.finish("{title} {shown} not installed: {error}")
 
                 return 1
             fi
 
-            LOG.say("{title} {target!} is installed")
+            work.finish("{title} {shown} installed")
 
             return 0
         si
@@ -340,7 +338,7 @@ namespace Ghul.Cli is
         /// - check_only: whether to report and change nothing
         refresh(component: Component, check_only: bool) -> int static is
             let title = component.title()
-            let held = component.installed() ?? ""
+            let held = LOG.version(component.installed() ?? "")
             let newest = component.latest()
 
             if let (error): ERROR = newest then
@@ -349,6 +347,8 @@ namespace Ghul.Cli is
                 return 1
             fi
 
+            let shown = LOG.version(newest!)
+
             if component.is_current(newest!) then
                 LOG.say("{title} {held} is up to date")
 
@@ -356,23 +356,21 @@ namespace Ghul.Cli is
             fi
 
             if check_only then
-                LOG.say("{title} {newest!} is available, {held} is installed")
+                LOG.say("{title} {shown} available, {held} installed")
 
                 return 0
             fi
 
-            LOG.say("updating {title} {held} to {newest!}...")
-
-            let done = component.install(newest!, LOG.say)
+            let work = LOG.begin("updating {title} {held} to {shown}")
+            let done = component.install(newest!, (line: string) -> void is si)
 
             if let (error): ERROR = done then
-                LOG.say(error)
-                LOG.say("{title} could not be updated")
+                work.finish("{title} not updated: {error}")
 
                 return 1
             fi
 
-            LOG.say("{title} updated to {newest!}")
+            work.finish("{title} updated {held} to {shown}")
 
             return 0
         si

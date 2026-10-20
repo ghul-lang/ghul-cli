@@ -1,0 +1,104 @@
+namespace Ghul.Cli.Tests is
+    use Collections.LIST
+
+    use Ghul.Cli.LOG
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // What LOG writes, and how a long operation looks when it is drawn and
+    // when it is not.
+    @TestClass()
+    class LOG_TESTS is
+        init() is si
+
+        // Runs `body` with LOG's output collected, standard error treated as
+        // not a terminal.
+        _said(body: () -> void) -> LIST[string] is
+            let said = LIST[string]()
+
+            LOG.redirect(line => said.add(line))
+            LOG.interactive(false)
+
+            try
+                body()
+            finally
+                LOG.restore()
+            yrt
+
+            return said
+        si
+
+        @Test()
+        a_version_is_spelled_without_the_v_of_a_release_tag() is
+            assert LOG.version("1.4.0") =~ "1.4.0";
+            assert LOG.version("v1.4.0") =~ "1.4.0";
+        si
+
+        @Test()
+        a_line_has_the_prefix_once() is
+            assert LOG.line("done") =~ "ghul: done";
+            assert LOG.line("ghul: done") =~ "ghul: done";
+        si
+
+        @Test()
+        an_operation_off_a_terminal_writes_one_line_and_nothing_else() is
+            let said = _said(() is
+                let progress = LOG.begin("installing ghul-llvm 1.4.0")
+
+                progress.update(10L, 100L)
+                progress.update(100L, 100L)
+                progress.finish("ghul-llvm 1.4.0 installed")
+            si)
+
+            assert said.count == 1 else "{said.count} lines";
+            assert said[0] =~ "ghul: ghul-llvm 1.4.0 installed";
+        si
+
+        @Test()
+        an_operation_off_a_terminal_is_not_live() is
+            let live = _said(() is
+                LOG.begin("working")
+
+                assert !LOG.is_live
+            si)
+
+            assert live.count == 0;
+        si
+
+        @Test()
+        a_line_with_nothing_in_it_is_not_written() is
+            assert _said(() is LOG.say("   ") si).count == 0;
+        si
+
+        @Test()
+        the_spinner_cycles_through_its_frames() is
+            assert LOG.render("working", 0, 0L, 0L) =~ "ghul: ⠋ working";
+            assert LOG.render("working", 1, 0L, 0L) =~ "ghul: ⠙ working";
+            assert LOG.render("working", 10, 0L, 0L) =~ "ghul: ⠋ working";
+        si
+
+        @Test()
+        the_bar_appears_once_the_total_is_known() is
+            let line = LOG.render("downloading Node.js 22.20.0", 3, 50L, 100L)
+
+            assert line.contains("━━━━━━━━━━──────────") else line;
+            assert line.contains("50%") else line;
+            assert !line.contains("⠸") else line;
+        si
+
+        @Test()
+        a_bar_never_overfills() is
+            assert LOG.bar(500L, 100L) =~ "━━━━━━━━━━━━━━━━━━━━";
+            assert LOG.bar(-5L, 100L) =~ "────────────────────";
+            assert LOG.percent(500L, 100L) == 100;
+        si
+
+        @Test()
+        sizes_are_given_in_a_unit() is
+            assert LOG.size(512L) =~ "512 B";
+            assert LOG.size(2048L) =~ "2.0 KB";
+            assert LOG.size(5L * 1024L * 1024L) =~ "5.0 MB";
+        si
+    si
+si

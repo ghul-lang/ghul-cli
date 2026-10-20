@@ -392,7 +392,6 @@ namespace Ghul.Project is
                 "ghul-node.{System.Environment.process_id}.{System.Guid.new_guid().to_string("N")}{suffix}"
             ])
 
-            say("downloading node {name}")
 
             try
                 let downloaded = _download("{base()}/v{name}/{archive}", name, scratch, digest, say)
@@ -424,38 +423,12 @@ namespace Ghul.Project is
                     return ERROR("node {version} has no release file for this platform (HTTP {cast int(response.status_code)})")
                 fi
 
-                let stream = use response.content.read_as_stream_async().result
-                let memory = use IO.MemoryStream()
-                let buffer = repeat(0ub, 65536) |> collect()
-                let total = response.content.headers?.content_length ?? 0L
-                let got mut = 0L
-                let percent mut = -1
-                let read mut = stream.read(buffer, 0, buffer.count)
+                let bytes = TRANSFER.read(response.content)
 
-                while read > 0 do
-                    memory.write(buffer, 0, read)
-                    got = got + cast long(read)
-
-                    if total > 0L then
-                        let now = cast int(got * 100L / total)
-
-                        if now != percent then
-                            percent = now
-
-                            if now % 5 == 0 \/ now == 100 then
-                                say("downloading node {version}: {now}%")
-                            fi
-                        fi
-                    fi
-
-                    read = stream.read(buffer, 0, buffer.count)
-                od
-
-                if got == 0L then
+                if bytes.count == 0 then
                     return ERROR("node {version} downloaded no bytes")
                 fi
 
-                let bytes = memory.to_array()
                 let actual = System.Convert.to_hex_string(
                     System.Security.Cryptography.SHA256.hash_data(bytes)).to_lower_invariant()
 

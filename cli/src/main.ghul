@@ -156,9 +156,7 @@ namespace Ghul.Cli is
                 wanted = newest!
             fi
 
-            let say = (line: string) -> void => if show_output then LOG.say(line) fi
-
-            if let (error): ERROR = install_compiler(store, wanted!, say) then
+            if let (error): ERROR = install_compiler(store, wanted!, show_output) then
                 return ERROR(error)
             fi
 
@@ -171,18 +169,22 @@ namespace Ghul.Cli is
     // A Node.js that runs the wasm target: the one the machine has, or one
     // fetched into the cache where it has none. The wasm-built compiler and
     // wasm programs run under it.
-    ensure_node(say: (string) -> void) -> Result[unit, string] is
+    ensure_node(show: bool) -> Result[unit, string] is
         if Ghul.Project.WASM_HOST_SELECTION.resolve("node")? then
             return OK(_)
         fi
 
-        say("no Node.js that runs the wasm target was found; fetching one")
-
-        let fetched = Ghul.Project.NODE_DOWNLOAD.of(Ghul.Project.NODE_STORE.for_this_user()).install(say)
+        let store = Ghul.Project.NODE_STORE.for_this_user()
+        let work = if show then LOG.begin("installing Node.js, which the wasm target needs") else null fi
+        let fetched = Ghul.Project.NODE_DOWNLOAD.of(store).install((line: string) -> void is si)
 
         if let (error): ERROR = fetched then
+            work?.discard()
+
             return ERROR("no Node.js ghul can run was found and one could not be fetched: {error}")
         fi
+
+        work?.finish("Node.js {LOG.version(store.highest_usable() ?? "")} installed")
 
         return OK(_)
     si
@@ -202,7 +204,30 @@ namespace Ghul.Cli is
     // an HTTP document rather than a .NET one, so a machine with no .NET
     // reads it as well as one with the SDK, and both land on the same
     // release, and the archive that release publishes for this platform.
-    install_compiler(store: Host.COMPILER_STORE, version: string, say: (string) -> void) -> Result[unit, string] is
+    // Installs the compiler, showing a live line while it runs and saying
+    // what was installed when `show` is set. A failure is returned for the
+    // caller to report.
+    install_compiler(store: Host.COMPILER_STORE, version: string, show: bool) -> Result[unit, string] is
+        let quiet = (line: string) -> void is si
+
+        if !show then
+            return install_compiler_quietly(store, version, quiet)
+        fi
+
+        let shown = LOG.version(version)
+        let work = LOG.begin("installing ghul.compiler {shown}")
+        let installed = install_compiler_quietly(store, version, quiet)
+
+        if installed? then
+            work.finish("ghul.compiler {shown} installed")
+        else
+            work.discard()
+        fi
+
+        return installed
+    si
+
+    install_compiler_quietly(store: Host.COMPILER_STORE, version: string, say: (string) -> void) -> Result[unit, string] is
         if store.is_llvm then
             return Host.NATIVE_COMPILER_DOWNLOAD.of(store).install(version, say)
         fi
@@ -443,7 +468,7 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        LOG.say("created {command_line.directory}; cd into it and ghul run")
+        LOG.say("created {command_line.directory}")
 
         // A project for wasm alone builds wherever the compiler does; running
         // it needs a host, and saying so here is the difference between a
@@ -492,7 +517,7 @@ namespace Ghul.Cli is
         let part = found!.part
 
         if part.targets.count == 0 then
-            LOG.say("{part.id} builds for no target this machine has")
+            LOG.say("{part.id} has no target this machine can build")
             return 1
         fi
 
@@ -500,7 +525,7 @@ namespace Ghul.Cli is
         let name = Path.get_file_name(Path.trim_ending_directory_separator(directory)) ?? part.id
 
         if Directory.exists(directory) /\ Directory.get_file_system_entries(directory).count > 0 then
-            LOG.say("{directory} already exists and is not empty")
+            LOG.say("{directory} exists and is not empty")
             return 1
         fi
 
@@ -548,10 +573,7 @@ namespace Ghul.Cli is
             File.write_all_bytes(Path.join([directory, file.path]), file.bytes)
         od
 
-        let target = if part.targets.count > 1 then " --target {Ghul.Project.BUILD_TARGETS.name(part.targets[0])}" else "" fi
-        let arguments = if part.args.count > 0 then " -- {string.join(" ", [_quoted(a) for a in part.args])}" else "" fi
-
-        LOG.say("fetched {part.id} into {directory}; cd into it and ghul run{target}{arguments}")
+        LOG.say("fetched {part.id} into {directory}")
 
         return 0
     si
@@ -578,7 +600,7 @@ namespace Ghul.Cli is
             let argument = rest[i]
 
             if argument =~ "--version" \/ argument.starts_with("--version=") then
-                LOG.say("a version cannot be chosen: ghul always installs the newest release")
+                LOG.say("install takes no version; it installs the newest release")
                 return 1
             elif argument =~ "--llvm" then
                 llvm_built = true
@@ -595,7 +617,7 @@ namespace Ghul.Cli is
         fi
 
         if positional.count > 1 then
-            LOG.say("a version cannot be chosen: ghul always installs the newest release")
+            LOG.say("install takes no version; it installs the newest release")
             return 1
         fi
 
@@ -638,7 +660,7 @@ namespace Ghul.Cli is
                 return OK(latest)
             fi
 
-            if let (error): ERROR = install_compiler(store, latest, LOG.say) then
+            if let (error): ERROR = install_compiler(store, latest, true) then
                 return ERROR(error)
             fi
 
@@ -661,7 +683,7 @@ namespace Ghul.Cli is
             if argument =~ "--check" then
                 check_only = true
             elif argument =~ "--version" \/ argument.starts_with("--version=") then
-                LOG.say("a version cannot be chosen: ghul always updates to the newest release")
+                LOG.say("update takes no version; it updates to the newest release")
                 return 1
             else
                 Std.error.write_line("usage: ghul update [--check]")
@@ -674,7 +696,7 @@ namespace Ghul.Cli is
         // The .NET tool is replaced by dotnet, which a running tool cannot
         // ask to replace itself.
         if !SELF_UPDATE.is_native() then
-            LOG.say("this ghul is a .NET tool; update it with '{SELF_UPDATE.TOOL_UPDATE_COMMAND}'")
+            LOG.say("ghul is installed as a .NET tool; run {SELF_UPDATE.TOOL_UPDATE_COMMAND}")
             return 0
         fi
 
@@ -692,21 +714,20 @@ namespace Ghul.Cli is
         let latest = update.latest_tag()
 
         if let problem: ERROR = latest then
-            LOG.say("the latest release could not be found: {problem.error}")
+            LOG.say("latest release not found: {problem.error}")
             return 1
         fi
 
         let tag = latest!
 
         if SELF_UPDATE.is_running_version(tag, running) then
-            LOG.say("ghul {running} is installed, and is the latest release")
+            LOG.say("ghul {LOG.version(running)} is up to date")
 
             return 0
         fi
 
         if check_only then
-            LOG.say("ghul {running} is installed; {tag} is the latest release")
-            LOG.say("'ghul update' installs it")
+            LOG.say("ghul {LOG.version(tag)} available, {LOG.version(running)} installed; run ghul update")
             return 0
         fi
 
@@ -722,7 +743,7 @@ namespace Ghul.Cli is
         try
             File.write_all_bytes(script_path, script!)
 
-            LOG.say("updating ghul {running} to {tag} in {install_root}...")
+            let work = LOG.begin("updating ghul {LOG.version(running)} to {LOG.version(tag)}")
 
             let start = System.Diagnostics.ProcessStartInfo("sh")
 
@@ -734,34 +755,36 @@ namespace Ghul.Cli is
             start.use_shell_execute = false
 
             // The script reports its progress on stdout, which this tool
-            // keeps for a script's own output, so it is passed on to stderr
-            // as it arrives.
+            // keeps for a script's own output, so it is read here and shown
+            // on stderr only if the update fails.
             start.redirect_standard_output = true
 
             let process = System.Diagnostics.Process.start(start)
 
             if !process? then
-                LOG.say("cannot update: sh could not be started")
+                work.finish("ghul not updated: sh could not be started")
                 return 1
             fi
 
-            // What the install script says is ghul's own output, so each
-            // line is prefixed like the rest; its blank lines and the
-            // "Try:" suggestions for a first install have no place in an
-            // update.
-            let suggesting mut = false
+            // What the install script says is kept, and shown only if it
+            // fails: its progress is not a fact about the update.
+            let output = Collections.LIST[string]()
 
             while let line = process.standard_output.read_line() do
-                if line.trim() =~ "Try:" then
-                    suggesting = true
-                fi
-
-                if !suggesting then
-                    LOG.say(line.trim())
-                fi
+                output.add(line.trim())
             od
 
             process.wait_for_exit()
+
+            if process.exit_code == 0 then
+                work.finish("ghul updated {LOG.version(running)} to {LOG.version(tag)}")
+            else
+                work.finish("ghul not updated")
+
+                for line in output do
+                    LOG.say(line)
+                od
+            fi
 
             return process.exit_code
         finally
@@ -813,7 +836,7 @@ namespace Ghul.Cli is
             Directory.delete(root, true)
         fi
 
-        LOG.say("cache cleared ({root})")
+        LOG.say("cache cleared")
         return 0
     si
 
@@ -845,7 +868,7 @@ namespace Ghul.Cli is
         let script_ref = rest[0]
 
         if !is_stdin_marker(script_ref) /\ !File.exists(script_ref) then
-            LOG.say("no such file: {script_ref}")
+            LOG.say("{script_ref} not found")
             return 1
         fi
 
@@ -887,13 +910,13 @@ namespace Ghul.Cli is
         let script_args = rest[1..<0]
 
         if !is_stdin_marker(script_ref) /\ !File.exists(script_ref) then
-            LOG.say("no such file: {script_ref}")
+            LOG.say("{script_ref} not found")
             return 1
         fi
 
         if !force /\ !is_stdin_marker(script_ref) /\ !is_runnable_by_default(script_ref) then
             Std.error.write_line(
-                "ghul: refusing to run {script_ref}: not a .ghul file and not an executable script starting with '#!' - use 'ghul run {script_ref}' to force it")
+                "ghul: {script_ref} is not a .ghul file or a #! script; use ghul run {script_ref}")
             return 1
         fi
 
@@ -966,7 +989,7 @@ namespace Ghul.Cli is
         let store = planned![0]
 
         if store.is_wasm then
-            if let (problem): ERROR = ensure_node(say) then
+            if let (problem): ERROR = ensure_node(true) then
                 say(problem)
                 return (exit_code = 1, project = null, output = "")
             fi
@@ -976,7 +999,7 @@ namespace Ghul.Cli is
 
         if let (error): ERROR = ensured then
             say(error)
-            say("could not determine the installed ghul.compiler version")
+            say("installed ghul.compiler version not found")
             return (exit_code = 1, project = null, output = "")
         fi
 
@@ -1215,8 +1238,11 @@ namespace Ghul.Cli is
         fi
 
         if cannot_host_dotnet then
-            Std.error.write_line(
-                "ghul: the .NET REPL needs .NET; 'ghul repl --target llvm' runs cells natively without it")
+            if LLVM_TOOLCHAIN.triple()? then
+                LOG.say("the .NET REPL needs the .NET SDK, which this ghul cannot find")
+            else
+                LOG.say("no REPL is supported on this configuration: the .NET REPL needs the .NET SDK, which was not found, and the native REPL needs Linux on x64 or arm64")
+            fi
 
             return 1
         fi
@@ -1277,7 +1303,7 @@ namespace Ghul.Cli is
             let store = planned![0]
 
             if store.is_wasm then
-                if let (problem): ERROR = ensure_node(say) then
+                if let (problem): ERROR = ensure_node(true) then
                     say(problem)
                     return 1
                 fi
@@ -1495,7 +1521,7 @@ namespace Ghul.Cli is
                     say)
         fi
 
-        say("could not install ghul.compiler")
+        say("ghul.compiler not installed")
         return 1
     si
 
@@ -1546,7 +1572,7 @@ namespace Ghul.Cli is
         let fallback: Host.COMPILER_STORE? mut = if planned!.count > 1 then planned![1] else null fi
 
         if chosen.is_wasm then
-            if let (problem): ERROR = ensure_node(say) then
+            if let (problem): ERROR = ensure_node(true) then
                 say(problem)
                 return null
             fi
@@ -1673,7 +1699,7 @@ namespace Ghul.Cli is
 
         if let (error): ERROR = installed then
             LOG.say("{error}")
-            LOG.say("could not install ghul.compiler")
+            LOG.say("ghul.compiler not installed")
             return null
         fi
 
@@ -1751,14 +1777,14 @@ namespace Ghul.Cli is
 
         if let (error): ERROR = version then
             say(error)
-            say("could not install ghul.compiler")
+            say("ghul.compiler not installed")
             return null
         fi
 
         let tools = project.manifest.tools
 
         if Ghul.Project.TOOL_FLOOR.problem(tools, Ghul.Project.PROJECT_TOOLS.COMPILER, version!)? then
-            say("ghul.compiler {version!} is outside what the project names in tools; installing the newest")
+            say("ghul.compiler {LOG.version(version!)} is outside what the project names in tools; installing the newest")
 
             let updated = update_compiler_to_latest(store)
 

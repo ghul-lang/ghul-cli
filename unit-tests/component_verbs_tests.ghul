@@ -80,7 +80,7 @@ namespace Ghul.Cli.Tests is
             let fake = FAKE_COMPONENT("1.0.0", "2.0.0")
             let said = _run(said => COMPONENT_VERBS.install(fake, "1.0.0"))
 
-            assert said =~ "0 | ghul: thing 1.0.0 is already installed" else said
+            assert said =~ "0 | ghul: thing 1.0.0 already installed" else said
             assert fake.installed_versions.count == 0
         si
 
@@ -89,7 +89,7 @@ namespace Ghul.Cli.Tests is
             let fake = FAKE_COMPONENT(null, "2.0.0")
             let said = _run(said => COMPONENT_VERBS.install(fake, null))
 
-            assert said =~ "0 | ghul: installing thing 2.0.0... | ghul: downloading thing 2.0.0... | ghul: thing 2.0.0 is installed" else said
+            assert said =~ "0 | ghul: thing 2.0.0 installed" else said
             assert fake.installed_versions[0] =~ "2.0.0"
         si
 
@@ -98,7 +98,7 @@ namespace Ghul.Cli.Tests is
             let fake = FAKE_COMPONENT("2.0.0", "2.0.0")
             let said = _run(said => COMPONENT_VERBS.install(fake, null))
 
-            assert said =~ "0 | ghul: thing 2.0.0 is already installed" else said
+            assert said =~ "0 | ghul: thing 2.0.0 already installed" else said
         si
 
         @Test()
@@ -109,7 +109,7 @@ namespace Ghul.Cli.Tests is
 
             let said = _run(said => COMPONENT_VERBS.install(fake, null))
 
-            assert said =~ "1 | ghul: installing thing 2.0.0... | ghul: downloading thing 2.0.0... | ghul: the server said no | ghul: failed to install thing" else said
+            assert said =~ "1 | ghul: thing 2.0.0 not installed: the server said no" else said
         si
 
         @Test()
@@ -120,7 +120,7 @@ namespace Ghul.Cli.Tests is
 
             let said = _run(said => COMPONENT_VERBS.install(fake, null))
 
-            assert said =~ "1 | ghul: no network | ghul: failed to install thing" else said
+            assert said =~ "1 | ghul: thing not installed: no network" else said
         si
 
         @Test()
@@ -136,7 +136,7 @@ namespace Ghul.Cli.Tests is
             let fake = FAKE_COMPONENT("1.0.0", "2.0.0")
             let said = _run(said => COMPONENT_VERBS.refresh(fake, true))
 
-            assert said =~ "0 | ghul: thing 2.0.0 is available, 1.0.0 is installed" else said
+            assert said =~ "0 | ghul: thing 2.0.0 available, 1.0.0 installed" else said
             assert fake.installed_versions.count == 0
         si
 
@@ -145,7 +145,7 @@ namespace Ghul.Cli.Tests is
             let fake = FAKE_COMPONENT("1.0.0", "2.0.0")
             let said = _run(said => COMPONENT_VERBS.refresh(fake, false))
 
-            assert said =~ "0 | ghul: updating thing 1.0.0 to 2.0.0... | ghul: downloading thing 2.0.0... | ghul: thing updated to 2.0.0" else said
+            assert said =~ "0 | ghul: thing updated 1.0.0 to 2.0.0" else said
             assert fake.installed_versions[0] =~ "2.0.0"
         si
 

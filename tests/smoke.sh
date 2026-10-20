@@ -115,7 +115,7 @@ check "$out" "compiled" "output of what 'ghul compile' built"
 
 echo "smoke: 'ghul install-compiler' with no version looks for the latest..." >&2
 out="$(dotnet "$cli" install-compiler 2>&1)"
-if [[ "$out" != *"is already installed"* && "$out" != *"is installed"* ]]; then
+if [[ "$out" != *"already installed"* && "$out" != *" installed"* ]]; then
     echo "smoke: expected 'ghul install-compiler' to report the latest compiler installed, got: $out" >&2
     exit 1
 fi
@@ -284,6 +284,8 @@ compilers="$fresh_home/.cache/ghul-cli/compilers"
 installed_versions="$(ls -d "$compilers"/*/*/ 2>/dev/null | wc -l)"
 if [[ "$installed_versions" != "1" ]]; then
     echo "smoke: expected exactly one compiler version after concurrent installs, found $installed_versions under $compilers" >&2
+    ls -d "$compilers"/*/*/ >&2
+    cat "$install_outs"/*.err >&2
     exit 1
 fi
 
