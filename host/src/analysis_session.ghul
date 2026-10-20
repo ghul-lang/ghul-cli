@@ -31,6 +31,12 @@ namespace Ghul.Repl.Host is
         _next: Tasks.TASK[string?]?
 
         init(compiler: COMPILER_COMMAND, directory: string) is
+            self.init(compiler, directory, Collections.LIST[string]())
+        si
+
+        // `extra_arguments` go to the analyser after its own, to give it a
+        // target and the libraries a session compiles against.
+        init(compiler: COMPILER_COMMAND, directory: string, extra_arguments: Collections.List[string]) is
             let start_info = DETACHED_START.of(compiler.file_name)
 
             for argument in compiler.leading_arguments() do
@@ -38,6 +44,10 @@ namespace Ghul.Repl.Host is
             od
 
             start_info.argument_list.add("--analyse")
+
+            for argument in extra_arguments do
+                start_info.argument_list.add(argument)
+            od
 
             for argument in REPL_COMPILER_ARGUMENTS.quieted do
                 start_info.argument_list.add(argument)
@@ -165,6 +175,11 @@ namespace Ghul.Repl.Host is
 
         STARTUP_TIMEOUT_MS: int static => 60000
         REPLY_TIMEOUT_MS: int static => 60000
+
+        // For a session whose cells are source rather than assemblies: the
+        // files of the cells accepted so far, sent with the text being
+        // analysed so that it can name what they define.
+        companions: (() -> Collections.List[(path: string, source: string)])? public
 
         is_available: bool => !_is_unavailable
 
@@ -328,7 +343,7 @@ namespace Ghul.Repl.Host is
                     return null
                 fi
 
-                if !(capabilities |> Ghul.Pipes.any(c => c =~ "add-references")) then
+                if !companions? /\ !(capabilities |> Ghul.Pipes.any(c => c =~ "add-references")) then
                     _give_up("the installed compiler cannot show a session's earlier cells to its analyser")
 
                     return null
@@ -372,6 +387,16 @@ namespace Ghul.Repl.Host is
                 json.write_string("command", "edit")
                 json.write_string("kind", "edit")
                 json.write_start_array("files")
+
+                if let provide = companions then
+                    for file in provide() do
+                        json.write_start_object()
+                        json.write_string("path", file.path)
+                        json.write_string("source", file.source)
+                        json.write_end_object()
+                    od
+                fi
+
                 json.write_start_object()
                 json.write_string("path", INPUT_PATH)
                 json.write_string("source", source)

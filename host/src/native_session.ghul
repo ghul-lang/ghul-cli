@@ -43,6 +43,7 @@ namespace Ghul.Repl.Host is
         _commands: IO.StreamWriter?
         _is_running: bool
         _fallback: COMPLETENESS_CHECK
+        _analysis: ANALYSIS_SESSION
 
         init(..) is
             _session = SESSION(_want_default_use)
@@ -53,7 +54,34 @@ namespace Ghul.Repl.Host is
 
             IO.Directory.create_directory(_directory)
 
+            let analysis_directory = IO.Path.join([_directory, "analysis"])
+
+            _analysis = ANALYSIS_SESSION(() => _start_analyser(analysis_directory), _session, (line: string) => Std.error.write_line(line))
+            _analysis.companions = () => _cell_sources()
+
             IO.File.write_all_text(_libraries_file(), _response_text(_library_arguments))
+        si
+
+        // The analyser sees the libraries the cells are compiled against, and
+        // gets the cells themselves with each text it is asked about.
+        _start_analyser(directory: string) -> AnalyserConnection? is
+            try
+                IO.Directory.create_directory(directory)
+
+                return ANALYSER_PROCESS(_compiler, directory, Collections.LIST[string](["--target", "llvm", "--cells", "@{_libraries_file()}"]))
+            catch e: System.Exception
+                return null
+            yrt
+        si
+
+        _cell_sources() -> Collections.List[(path: string, source: string)] is
+            let result = Collections.LIST[(path: string, source: string)]()
+
+            for path in _cell_files do
+                result.add((path = path, source = IO.File.read_all_text(path)))
+            od
+
+            return result
         si
 
         _libraries_file() -> string => IO.Path.join([_directory, "libraries.rsp"])
@@ -86,7 +114,7 @@ namespace Ghul.Repl.Host is
 
         is_running: bool => _is_running
 
-        is_analysis_available: bool => false
+        is_analysis_available: bool => _analysis.is_available
 
         submit(source: string) -> SUBMIT_RESULT => _submit_recorded(source, null)
 
@@ -142,17 +170,19 @@ namespace Ghul.Repl.Host is
         add_package(package: string, version: string?) -> ADDED_REFERENCES =>
             ADDED_REFERENCES(Collections.LIST[string](), "packages are not supported on the llvm target yet")
 
-        complete(text: string, line: int, column: int) -> Collections.List[ANALYSIS_COMPLETION]? => null
+        complete(text: string, line: int, column: int) -> Collections.List[ANALYSIS_COMPLETION]? => _analysis.complete(text, line, column)
 
-        hover(text: string, line: int, column: int) -> string? => null
+        hover(text: string, line: int, column: int) -> string? => _analysis.hover(text, line, column)
 
-        diagnostics(text: string) -> Collections.List[string]? => null
+        diagnostics(text: string) -> Collections.List[string]? => _analysis.diagnostics(text)
 
         check(text: string) -> Completeness => _fallback.check(text)
 
         check_ending(text: string) -> CHECK_ANSWER => CHECK_ANSWER(check(text), null)
 
         close() is
+            _analysis.close()
+
             try
                 if let server = _server then
                     server.standard_input.write_line("quit")
