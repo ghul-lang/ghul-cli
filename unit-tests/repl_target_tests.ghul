@@ -1,0 +1,29 @@
+namespace Ghul.Cli.Tests is
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    @TestClass()
+    class REPL_TARGET_TESTS is
+        init() is si
+
+        _options(want_llvm: bool, is_target_given: bool) -> REPL_OPTIONS =>
+            REPL_OPTIONS(true, true, Repl.ThemeChoice.AUTO, want_llvm, is_target_given)
+
+        @Test()
+        repl_is_native__when_asked_for() is
+            assert repl_is_native(_options(true, true), false, false);
+        si
+
+        @Test()
+        repl_is_native__by_default_only_where_dotnet_cannot_host_cells_and_ghul_llvm_is_released() is
+            assert repl_is_native(_options(false, false), true, true);
+            assert !repl_is_native(_options(false, false), false, true);
+            assert !repl_is_native(_options(false, false), true, false);
+        si
+
+        @Test()
+        repl_is_native__not_when_dotnet_was_asked_for() is
+            assert !repl_is_native(_options(false, true), true, true);
+        si
+    si
+si

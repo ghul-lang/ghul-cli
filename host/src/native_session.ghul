@@ -301,7 +301,7 @@ namespace Ghul.Repl.Host is
         // cells where there is one, and in a process of its own otherwise.
         // Whether the build succeeded.
         _build(arguments: Collections.List[string], diagnostics: Collections.LIST[CELL_DIAGNOSTIC]) -> bool is
-            if !_server_failed /\ _compiler.assembly? then
+            if !_server_failed then
                 let served = _build_served(arguments, diagnostics)
 
                 if served? then
