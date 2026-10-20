@@ -102,9 +102,35 @@ namespace Ghul.Repl.Host is
             return null
         si
 
-        // A running cell lives in the host, which this does not yet stop
-        // without ending the session.
-        interrupt() -> bool => false
+        // Ends the cell running in the host, which takes SIGINT as the end of
+        // that cell and not of the session. False while no cell is in the
+        // host: a build in progress is not stopped.
+        interrupt() -> bool is
+            if !_in_host then
+                return false
+            fi
+
+            if let host = _host then
+                try
+                    let start_info = System.Diagnostics.ProcessStartInfo()
+
+                    start_info.file_name = "kill"
+                    start_info.use_shell_execute = false
+                    start_info.argument_list.add("-INT")
+                    start_info.argument_list.add("{host.id}")
+
+                    System.Diagnostics.Process.start(start_info)?.wait_for_exit()
+
+                    return true
+                catch e: System.Exception
+                    return false
+                yrt
+            fi
+
+            return false
+        si
+
+        _in_host: bool
 
         set_display_sink(sink: Ghul.DisplaySink) is si
 
@@ -224,7 +250,9 @@ namespace Ghul.Repl.Host is
                 Std.error.write_line("[{request.name}: compile {compile_time:F0} ms, load and run {started.elapsed_milliseconds - compile_time:F0} ms]")
             fi
 
-            return SUBMIT_RESULT(true, outcome.diagnostics, run.value, run.error, false)
+            let interrupted = run.error =~ "interrupted"
+
+            return SUBMIT_RESULT(true, outcome.diagnostics, run.value, if interrupted then null else run.error fi, interrupted)
         si
 
         _source_path(name: string) -> string => IO.Path.join([_directory, "{name}.ghul"])
@@ -480,6 +508,8 @@ namespace Ghul.Repl.Host is
                 return NATIVE_RUN(null, problem)
             fi
 
+            _in_host = true
+
             let commands = _commands!
 
             commands.write_line(shared_object)
@@ -495,6 +525,7 @@ namespace Ghul.Repl.Host is
                 let c = output.read()
 
                 if c < 0 then
+                    _in_host = false
                     Std.out.write(text.to_string())
 
                     return NATIVE_RUN(null, "ghul: the cell host ended unexpectedly")
@@ -525,9 +556,11 @@ namespace Ghul.Repl.Host is
                 fi
             od
 
+            _in_host = false
+
             Std.out.flush()
 
-            return NATIVE_RUN(value, if status == 0 then null else "ghul: the cell ended with status {status}" fi)
+            return NATIVE_RUN(value, if status == 0 then null elif status == 130 then "interrupted" else "ghul: the cell ended with status {status}" fi)
         si
     si
 
