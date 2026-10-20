@@ -91,7 +91,11 @@ namespace Ghul.Cli is
             return platform? /\ LLVM_TOOLCHAIN.for_this_user().is_kept(version, platform!)
         si
 
-        is_current(latest: string) -> bool => has(latest)
+        is_current(latest: string) -> bool is
+            let platform = LLVM_TOOLCHAIN.triple_for(_machine.rid)
+
+            return has(latest) /\ platform? /\ LLVM_TOOLCHAIN.for_this_user().is_host_kept(latest, platform!)
+        si
 
         install(version: string, say: (string) -> void) -> Result[unit, string] is
             let platform = LLVM_TOOLCHAIN.triple_for(_machine.rid)
@@ -104,6 +108,12 @@ namespace Ghul.Cli is
 
             if let (error): ERROR = found then
                 return ERROR(error)
+            fi
+
+            // The cell host the native REPL runs cells in comes with the release,
+            // so it is fetched here and not by the first REPL that needs it.
+            if let (error): ERROR = LLVM_TOOLCHAIN.for_this_user().host_executable(found!) then
+                say("ghul: cannot fetch the cell host: {error}")
             fi
 
             return OK(_)
