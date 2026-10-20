@@ -1,0 +1,59 @@
+namespace Ghul.Cli.Tests is
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // Which compiler a command runs is COMPILER_PLAN's to decide, from the
+    // machine and what it holds. A command that picks a store itself runs
+    // a compiler the plan would not have chosen, and fetches the wrong one:
+    // no .NET and no Native AOT compiler for the platform is a machine the
+    // plan hands the wasm-built compiler to.
+    @TestClass()
+    class COMPILER_CHOICE_LINT_TESTS is
+        init() is si
+
+        _cli_sources() -> string static is
+            let directory: string? mut = IO.Path.get_directory_name(System.Reflection.Assembly.get_executing_assembly().location)
+
+            while directory? do
+                let candidate = IO.Path.combine(directory, "cli", "src")
+
+                if IO.Directory.exists(candidate) then
+                    return candidate
+                fi
+
+                directory = IO.Path.get_directory_name(directory)
+            od
+
+            return ""
+        si
+
+        @Test()
+        no_command_picks_a_compiler_store_except_through_the_plan() is
+            let root = _cli_sources()
+
+            if root.length == 0 then
+                // Run from a copy without the sources beside it.
+                return
+            fi
+
+            let allowed = ["compiler_plan.ghul", "machine.ghul"]
+            let offenders = Collections.LIST[string]()
+
+            for path in IO.Directory.get_files(root, "*.ghul", IO.SearchOption.ALL_DIRECTORIES) do
+                if allowed |> Ghul.Pipes.any(name => name =~ IO.Path.get_file_name(path)) then
+                    continue
+                fi
+
+                let text = IO.File.read_all_text(path)
+
+                for name in ["COMPILER_STORE.for_this_user", "managed_for_this_user", "native_for_this_user", "wasm_for_this_user", "llvm_for_this_user"] do
+                    if text.contains(name) then
+                        offenders.add("{IO.Path.get_file_name(path)}: {name}")
+                    fi
+                od
+            od
+
+            assert offenders.count == 0;
+        si
+    si
+si

@@ -1055,14 +1055,21 @@ namespace Ghul.Cli is
         return installed < wanted
     si
 
+    // Whether `ghul repl` runs its cells in a host process of their own:
+    // when asked, or when no target was given and this machine cannot host
+    // .NET cells but ghul-llvm is released for it.
+    repl_is_native(options: REPL_OPTIONS, cannot_host_dotnet: bool, llvm_is_released: bool) -> bool =>
+        options.want_llvm \/ (!options.is_target_given /\ cannot_host_dotnet /\ llvm_is_released)
+
     // What `ghul repl` was asked for.
-    class REPL_OPTIONS(want_server: bool, want_default_use: bool, theme: Repl.ThemeChoice, want_llvm: bool) is
+    class REPL_OPTIONS(want_server: bool, want_default_use: bool, theme: Repl.ThemeChoice, want_llvm: bool, is_target_given: bool) is
         // Null when an argument is not one the session takes.
         parse(args: Collections.List[string]) -> REPL_OPTIONS? static is
             let want_server mut = true
             let want_default_use mut = true
             let theme mut = Repl.ThemeChoice.AUTO
             let want_llvm mut = false
+            let is_target_given mut = false
             let i mut = 0
 
             while i < args.count do
@@ -1073,6 +1080,7 @@ namespace Ghul.Cli is
                     want_default_use = false
                 when "--target" then
                     i = i + 1
+                    is_target_given = true
 
                     if i >= args.count then
                         return null
@@ -1110,7 +1118,7 @@ namespace Ghul.Cli is
                 i = i + 1
             od
 
-            return REPL_OPTIONS(want_server, want_default_use, theme, want_llvm)
+            return REPL_OPTIONS(want_server, want_default_use, theme, want_llvm, is_target_given)
         si
     si
 
@@ -1123,20 +1131,25 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        if options.want_llvm then
+        // The cells of the .NET session are assemblies loaded into this
+        // process, which needs .NET: the Native AOT build has none, and
+        // neither has a machine without it. The native session runs them
+        // in a host process of its own, so it is what a session that cannot
+        // host .NET cells starts, where ghul-llvm is released for the platform.
+        let cannot_host_dotnet = SELF_UPDATE.is_native() \/ !Host.HOST.has_dotnet()
+
+        if repl_is_native(options!, cannot_host_dotnet, LLVM_TOOLCHAIN.triple()?) then
             return cmd_repl_llvm(options!)
         fi
 
-        // A session loads each cell's assembly into this process, which the
-        // Native AOT build cannot do whatever is installed beside it.
-        if SELF_UPDATE.is_native() then
+        if cannot_host_dotnet then
             Std.error.write_line(
-                "ghul: the REPL needs .NET for now: install the .NET SDK, then 'dotnet tool install -g ghul.cli' and run that ghul")
+                "ghul: the .NET REPL needs .NET; 'ghul repl --target llvm' runs cells natively without it")
 
             return 1
         fi
 
-        let store = Host.COMPILER_STORE.for_this_user()
+        let store = COMPILER_PLAN.store(CompilerKind.MANAGED)
 
         let ensured = ensure_compiler_installed(store, null, true)
 
@@ -1180,7 +1193,24 @@ namespace Ghul.Cli is
         if named? /\ named.length > 0 then
             compiler = Host.COMPILER_COMMAND("dotnet", named)
         else
-            let store = Host.COMPILER_STORE.for_this_user()
+            // The compiler a build uses: the managed one where there is .NET,
+            // otherwise the wasm-built one under Node.
+            let planned = planned_stores(false)
+
+            if let (problem): ERROR = planned then
+                say(problem)
+                return 1
+            fi
+
+            let store = planned![0]
+
+            if store.is_wasm then
+                if let (problem): ERROR = ensure_node(say) then
+                    say(problem)
+                    return 1
+                fi
+            fi
+
             let ensured = ensure_compiler_installed(store, null, true)
 
             if let (error): ERROR = ensured then
@@ -1188,7 +1218,13 @@ namespace Ghul.Cli is
                 return 1
             fi
 
-            compiler = store.command(ensured!)
+            let command = store.command(ensured!)
+
+            // Node as the build resolves it: the one this tool fetched, which
+            // is not on the PATH.
+            compiler = Host.COMPILER_COMMAND(
+                if store.is_wasm then Ghul.Project.WASM_HOST_SELECTION.resolve("node") ?? command.file_name else command.file_name fi,
+                command.assembly)
         fi
 
         let toolchain = LLVM_TOOLCHAIN.for_this_user()
