@@ -141,7 +141,7 @@ namespace Ghul.Cli.Tests is
             let library = SOURCE_LIBRARY("ghul-core", "0.3.0", "/cache/core", LIST[string](["/cache/core/src/a.ghul", "/cache/core/src/b.ghul"]))
 
             _same(
-                "--target wasm --wasm-loader /cache/core/host/loader.mjs --library-source ghul-core@0.3.0=/cache/core /cache/core/src/a.ghul /cache/core/src/b.ghul -o out/app main.ghul",
+                "--target wasm --wasm-loader {IO.Path.combine("/cache/core", "host", "loader.mjs")} --library-source ghul-core@0.3.0=/cache/core /cache/core/src/a.ghul /cache/core/src/b.ghul -o out/app main.ghul",
                 _joined(
                     COMPILER_ARGUMENTS.for_build(
                         _manifest(ManifestKind.PROGRAM, _plain_options()),
