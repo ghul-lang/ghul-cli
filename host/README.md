@@ -1,11 +1,11 @@
 # ghul.repl.host
 
-[![CI](https://img.shields.io/github/actions/workflow/status/degory/ghul-cli/ci.yml?branch=main)](https://github.com/degory/ghul-cli/actions/workflows/ci.yml?query=branch%3Amain)
+[![CI](https://img.shields.io/github/actions/workflow/status/ghul-lang/ghul-cli/ci.yml?branch=main)](https://github.com/ghul-lang/ghul-cli/actions/workflows/ci.yml?query=branch%3Amain)
 [![NuGet version (ghul.repl.host)](https://img.shields.io/nuget/v/ghul.repl.host.svg)](https://www.nuget.org/packages/ghul.repl.host/)
-[![License](https://img.shields.io/github/license/degory/ghul-cli)](https://github.com/degory/ghul-cli/blob/main/LICENSE)
+[![License](https://img.shields.io/github/license/ghul-lang/ghul-cli)](https://github.com/ghul-lang/ghul-cli/blob/main/LICENSE)
 [![ghūl](https://img.shields.io/badge/gh%C5%ABl-100%25!-information)](https://ghul.dev)
 
-Runs a [ghul.repl](https://github.com/degory/ghul-cli/blob/main/repl/README.md)
+Runs a [ghul.repl](https://github.com/ghul-lang/ghul-cli/blob/main/repl/README.md)
 session in the current process, on a machine that has `ghul.compiler`
 installed. It compiles each cell with that compiler, loads the cell into a
 load context that belongs to the session, and runs it. `ghul.repl` itself

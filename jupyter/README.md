@@ -1,13 +1,13 @@
 # ghul.jupyter
 
-[![CI](https://img.shields.io/github/actions/workflow/status/degory/ghul-cli/ci.yml?branch=main)](https://github.com/degory/ghul-cli/actions/workflows/ci.yml?query=branch%3Amain)
+[![CI](https://img.shields.io/github/actions/workflow/status/ghul-lang/ghul-cli/ci.yml?branch=main)](https://github.com/ghul-lang/ghul-cli/actions/workflows/ci.yml?query=branch%3Amain)
 [![NuGet version (ghul.jupyter)](https://img.shields.io/nuget/v/ghul.jupyter.svg)](https://www.nuget.org/packages/ghul.jupyter/)
-[![License](https://img.shields.io/github/license/degory/ghul-cli)](https://github.com/degory/ghul-cli/blob/main/LICENSE)
+[![License](https://img.shields.io/github/license/ghul-lang/ghul-cli)](https://github.com/ghul-lang/ghul-cli/blob/main/LICENSE)
 [![ghūl](https://img.shields.io/badge/gh%C5%ABl-100%25!-information)](https://ghul.dev)
 
 A [Jupyter](https://jupyter.org) kernel for [ghūl](https://ghul.dev). It
 compiles and runs notebook cells as a
-[ghul.repl](https://github.com/degory/ghul-cli/blob/main/repl/README.md)
+[ghul.repl](https://github.com/ghul-lang/ghul-cli/blob/main/repl/README.md)
 session, with one assembly for each cell.
 
 ## installing
@@ -76,9 +76,9 @@ at a time. A cell cannot read standard input.
 To restart, the front end starts the kernel process again, so a restart
 begins a new session.
 
-The [ghul.repl README](https://github.com/degory/ghul-cli/blob/main/repl/README.md)
+The [ghul.repl README](https://github.com/ghul-lang/ghul-cli/blob/main/repl/README.md)
 describes the session. The REPL section of
-[the CLI's README](https://github.com/degory/ghul-cli/blob/main/README.md)
+[the CLI's README](https://github.com/ghul-lang/ghul-cli/blob/main/README.md)
 describes what a cell can do.
 
 ## the protocol

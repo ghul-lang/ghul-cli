@@ -1,8 +1,8 @@
 # ghūl CLI
 
-[![CI](https://img.shields.io/github/actions/workflow/status/degory/ghul-cli/ci.yml?branch=main)](https://github.com/degory/ghul-cli/actions/workflows/ci.yml?query=branch%3Amain)
+[![CI](https://img.shields.io/github/actions/workflow/status/ghul-lang/ghul-cli/ci.yml?branch=main)](https://github.com/ghul-lang/ghul-cli/actions/workflows/ci.yml?query=branch%3Amain)
 [![NuGet version (ghul.cli)](https://img.shields.io/nuget/v/ghul.cli.svg)](https://www.nuget.org/packages/ghul.cli/)
-[![License](https://img.shields.io/github/license/degory/ghul-cli)](https://github.com/degory/ghul-cli/blob/main/LICENSE)
+[![License](https://img.shields.io/github/license/ghul-lang/ghul-cli)](https://github.com/ghul-lang/ghul-cli/blob/main/LICENSE)
 [![ghūl](https://img.shields.io/badge/gh%C5%ABl-100%25!-information)](https://ghul.dev)
 
 `ghul` runs a [ghūl](https://ghul.dev) script directly, with no project file.
@@ -861,15 +861,15 @@ compiler is installed. Names that start with `_` cross cells only with
 
 Three packages make up the REPL:
 
-- [`ghul.repl`](https://github.com/degory/ghul-cli/blob/main/repl/README.md)
+- [`ghul.repl`](https://github.com/ghul-lang/ghul-cli/blob/main/repl/README.md)
   is the session: the cells it has accepted, the imports each new cell needs,
   and the names each compiled cell exports. It compiles nothing and runs
   nothing, so a browser page or a notebook kernel can use it with its own
   compiler.
-- [`ghul.repl.host`](https://github.com/degory/ghul-cli/blob/main/host/README.md)
+- [`ghul.repl.host`](https://github.com/ghul-lang/ghul-cli/blob/main/host/README.md)
   compiles cells with the installed compiler, loads them and runs them in
   the current process. `ghul repl` uses it, and so can another program.
-- [`ghul.jupyter`](https://github.com/degory/ghul-cli/blob/main/jupyter/README.md)
+- [`ghul.jupyter`](https://github.com/ghul-lang/ghul-cli/blob/main/jupyter/README.md)
   is a Jupyter kernel built on both.
 
 ## how it works
