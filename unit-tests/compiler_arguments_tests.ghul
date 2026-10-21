@@ -141,7 +141,7 @@ namespace Ghul.Cli.Tests is
             let library = SOURCE_LIBRARY("ghul-core", "0.3.0", "/cache/core", LIST[string](["/cache/core/src/a.ghul", "/cache/core/src/b.ghul"]))
 
             _same(
-                "--target wasm --library-source ghul-core@0.3.0=/cache/core /cache/core/src/a.ghul /cache/core/src/b.ghul -o out/app main.ghul",
+                "--target wasm --wasm-loader {IO.Path.combine("/cache/core", "host", "loader.mjs")} --library-source ghul-core@0.3.0=/cache/core /cache/core/src/a.ghul /cache/core/src/b.ghul -o out/app main.ghul",
                 _joined(
                     COMPILER_ARGUMENTS.for_build(
                         _manifest(ManifestKind.PROGRAM, _plain_options()),
@@ -150,6 +150,39 @@ namespace Ghul.Cli.Tests is
                         BUILD_MODE.release,
                         "out/app",
                         LIST[string](["main.ghul"]))))
+        si
+
+        @Test()
+        a_wasm_program_takes_its_loader_from_the_core_library_and_no_other_library() is
+            let other = SOURCE_LIBRARY("ghul-raster", "1.0.0", "/cache/raster", LIST[string](["/cache/raster/a.ghul"]))
+
+            _same(
+                "--target wasm --library-source ghul-raster@1.0.0=/cache/raster /cache/raster/a.ghul -o out/app main.ghul",
+                _joined(
+                    COMPILER_ARGUMENTS.for_build(
+                        _manifest(ManifestKind.PROGRAM, _plain_options()),
+                        BuildTarget.WASM,
+                        LIST[SOURCE_LIBRARY]([other]),
+                        BUILD_MODE.release,
+                        "out/app",
+                        LIST[string](["main.ghul"]))))
+        si
+
+        @Test()
+        a_wasm_library_and_an_llvm_program_are_given_no_loader() is
+            let library = SOURCE_LIBRARY("ghul-core", "0.3.0", "/cache/core", LIST[string](["/cache/core/src/a.ghul"]))
+
+            _same(
+                "--library --type-check --target wasm --library-source ghul-core@0.3.0=/cache/core /cache/core/src/a.ghul",
+                _joined(
+                    COMPILER_ARGUMENTS.options(
+                        _manifest(ManifestKind.LIBRARY, _plain_options()), BuildTarget.WASM, LIST[SOURCE_LIBRARY]([library]))))
+
+            _same(
+                "--target llvm --library-source ghul-core@0.3.0=/cache/core /cache/core/src/a.ghul",
+                _joined(
+                    COMPILER_ARGUMENTS.options(
+                        _manifest(ManifestKind.PROGRAM, _plain_options()), BuildTarget.LLVM, LIST[SOURCE_LIBRARY]([library]))))
         si
 
         @Test()
