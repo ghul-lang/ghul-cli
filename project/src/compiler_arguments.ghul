@@ -131,7 +131,14 @@ namespace Ghul.Project is
 
             add(["--target", target_name(target)])
 
+            // The loader that runs a wasm executable ships with the core
+            // library, so it comes from the same checkout as the host
+            // operations it implements.
             for library in libraries do
+                if target == BuildTarget.WASM /\ manifest.kind != ManifestKind.LIBRARY /\ library.name =~ CORE_LIBRARY.NAME then
+                    add(["--wasm-loader", IO.Path.combine(library.root, "host", "loader.mjs")])
+                fi
+
                 add(["--library-source", "{library.name}@{library.version}={library.root}"])
 
                 for file in library.files do
