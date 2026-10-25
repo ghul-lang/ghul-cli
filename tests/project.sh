@@ -187,11 +187,11 @@ git clone -q --depth 1 https://github.com/ghul-lang/ghul-runtime "$scratch/runti
 # fetches the host and compiles before it writes anything, so a failure with
 # the stderr discarded says nothing about which of those it was.
 out="$(cd "$wasm" && dotnet "$cli" run --library "ghul-core=$scratch/core-checkout" \
-    --library "ghul-runtime=$scratch/runtime-checkout/ghul-runtime" 2>"$scratch/library-run.err")" \
+    --library "ghul-runtime=$scratch/runtime-checkout" 2>"$scratch/library-run.err")" \
     || { cat "$scratch/library-run.err" >&2; fail "ghul run with --library failed"; }
 check "$out" "hello with use default" "wasm run output with --library"
 
-if err="$(cd "$wasm" && dotnet "$cli" build --library "ghul-core=$scratch/no-such-core" 2>&1)"; then
+if err="$(cd "$wasm" && dotnet "$cli" build --library "ghul-runtime=$scratch/no-such-core" 2>&1)"; then
     fail "expected --library naming a missing directory to fail"
 fi
 [[ "$err" == *"no-such-core"* ]] || fail "unexpected message for a missing library directory: $err"
@@ -220,7 +220,7 @@ echo "project: ghul new creates a project that builds and runs on wasm..." >&2
 (cd "$scratch" && dotnet "$cli" new scaffolded --target wasm,llvm 2>/dev/null) || fail "ghul new failed"
 [[ -f "$scratch/scaffolded/.gitignore" ]] || fail "ghul new wrote no .gitignore"
 grep -q '"compiler": ">=' "$scratch/scaffolded/ghul-project.json" || fail "ghul new wrote no compiler floor"
-grep -q '"ghul-core": { "version": ">=' "$scratch/scaffolded/ghul-project.json" || fail "ghul new wrote no ghul-core floor"
+! grep -q '"ghul-core"' "$scratch/scaffolded/ghul-project.json" || fail "ghul new wrote a ghul-core declaration"
 grep -q '"ghul-runtime": { "version": ">=' "$scratch/scaffolded/ghul-project.json" || fail "ghul new wrote no ghul-runtime floor"
 grep -q '"ghul-llvm": ">=' "$scratch/scaffolded/ghul-project.json" || fail "ghul new wrote no ghul-llvm floor for a project with an llvm target"
 out="$(cd "$scratch/scaffolded" && dotnet "$cli" run --target wasm 2>/dev/null)" || fail "ghul run of a new project failed on wasm"
@@ -268,7 +268,7 @@ cp "$old_wasm/src/main.ghul" "$undeclared/src/main.ghul"
 if err="$(cd "$undeclared" && dotnet "$cli" build --target wasm 2>&1)"; then
     fail "expected a manifest with no libraries declared to fail"
 fi
-[[ "$err" == *'"ghul-core": { "version": ">='* && "$err" == *'"ghul-runtime": { "version": ">='* ]] || fail "unexpected message for undeclared libraries: $err"
+[[ "$err" == *'"ghul-runtime": { "version": ">='* && "$err" != *ghul-core* ]] || fail "unexpected message for undeclared libraries: $err"
 
 echo "project: an llvm build fetches the ghul-llvm release chosen for its compiler..." >&2
 (cd "$scratch" && dotnet "$cli" new native --target llvm 2>/dev/null) || fail "ghul new --target llvm failed"

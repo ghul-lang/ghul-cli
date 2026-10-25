@@ -132,11 +132,27 @@ namespace Ghul.Project is
             add(["--target", target_name(target)])
 
             // The loader that runs a wasm executable ships with the core
-            // library, so it comes from the same checkout as the host
-            // operations it implements.
+            // library's sources, which the runtime library carries: at the
+            // ghul-core tree inside its repository, beside the runtime tree
+            // where a path dependency points into it, or in the core-only
+            // checkout a dependency predating the merge names. Where none of
+            // the three is there, the first is still passed, so the compiler
+            // reports the missing file rather than building without a loader.
             for library in libraries do
-                if target == BuildTarget.WASM /\ manifest.kind != ManifestKind.LIBRARY /\ library.name =~ CORE_LIBRARY.NAME then
-                    add(["--wasm-loader", IO.Path.combine(library.root, "host", "loader.mjs")])
+                if target == BuildTarget.WASM /\ manifest.kind != ManifestKind.LIBRARY /\ library.name =~ RUNTIME_LIBRARY.NAME then
+                    let within = IO.Path.combine([library.root, "ghul-core", "host", "loader.mjs"])
+                    let beside = IO.Path.combine([library.root, "..", "ghul-core", "host", "loader.mjs"])
+                    let alone = IO.Path.combine(library.root, "host", "loader.mjs")
+
+                    if IO.File.exists(within) then
+                        add(["--wasm-loader", within])
+                    elif IO.File.exists(beside) then
+                        add(["--wasm-loader", beside])
+                    elif IO.File.exists(alone) then
+                        add(["--wasm-loader", alone])
+                    else
+                        add(["--wasm-loader", within])
+                    fi
                 fi
 
                 add(["--library-source", "{library.name}@{library.version}={library.root}"])

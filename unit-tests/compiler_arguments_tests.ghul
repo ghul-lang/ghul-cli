@@ -138,10 +138,10 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         a_source_library_is_declared_then_its_files_follow() is
-            let library = SOURCE_LIBRARY("ghul-core", "0.3.0", "/cache/core", LIST[string](["/cache/core/src/a.ghul", "/cache/core/src/b.ghul"]))
+            let library = SOURCE_LIBRARY("ghul-runtime", "31.0.3", "/cache/runtime", LIST[string](["/cache/runtime/src/a.ghul", "/cache/runtime/src/b.ghul"]))
 
             _same(
-                "--target wasm --wasm-loader {IO.Path.combine("/cache/core", "host", "loader.mjs")} --library-source ghul-core@0.3.0=/cache/core /cache/core/src/a.ghul /cache/core/src/b.ghul -o out/app main.ghul",
+                "--target wasm --wasm-loader {IO.Path.combine(["/cache/runtime", "ghul-core", "host", "loader.mjs"])} --library-source ghul-runtime@31.0.3=/cache/runtime /cache/runtime/src/a.ghul /cache/runtime/src/b.ghul -o out/app main.ghul",
                 _joined(
                     COMPILER_ARGUMENTS.for_build(
                         _manifest(ManifestKind.PROGRAM, _plain_options()),

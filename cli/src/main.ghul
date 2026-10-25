@@ -383,12 +383,6 @@ namespace Ghul.Cli is
         let cache = Ghul.Project.LIBRARY_CACHE.for_this_user()
         let resolver = Ghul.Project.LIBRARY_RESOLVER(cache)
 
-        let core = resolver.latest(Ghul.Project.CORE_LIBRARY.NAME, Ghul.Project.CORE_LIBRARY.repository())
-
-        if core? then
-            libraries.add((tool = Ghul.Project.CORE_LIBRARY.NAME, version = core!.substring(1)))
-        fi
-
         let runtime = resolver.latest(Ghul.Project.RUNTIME_LIBRARY.NAME, Ghul.Project.RUNTIME_LIBRARY.repository())
 
         if runtime? then
@@ -981,7 +975,6 @@ namespace Ghul.Cli is
         let newest = Ghul.Project.VERSION_RANGE.parse(">=0.0.0")!
         let dependencies = Collections.MAP[string, Ghul.Project.DEPENDENCY]()
 
-        dependencies.add(Ghul.Project.CORE_LIBRARY.NAME, Ghul.Project.DEPENDENCY.GIT(Ghul.Project.CORE_LIBRARY.repository(), null, null, null, newest))
         dependencies.add(Ghul.Project.RUNTIME_LIBRARY.NAME, Ghul.Project.DEPENDENCY.GIT(Ghul.Project.RUNTIME_LIBRARY.repository(), null, null, null, newest))
 
         return dependencies

@@ -55,34 +55,27 @@ namespace Ghul.Project is
         si
 
 
-        /// The problem with a project that declares neither or only one of
-        /// the compiler's two libraries, naming the lines to add with the
-        /// newest release as the floor, or null where both are declared.
+        /// The problem with a project that declares no library to compile
+        /// with, naming the line to add with the newest release as the
+        /// floor, or null where one is declared.
         ///
         /// - manifest: the project's manifest
         /// - cache: where fetched libraries are kept
         undeclared_libraries(manifest: MANIFEST, cache: LIBRARY_CACHE) -> string? static is
-            let lines = LIST[string]()
-
-            for pair in [(name = CORE_LIBRARY.NAME, repository = CORE_LIBRARY.repository()), (name = RUNTIME_LIBRARY.NAME, repository = RUNTIME_LIBRARY.repository())] do
-                if !manifest.dependencies.contains_key(pair.name) then
-                    let newest = LIBRARY_RESOLVER(cache).latest(pair.name, pair.repository)
-                    let floor = if newest? then newest!.substring(1) else "0.0.0" fi
-
-                    lines.add("\"{pair.name}\": {{ \"version\": \">={floor}\" }}")
-                fi
-            od
-
-            if lines.count == 0 then
+            if manifest.dependencies.contains_key(RUNTIME_LIBRARY.NAME) then
                 return null
             fi
 
-            return "the manifest must declare the libraries it compiles with; add to dependencies: {string.join(", ", lines)}"
+            let newest = LIBRARY_RESOLVER(cache).latest(RUNTIME_LIBRARY.NAME, RUNTIME_LIBRARY.repository())
+            let floor = if newest? then newest!.substring(1) else "0.0.0" fi
+
+            return "the manifest must declare the library it compiles with; add to dependencies: \"ghul-runtime\": {{ \"version\": \">={floor}\" }}"
         si
-        /// The source libraries a build of `project` compiles in: the core
-        /// library, the runtime library and then the libraries the
-        /// manifest's own dependencies name. Null, with the problem reported
-        /// to `say`, where any of them cannot be found.
+        /// The source libraries a build of `project` compiles in: the
+        /// runtime library, which carries the core library's sources in
+        /// the repository it is fetched from, and then the libraries the
+        /// manifest's own dependencies name. Null, with the problem
+        /// reported to `say`, where any of them cannot be found.
         ///
         /// - project: the project being built
         /// - cache: where fetched libraries are kept
@@ -98,15 +91,6 @@ namespace Ghul.Project is
                 say(missing)
                 return null
             fi
-
-            let found = CORE_LIBRARY.find(project.manifest, project.directory, cache)
-
-            if let (problem): Result.ERROR = found then
-                say(problem)
-                return null
-            fi
-
-            result.add(found!)
 
             let runtime = RUNTIME_LIBRARY.find(project.manifest, project.directory, cache)
 
