@@ -187,7 +187,7 @@ git clone -q --depth 1 https://github.com/ghul-lang/ghul-runtime "$scratch/runti
 # fetches the host and compiles before it writes anything, so a failure with
 # the stderr discarded says nothing about which of those it was.
 out="$(cd "$wasm" && dotnet "$cli" run --library "ghul-core=$scratch/core-checkout" \
-    --library "ghul-runtime=$scratch/runtime-checkout" 2>"$scratch/library-run.err")" \
+    --library "ghul-runtime=$scratch/runtime-checkout/ghul-runtime" 2>"$scratch/library-run.err")" \
     || { cat "$scratch/library-run.err" >&2; fail "ghul run with --library failed"; }
 check "$out" "hello with use default" "wasm run output with --library"
 

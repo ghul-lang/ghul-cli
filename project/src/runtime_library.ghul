@@ -1,5 +1,4 @@
 namespace Ghul.Project is
-    use Collections.LIST
     use IO.File
     use IO.Path
 
@@ -7,18 +6,14 @@ namespace Ghul.Project is
 
     /// The runtime library a build for the wasm target compiles in after
     /// the core library: ghul-runtime, which supplies the pipes, ranges and
-    /// the rest of what `Ghul` and `Ghul.Pipes` declare, from the files its
-    /// `wasm-sources.rsp` lists.
+    /// the rest of what `Ghul` and `Ghul.Pipes` declare, from the sources
+    /// its own manifest lists.
     ///
     /// A project declares ghul-runtime among the manifest's dependencies, as a
     /// version range, a tag or a path.
     class RUNTIME_LIBRARY is
         /// The library's name, which a manifest declares it under.
         NAME: string static => "ghul-runtime"
-
-        /// The file in the library's root listing the sources a wasm build
-        /// compiles, one a line, relative to that root.
-        SOURCE_LIST: string static => "wasm-sources.rsp"
 
         /// Where ghul-runtime is fetched from: `GHUL_RUNTIME_REPOSITORY`
         /// where that is set, for a mirror or a test, and its own repository
@@ -84,25 +79,31 @@ namespace Ghul.Project is
             return _read(if let sub: string = directory then Path.join([outcome!.directory, sub]) else outcome!.directory fi, version)
         si
 
-        // The library in `root`, with the sources its source list names.
+        // The library in `root`, as its own manifest describes it.
         _read(root: string, version: string) -> Result[SOURCE_LIBRARY, string] static is
-            let list_path = Path.join([root, SOURCE_LIST])
+            let manifest_path = MANIFEST_LOCATION.find_in(root)
 
-            if !File.exists(list_path) then
-                return ERROR("{NAME} at {root} has no {SOURCE_LIST}")
+            if !manifest_path? then
+                return ERROR("{NAME} at {root} has no {MANIFEST_LOCATION.FILE_NAME}")
             fi
 
-            let files = LIST[string]()
+            let outcome = MANIFEST_READER.read(File.read_all_text(manifest_path), manifest_path)
 
-            for line in File.read_all_lines(list_path) do
-                let entry = line.trim()
+            if let problems: ReadOutcome.PROBLEMS = outcome then
+                let first = if problems.problems.count > 0 then problems.problems[0].describe() else "it cannot be read" fi
 
-                if entry.length > 0 then
-                    files.add(Path.get_full_path(Path.join([root, entry])))
-                fi
-            od
+                return ERROR("{NAME}'s manifest at {manifest_path}: {first}")
+            fi
 
-            return OK(SOURCE_LIBRARY(NAME, version, root, files))
+            let manifest = cast ReadOutcome.OK(outcome).manifest
+
+            return
+                OK(
+                    SOURCE_LIBRARY(
+                        manifest.name,
+                        manifest.version ?? version,
+                        root,
+                        SOURCE_SET.expand(root, manifest.sources)))
         si
     si
 si
