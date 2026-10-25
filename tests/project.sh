@@ -191,7 +191,7 @@ out="$(cd "$wasm" && dotnet "$cli" run --library "ghul-core=$scratch/core-checko
     || { cat "$scratch/library-run.err" >&2; fail "ghul run with --library failed"; }
 check "$out" "hello with use default" "wasm run output with --library"
 
-if err="$(cd "$wasm" && dotnet "$cli" build --library "ghul-core=$scratch/no-such-core" 2>&1)"; then
+if err="$(cd "$wasm" && dotnet "$cli" build --library "ghul-runtime=$scratch/no-such-core" 2>&1)"; then
     fail "expected --library naming a missing directory to fail"
 fi
 [[ "$err" == *"no-such-core"* ]] || fail "unexpected message for a missing library directory: $err"
