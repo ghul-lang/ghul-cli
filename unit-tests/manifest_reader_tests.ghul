@@ -132,14 +132,20 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        a_ghul_core_dependency_is_refused_as_now_part_of_ghul_runtime() is
-            for declaration in ["{{ \"version\": \">=0.0.0\" }}", "{{ \"path\": \"../core\" }}", "{{ \"git\": \"https://github.com/ghul-lang/ghul-core\", \"tag\": \"v1.0.0\" }}"] do
-                let problems = _problems("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"dependencies\": {{\"ghul-core\": {declaration}, \"ghul-runtime\": {{ \"version\": \"^31.0.0\" }}}} }}")
+        a_ghul_core_dependency_is_ignored_and_flagged_as_now_part_of_ghul_runtime() is
+            for declaration in ["{{ \"version\": \">=0.0.0\" }}", "{{ \"path\": \"../core\" }}", "{{ \"git\": \"https://github.com/ghul-lang/ghul-core\", \"tag\": \"v1.0.0\" }}", "{{}}", "\"1.0.0\""] do
+                let manifest = _read("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"dependencies\": {{\"ghul-core\": {declaration}, \"ghul-runtime\": {{ \"version\": \"^31.0.0\" }}}} }}")
 
-                assert problems.count == 1 else "{problems.count} problems for {declaration}";
-                assert problems[0].contains("dependencies.ghul-core") else problems[0];
-                assert problems[0].contains("the core library is now part of ghul-runtime: remove this declaration") else problems[0];
+                assert manifest? else "{declaration} does not read";
+                assert manifest!.ignores_core else "{declaration} is not flagged";
+                assert !manifest!.dependencies.contains_key("ghul-core") else "{declaration} is a dependency";
+                assert manifest!.dependencies.contains_key("ghul-runtime") else "{declaration} lost ghul-runtime";
             od
+        si
+
+        @Test()
+        a_manifest_not_declaring_ghul_core__does_not_ignore_it() is
+            assert !_read("{{\"name\": \"app\", \"targets\": [\"wasm\"]}}")!.ignores_core;
         si
 
         @Test()

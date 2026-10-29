@@ -104,6 +104,23 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
+        a_library_declaring_ghul_core_is_found_without_it() is
+            let scratch = _scratch()
+
+            try
+                _project(Path.combine(scratch, "app"), "app", "\"wasm\"", "\"shapes\": {{ \"path\": \"../shapes\" }}")
+                _project(Path.combine(scratch, "shapes"), "shapes", "\"wasm\"", "\"ghul-core\": {{ \"path\": \"../none\" }}")
+
+                let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
+
+                assert found? else _message(found)
+                assert _names(found!) =~ "shapes@0.0.0" else _names(found!)
+            finally
+                _delete(scratch)
+            yrt
+        si
+
+        @Test()
         a_library_at_a_git_tag_is_fetched_and_takes_its_version_from_the_tag() is
             let scratch = _scratch()
 

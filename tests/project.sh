@@ -270,17 +270,15 @@ if err="$(cd "$undeclared" && dotnet "$cli" build --target wasm 2>&1)"; then
 fi
 [[ "$err" == *'"ghul-runtime": { "version": ">='* && "$err" != *ghul-core* ]] || fail "unexpected message for undeclared libraries: $err"
 
-echo "project: a manifest that still declares ghul-core is told to remove it..." >&2
+echo "project: a manifest that still declares ghul-core builds, with a warning to remove it..." >&2
 declares_core="$scratch/declares-core"
 mkdir -p "$declares_core/src"
 cat > "$declares_core/ghul-project.json" <<'JSON'
 { "name": "declares-core", "targets": ["wasm"], "dependencies": { "ghul-core": { "version": ">=0.0.0" }, "ghul-runtime": { "version": ">=0.0.0" } } }
 JSON
 cp "$old_wasm/src/main.ghul" "$declares_core/src/main.ghul"
-if err="$(cd "$declares_core" && dotnet "$cli" build 2>&1)"; then
-    fail "expected a manifest declaring ghul-core to fail"
-fi
-[[ "$err" == *"dependencies.ghul-core"*"part of ghul-runtime"* ]] || fail "unexpected message for a ghul-core declaration: $err"
+err="$(cd "$declares_core" && dotnet "$cli" build 2>&1)" || fail "a manifest declaring ghul-core did not build: $err"
+[[ "$err" == *"ghul-core is now part of ghul-runtime: its declaration is ignored; remove it"* ]] || fail "no warning for a ghul-core declaration: $err"
 
 echo "project: an llvm build fetches the ghul-llvm release chosen for its compiler..." >&2
 (cd "$scratch" && dotnet "$cli" new native --target llvm 2>/dev/null) || fail "ghul new --target llvm failed"

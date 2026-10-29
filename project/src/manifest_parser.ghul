@@ -11,6 +11,7 @@ namespace Ghul.Project is
     class MANIFEST_PARSER is
         _problems: Collections.LIST[MANIFEST_PROBLEM]
         _ignored_dotnet: bool
+        _ignored_core: bool
 
         init() is
             _problems = LIST[MANIFEST_PROBLEM]()
@@ -56,6 +57,7 @@ namespace Ghul.Project is
             let manifest = MANIFEST(name, version, kind, targets, sources, options, dependencies, compiler_build, prefer, host_wasm, tools)
 
             manifest.ignores_dotnet = _ignored_dotnet
+            manifest.ignores_core = _ignored_core
 
             return manifest
         si
@@ -420,15 +422,16 @@ namespace Ghul.Project is
         si
 
         _dependency(name: string, value: JsonElement) -> DEPENDENCY? is
-            if value.value_kind != JsonValueKind.OBJECT then
-                _report("dependencies.{name}", "the value is not an object")
+            // ghul-core's sources now ship inside ghul-runtime. Released
+            // libraries still declare it, so the declaration is skipped
+            // rather than refused, and flagged so the reader can say so.
+            if name =~ "ghul-core" then
+                _ignored_core = true
                 return null
             fi
 
-            // ghul-core's sources now ship inside ghul-runtime, so a
-            // declaration of it as a library of its own is out of date.
-            if name =~ "ghul-core" then
-                _report("dependencies.{name}", "the core library is now part of {RUNTIME_LIBRARY.NAME}: remove this declaration")
+            if value.value_kind != JsonValueKind.OBJECT then
+                _report("dependencies.{name}", "the value is not an object")
                 return null
             fi
 

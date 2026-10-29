@@ -382,8 +382,9 @@ and admits a newer major version, where `^` stops at the next one. `>=0.0.0`
 says the project accepts any release. A `path` uses a checkout instead. A
 project for wasm or llvm that leaves it out is refused, and the message names
 the line to add with the newest release as the floor. The core was once a
-library of its own, ghul-core; a manifest that still declares it is refused,
-and the declaration is to be removed. The releases are
+library of its own, ghul-core; a declaration of it, in a project or in a
+library it depends on, is ignored, and a project's own draws a warning to
+remove it. The releases are
 listed on every build; where GitHub cannot be reached, the release used last
 is used again. A library that needs a newer compiler than the installed one
 fails to compile with the compiler's own error, and `ghul update` brings the

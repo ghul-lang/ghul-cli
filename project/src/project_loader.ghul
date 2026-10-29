@@ -53,10 +53,17 @@ namespace Ghul.Project is
                 IO.Std.error.write_line("ghul: warning: {MANIFEST_LOCATION.FILE_NAME}: ghul does not build for dotnet, so the dotnet target is ignored")
             fi
 
+            if manifest.ignores_core /\ !_warned_core then
+                _warned_core = true
+
+                IO.Std.error.write_line("ghul: warning: {MANIFEST_LOCATION.FILE_NAME}: ghul-core is now part of {RUNTIME_LIBRARY.NAME}: its declaration is ignored; remove it")
+            fi
+
             return (manifest = manifest, messages = messages)
         si
 
         _warned_dotnet: bool static
+        _warned_core: bool static
 
         /// The project in `directory`, built for `target_name`.
         ///
