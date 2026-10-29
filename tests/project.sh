@@ -3,7 +3,8 @@
 # ghul-project.json, driving the built CLI as an installed tool would run,
 # under a scratch HOME so the compiler is installed on demand.
 #
-# The wasm checks build with the core and runtime libraries fetched from Git
+# The wasm checks build with the runtime library, which carries the core
+# sources, fetched from Git
 # and run the program under Node.js.
 set -euo pipefail
 
@@ -41,7 +42,7 @@ cat > "$program/ghul-project.json" <<'JSON'
     // a comment and a trailing comma, both of which a manifest may carry
     "name": "greeter",
     "targets": ["wasm"],
-    "dependencies": { "ghul-core": { "version": ">=0.0.0" }, "ghul-runtime": { "version": ">=0.0.0" } },
+    "dependencies": { "ghul-runtime": { "version": ">=0.0.0" } },
 }
 JSON
 cat > "$program/src/main.ghul" <<'GHUL'
@@ -77,7 +78,7 @@ echo "project: a library builds..." >&2
 library="$scratch/shapes"
 mkdir -p "$library/src"
 cat > "$library/ghul-project.json" <<'JSON'
-{ "name": "shapes", "kind": "library", "dependencies": { "ghul-core": { "version": ">=0.0.0" }, "ghul-runtime": { "version": ">=0.0.0" } } }
+{ "name": "shapes", "kind": "library", "dependencies": { "ghul-runtime": { "version": ">=0.0.0" } } }
 JSON
 cat > "$library/src/shapes.ghul" <<'GHUL'
 namespace Shapes is
@@ -170,7 +171,7 @@ fi
 wasm="$scratch/wasm-greeter"
 mkdir -p "$wasm/src"
 cat > "$wasm/ghul-project.json" <<'JSON'
-{ "name": "wasm-greeter", "targets": ["wasm"], "dependencies": { "ghul-core": { "version": ">=0.0.0" }, "ghul-runtime": { "version": ">=0.0.0" } } }
+{ "name": "wasm-greeter", "targets": ["wasm"], "dependencies": { "ghul-runtime": { "version": ">=0.0.0" } } }
 JSON
 cat > "$wasm/src/main.ghul" <<'GHUL'
 use default
@@ -180,14 +181,13 @@ entry() is
 si
 GHUL
 
-echo "project: --library builds a wasm program against library checkouts..." >&2
-git clone -q --depth 1 https://github.com/ghul-lang/ghul-core "$scratch/core-checkout"
+echo "project: --library builds a wasm program against a library checkout..." >&2
 git clone -q --depth 1 https://github.com/ghul-lang/ghul-runtime "$scratch/runtime-checkout"
 # The run's stderr is kept and printed only where the run fails: a wasm run
 # fetches the host and compiles before it writes anything, so a failure with
 # the stderr discarded says nothing about which of those it was.
-out="$(cd "$wasm" && dotnet "$cli" run --library "ghul-core=$scratch/core-checkout" \
-    --library "ghul-runtime=$scratch/runtime-checkout" 2>"$scratch/library-run.err")" \
+out="$(cd "$wasm" && dotnet "$cli" run --library "ghul-runtime=$scratch/runtime-checkout" \
+    2>"$scratch/library-run.err")" \
     || { cat "$scratch/library-run.err" >&2; fail "ghul run with --library failed"; }
 check "$out" "hello with use default" "wasm run output with --library"
 
@@ -258,7 +258,7 @@ if err="$(cd "$old_host" && dotnet "$cli" build --target wasm 2>&1)"; then
 fi
 [[ "$err" == *"host is now engine"* ]] || fail "unexpected message for a host key: $err"
 
-echo "project: a manifest that declares neither library is told the lines to add..." >&2
+echo "project: a manifest that declares no library is told the line to add..." >&2
 undeclared="$scratch/undeclared"
 mkdir -p "$undeclared/src"
 cat > "$undeclared/ghul-project.json" <<'JSON'
@@ -269,6 +269,16 @@ if err="$(cd "$undeclared" && dotnet "$cli" build --target wasm 2>&1)"; then
     fail "expected a manifest with no libraries declared to fail"
 fi
 [[ "$err" == *'"ghul-runtime": { "version": ">='* && "$err" != *ghul-core* ]] || fail "unexpected message for undeclared libraries: $err"
+
+echo "project: a manifest that still declares ghul-core builds, with a warning to remove it..." >&2
+declares_core="$scratch/declares-core"
+mkdir -p "$declares_core/src"
+cat > "$declares_core/ghul-project.json" <<'JSON'
+{ "name": "declares-core", "targets": ["wasm"], "dependencies": { "ghul-core": { "version": ">=0.0.0" }, "ghul-runtime": { "version": ">=0.0.0" } } }
+JSON
+cp "$old_wasm/src/main.ghul" "$declares_core/src/main.ghul"
+err="$(cd "$declares_core" && dotnet "$cli" build 2>&1)" || fail "a manifest declaring ghul-core did not build: $err"
+[[ "$err" == *"ghul-core is now part of ghul-runtime: its declaration is ignored; remove it"* ]] || fail "no warning for a ghul-core declaration: $err"
 
 echo "project: an llvm build fetches the ghul-llvm release chosen for its compiler..." >&2
 (cd "$scratch" && dotnet "$cli" new native --target llvm 2>/dev/null) || fail "ghul new --target llvm failed"

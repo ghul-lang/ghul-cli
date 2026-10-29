@@ -117,12 +117,11 @@ namespace Ghul.Cli.Tests is
         the_manifest_writes_a_floor_for_each_library_and_reads_back() is
             let libraries = LIST[(tool: string, version: string)]()
 
-            libraries.add((tool = "ghul-core", version = "1.0.0"))
             libraries.add((tool = "ghul-runtime", version = "29.1.1"))
 
             let text = PROJECT_SCAFFOLD.manifest_text("hello", LIST[BuildTarget]([BuildTarget.WASM]), LIST[(tool: string, version: string)](), libraries)
 
-            assert text.contains("\"dependencies\": {{ \"ghul-core\": {{ \"version\": \">=1.0.0\" }}, \"ghul-runtime\": {{ \"version\": \">=29.1.1\" }} }}") else text
+            assert text.contains("\"dependencies\": {{ \"ghul-runtime\": {{ \"version\": \">=29.1.1\" }} }}") else text
 
             let read = MANIFEST_READER.read(text, "ghul-project.json")
 

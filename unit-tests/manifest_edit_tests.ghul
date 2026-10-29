@@ -33,12 +33,12 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         add_dependency__adds_to_an_existing_dependencies_object_keeping_the_rest() is
-            let text = "{{\n    // kept\n    \"name\": \"app\",\n    \"targets\": [\"wasm\"],\n    \"dependencies\": {{\n        \"ghul-core\": {{ \"version\": \">=0.0.0\" }},\n    }},\n}}\n"
+            let text = "{{\n    // kept\n    \"name\": \"app\",\n    \"targets\": [\"wasm\"],\n    \"dependencies\": {{\n        \"ghul-runtime\": {{ \"version\": \">=0.0.0\" }},\n    }},\n}}\n"
 
             let edited = _added(text)
 
             assert edited.contains("// kept");
-            assert edited.contains("\"ghul-core\": {{ \"version\": \">=0.0.0\" }},");
+            assert edited.contains("\"ghul-runtime\": {{ \"version\": \">=0.0.0\" }},");
             assert edited.contains("\"parsing\": {{ \"git\": \"https://github.com/acme/parsing\", \"version\": \"^1.2.0\" }}");
             _has_parsing_pin(edited);
         si

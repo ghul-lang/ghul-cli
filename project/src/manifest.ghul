@@ -20,6 +20,11 @@ namespace Ghul.Project is
         /// builds for, which ghul leaves out of its targets.
         ignores_dotnet: bool public
 
+        /// Whether the manifest declares ghul-core, whose sources now ship
+        /// inside ghul-runtime, so the declaration is left out of its
+        /// dependencies.
+        ignores_core: bool public
+
         /// The members a `workspace` manifest lists, as paths or globs
         /// relative to its directory; empty for every other kind.
         members: Collections.LIST[string] public

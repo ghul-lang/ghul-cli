@@ -54,7 +54,7 @@ search upwards: a project is what its own root says it is.
         "warn-as-error": []
     },
     "dependencies": {
-        "ghul-core": { "git": "https://github.com/ghul-lang/ghul-core", "tag": "v1.2.0" },
+        "ghul-runtime": { "git": "https://github.com/ghul-lang/ghul-runtime", "tag": "v31.0.1" },
         "parsing": { "git": "https://example.com/libs.git", "branch": "main", "directory": "parsing" },
         "scratch": { "path": "../scratch" }
     }

@@ -72,10 +72,9 @@ namespace Ghul.Project is
             return "the manifest must declare the library it compiles with; add to dependencies: \"ghul-runtime\": {{ \"version\": \">={floor}\" }}"
         si
         /// The source libraries a build of `project` compiles in: the
-        /// runtime library, which carries the core library's sources in
-        /// the repository it is fetched from, and then the libraries the
-        /// manifest's own dependencies name. Null, with the problem
-        /// reported to `say`, where any of them cannot be found.
+        /// runtime library, which carries the core sources too, and then
+        /// the libraries the manifest's own dependencies name. Null, with
+        /// the problem reported to `say`, where any of them cannot be found.
         ///
         /// - project: the project being built
         /// - cache: where fetched libraries are kept
@@ -147,8 +146,7 @@ namespace Ghul.Project is
         ///
         /// - project: the project to build
         /// - compiler: how the compiler is started
-        /// - compiler_version: the compiler's version, which picks the core
-        ///   library for a target with source libraries
+        /// - compiler_version: the compiler's version
         /// - runtime_assembly: the runtime copied beside a `dotnet` build,
         ///   where there is one
         /// - cache: where fetched libraries are kept

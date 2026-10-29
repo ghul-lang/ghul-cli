@@ -119,23 +119,38 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        the_compilers_libraries_are_declared_by_version_alone() is
-            let outcome = MANIFEST_READER.read("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"dependencies\": {{\"ghul-core\": {{ \"version\": \">=0.0.0\" }}, \"ghul-runtime\": {{ \"version\": \"^29.0.0\" }}}} }}", "ghul-project.json")
+        the_compilers_library_is_declared_by_version_alone() is
+            let outcome = MANIFEST_READER.read("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"dependencies\": {{\"ghul-runtime\": {{ \"version\": \"^29.0.0\" }}}} }}", "ghul-project.json")
 
             assert isa ReadOutcome.OK(outcome);
 
             let dependencies = (cast ReadOutcome.OK(outcome)).manifest.dependencies
-            let core = cast DEPENDENCY.GIT(dependencies["ghul-core"])
             let runtime = cast DEPENDENCY.GIT(dependencies["ghul-runtime"])
 
-            assert core.url.contains("ghul-core");
-            assert core.version!.to_string() =~ ">=0.0.0";
+            assert runtime.url.contains("ghul-runtime");
             assert runtime.version!.to_string() =~ "^29.0.0";
         si
 
         @Test()
+        a_ghul_core_dependency_is_ignored_and_flagged_as_now_part_of_ghul_runtime() is
+            for declaration in ["{{ \"version\": \">=0.0.0\" }}", "{{ \"path\": \"../core\" }}", "{{ \"git\": \"https://github.com/ghul-lang/ghul-core\", \"tag\": \"v1.0.0\" }}", "{{}}", "\"1.0.0\""] do
+                let manifest = _read("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"dependencies\": {{\"ghul-core\": {declaration}, \"ghul-runtime\": {{ \"version\": \"^31.0.0\" }}}} }}")
+
+                assert manifest? else "{declaration} does not read";
+                assert manifest!.ignores_core else "{declaration} is not flagged";
+                assert !manifest!.dependencies.contains_key("ghul-core") else "{declaration} is a dependency";
+                assert manifest!.dependencies.contains_key("ghul-runtime") else "{declaration} lost ghul-runtime";
+            od
+        si
+
+        @Test()
+        a_manifest_not_declaring_ghul_core__does_not_ignore_it() is
+            assert !_read("{{\"name\": \"app\", \"targets\": [\"wasm\"]}}")!.ignores_core;
+        si
+
+        @Test()
         a_path_for_the_compilers_library_is_accepted() is
-            let outcome = MANIFEST_READER.read("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"dependencies\": {{\"ghul-core\": {{\"path\": \"../core\"}}}} }}", "ghul-project.json")
+            let outcome = MANIFEST_READER.read("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"dependencies\": {{\"ghul-runtime\": {{\"path\": \"../runtime\"}}}} }}", "ghul-project.json")
 
             assert isa ReadOutcome.OK(outcome);
         si
@@ -438,7 +453,7 @@ namespace Ghul.Cli.Tests is
             assert !_read("{{\"name\": \"app\", \"targets\": [\"wasm\"]}}")!.ignores_dotnet;
         si
 
-        // ghul-core lists dotnet among its targets, being built for .NET by
+        // ghul-runtime lists dotnet among its targets, being built for .NET by
         // other means; a library is compiled in from source, so the entry is
         // skipped rather than refused.
         @Test()

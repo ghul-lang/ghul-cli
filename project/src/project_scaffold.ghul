@@ -81,7 +81,7 @@ namespace Ghul.Project is
         /// - name: the project's name, as its manifest records it
         /// - targets: the targets the project builds for
         /// - floors: the oldest release of each tool the project is written with
-        /// - libraries: the oldest release of ghul-core and ghul-runtime it is written with
+        /// - libraries: the oldest release of ghul-runtime it is written with
         files(name: string, targets: Collections.List[BuildTarget], floors: Collections.List[(tool: string, version: string)], libraries: Collections.List[(tool: string, version: string)]) -> Collections.List[(path: string, text: string)] static is
             let result = LIST[(path: string, text: string)]()
 
@@ -138,7 +138,7 @@ namespace Ghul.Project is
         ///
         /// - command_line: the parsed arguments, with no problem
         /// - floors: the oldest release of each tool the project is written with
-        /// - libraries: the oldest release of ghul-core and ghul-runtime it is written with
+        /// - libraries: the oldest release of ghul-runtime it is written with
         create(command_line: NEW_COMMAND_LINE, floors: Collections.List[(tool: string, version: string)], libraries: Collections.List[(tool: string, version: string)]) -> Result[unit, string] static is
             let directory = Path.get_full_path(command_line.directory!)
             let name = Path.get_file_name(Path.trim_ending_directory_separator(directory)) ?? ""

@@ -11,6 +11,7 @@ namespace Ghul.Project is
     class MANIFEST_PARSER is
         _problems: Collections.LIST[MANIFEST_PROBLEM]
         _ignored_dotnet: bool
+        _ignored_core: bool
 
         init() is
             _problems = LIST[MANIFEST_PROBLEM]()
@@ -56,6 +57,7 @@ namespace Ghul.Project is
             let manifest = MANIFEST(name, version, kind, targets, sources, options, dependencies, compiler_build, prefer, host_wasm, tools)
 
             manifest.ignores_dotnet = _ignored_dotnet
+            manifest.ignores_core = _ignored_core
 
             return manifest
         si
@@ -420,6 +422,14 @@ namespace Ghul.Project is
         si
 
         _dependency(name: string, value: JsonElement) -> DEPENDENCY? is
+            // ghul-core's sources now ship inside ghul-runtime. Released
+            // libraries still declare it, so the declaration is skipped
+            // rather than refused, and flagged so the reader can say so.
+            if name =~ "ghul-core" then
+                _ignored_core = true
+                return null
+            fi
+
             if value.value_kind != JsonValueKind.OBJECT then
                 _report("dependencies.{name}", "the value is not an object")
                 return null
@@ -431,8 +441,8 @@ namespace Ghul.Project is
             let has_git = value.try_get_property("git", git_value ref)
             let has_path = value.try_get_property("path", path_value ref)
 
-            // The compiler's two libraries have a repository of their own, so
-            // a declaration of one may be only a version.
+            // The compiler's library has a repository of its own, so a
+            // declaration of it may be only a version.
             if !has_git /\ !has_path /\ _default_repository(name)? then
                 _check_keys(value, _git_keys())
 
@@ -523,13 +533,9 @@ namespace Ghul.Project is
             return DEPENDENCY.GIT(url, tag, branch, directory, version)
         si
 
-        // Where one of the compiler's two libraries is fetched from, or null
-        // for any other name.
+        // Where the compiler's library is fetched from, or null for any
+        // other name.
         _default_repository(name: string) -> string? is
-            if name =~ CORE_LIBRARY.NAME then
-                return CORE_LIBRARY.repository()
-            fi
-
             if name =~ RUNTIME_LIBRARY.NAME then
                 return RUNTIME_LIBRARY.repository()
             fi
