@@ -375,9 +375,9 @@ namespace Ghul.Cli is
         return floors
     si
 
-    // The oldest release of ghul-core and ghul-runtime a new project is
-    // written with, which is the newest release. One that cannot be found out
-    // is left out, and the build then says what to add.
+    // The oldest release of ghul-runtime a new project is written with,
+    // which is the newest release. Where that cannot be found out it is left
+    // out, and the build then says what to add.
     new_project_libraries() -> Collections.List[(tool: string, version: string)] is
         let libraries = Collections.LIST[(tool: string, version: string)]()
         let cache = Ghul.Project.LIBRARY_CACHE.for_this_user()

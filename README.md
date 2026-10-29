@@ -83,7 +83,7 @@ first time it is needed. A wasm build runs with Node.js 22.19 or later on the
 22 line, 24.15 or later on the 24 line, or 25 or later; where the machine has
 none, `ghul` says so and that `ghul install node` brings one in, and on Linux
 x64 that the llvm target builds a native executable without it. Both fetch
-ghul-core and ghul-runtime with `git`.
+ghul-runtime with `git`.
 
 Without .NET, the compiler itself is the wasm-built one, run by Node: a
 single archive every release publishes for every platform, fetched the first
@@ -173,8 +173,8 @@ only by an earlier release's install, and kept up to date while it is there.
 `GHUL_COMPILER_HOST` (`wasm`, `dotnet` or `native`) names the one to use
 instead. `install compiler` installs the latest release, and nothing if it is
 already installed. A version cannot be chosen: the compiler, ghul-llvm,
-Node.js, wasmtime and the compiler's libraries ghul-core and ghul-runtime are
-tools, and always the newest release. What a project depends on is pinned in its
+Node.js, wasmtime and the compiler's library ghul-runtime are tools, and
+always the newest release. What a project depends on is pinned in its
 manifest's `dependencies`. `GHUL_COMPILER_FEED` names a different feed to download from, for a
 mirror or an offline network.
 
@@ -364,16 +364,15 @@ The `wasm` target writes
 a WebAssembly module and the JavaScript loader the compiler puts beside it,
 and runs under Node.js 22.19 or later on the 22 line, 24.15 or later on the 24
 line, or 25 or later, which `ghul` checks before running it; Node 23 cannot
-run it. A wasm build compiles in two libraries,
-fetched from Git into `~/.cache/ghul-cli/libraries`: ghul-core, which gives
-the built-in types their members, and then ghul-runtime, which supplies the
-pipes and the rest of `Ghul`. They are libraries with releases of their own, so
-a project declares both in its `dependencies`, which `ghul new` writes:
+run it. A wasm build compiles in one library, ghul-runtime, fetched from Git
+into `~/.cache/ghul-cli/libraries`. It carries two sets of sources: the core,
+which gives the built-in types their members, and the runtime, which supplies
+the pipes and the rest of `Ghul`. It is a library with releases of its own, so
+a project declares it in its `dependencies`, which `ghul new` writes:
 
 ```json
 "dependencies": {
-    "ghul-core": { "version": ">=0.75.1" },
-    "ghul-runtime": { "version": ">=29.1.1" }
+    "ghul-runtime": { "version": ">=31.0.0" }
 }
 ```
 
@@ -381,8 +380,10 @@ The repository is known, so a version alone is enough. It is a range as for
 any dependency, and a build uses the newest release it admits: `>=` is a floor
 and admits a newer major version, where `^` stops at the next one. `>=0.0.0`
 says the project accepts any release. A `path` uses a checkout instead. A
-project for wasm or llvm that leaves either out is refused, and the message
-names the lines to add with the newest release as the floor. The releases are
+project for wasm or llvm that leaves it out is refused, and the message names
+the line to add with the newest release as the floor. The core was once a
+library of its own, ghul-core; a manifest that still declares it is refused,
+and the declaration is to be removed. The releases are
 listed on every build; where GitHub cannot be reached, the release used last
 is used again. A library that needs a newer compiler than the installed one
 fails to compile with the compiler's own error, and `ghul update` brings the
@@ -392,7 +393,7 @@ A script is not a project and declares nothing: it is built with the newest
 release of each.
 
 Any other entry in `dependencies` names a source library a wasm build compiles
-in after those two: a directory holding a `ghul-project.json` that lists
+in after ghul-runtime: a directory holding a `ghul-project.json` that lists
 `wasm` among its targets, declared by `path` or as a `git` repository at a
 `version`, and fetched into the same cache. A `version` is a bare release
 (exactly that one), `^1.2.3` (at least that, below the next major), `~1.2.3`
@@ -409,7 +410,7 @@ Two options override the manifest for one build, which is how a repository
 tests its own checkout. `--compiler <command>` builds with the command given,
 such as `dotnet /path/to/publish/ghul.dll`, in place of an installed compiler;
 the libraries are the newest releases, as for any build. `--library <name>=<path>`, which can be given more than once,
-compiles the source library `name` (`ghul-core` or `ghul-runtime`) from the
+compiles the source library `name` (such as `ghul-runtime`) from the
 directory at `path`. Both work with `build`, `run` and `ghul project
 response-file`, and `--compiler` with `ghul project compiler`.
 
@@ -521,7 +522,7 @@ ghul project compiler [--json]
 `ghul project response-file` writes the options a build passes the compiler,
 one flag a line with its value, without the output or the project's own
 sources: the client passes it to the compiler as `@<path>`. A wasm build's
-core library is in it too, as its `--library-source` declaration and its
+runtime library is in it too, as its `--library-source` declaration and its
 files. `--source-globs` also writes the manifest's source globs, one a line
 and relative to the manifest, for the client to expand and watch.
 Where the manifest lists more than one target, `--target` names the one,

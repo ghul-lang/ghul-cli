@@ -217,10 +217,11 @@ looks for them.
   built (editors reuse it), and `PROJECT_BUILD` runs the compiler through
   a response file (`RESPONSE_FILE`) into `out/<target>/` (`out/<target>-debug/` with `--debug`); `PROJECT_RUN`
   runs the result with `dotnet`, or with `node` through the loader beside
-  a wasm module. `CORE_LIBRARY` supplies ghul-core to a wasm build, at a
-  tag pinned per compiler version unless the manifest declares it, through
-  `LIBRARY_CACHE` (a tag fetched by `GIT` into a read-only per-user cache
-  entry, found again with no `git` call). `DEPENDENCY_LIBRARIES` supplies a
+  a wasm module. `RUNTIME_LIBRARY` supplies ghul-runtime, the one library
+  carrying both the core and the runtime sources, to a wasm build at the
+  release the manifest declares, through `LIBRARY_CACHE` (a tag fetched by
+  `GIT` into a read-only per-user cache entry, found again with no `git`
+  call); the wasm loader is its `ghul-core/host/loader.mjs`. `DEPENDENCY_LIBRARIES` supplies a
   wasm build the other source libraries the manifest's dependencies name,
   each after the libraries it depends on. `FILE_LOCK` is the advisory lock
   the cache and the CLI's script cache share. `EDITOR_FILES` writes what

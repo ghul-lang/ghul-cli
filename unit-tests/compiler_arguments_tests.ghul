@@ -153,7 +153,7 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        a_wasm_program_takes_its_loader_from_the_core_library_and_no_other_library() is
+        a_wasm_program_takes_its_loader_from_the_runtime_library_and_no_other_library() is
             let other = SOURCE_LIBRARY("ghul-raster", "1.0.0", "/cache/raster", LIST[string](["/cache/raster/a.ghul"]))
 
             _same(
@@ -170,16 +170,16 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         a_wasm_library_and_an_llvm_program_are_given_no_loader() is
-            let library = SOURCE_LIBRARY("ghul-core", "0.3.0", "/cache/core", LIST[string](["/cache/core/src/a.ghul"]))
+            let library = SOURCE_LIBRARY("ghul-runtime", "31.0.3", "/cache/runtime", LIST[string](["/cache/runtime/src/a.ghul"]))
 
             _same(
-                "--library --type-check --target wasm --library-source ghul-core@0.3.0=/cache/core /cache/core/src/a.ghul",
+                "--library --type-check --target wasm --library-source ghul-runtime@31.0.3=/cache/runtime /cache/runtime/src/a.ghul",
                 _joined(
                     COMPILER_ARGUMENTS.options(
                         _manifest(ManifestKind.LIBRARY, _plain_options()), BuildTarget.WASM, LIST[SOURCE_LIBRARY]([library]))))
 
             _same(
-                "--target llvm --library-source ghul-core@0.3.0=/cache/core /cache/core/src/a.ghul",
+                "--target llvm --library-source ghul-runtime@31.0.3=/cache/runtime /cache/runtime/src/a.ghul",
                 _joined(
                     COMPILER_ARGUMENTS.options(
                         _manifest(ManifestKind.PROGRAM, _plain_options()), BuildTarget.LLVM, LIST[SOURCE_LIBRARY]([library]))))
@@ -187,7 +187,7 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         option_groups_hold_each_flag_with_its_value_and_flatten_to_the_options() is
-            let library = SOURCE_LIBRARY("ghul-core", "0.3.0", "/core", LIST[string](["/core/a.ghul"]))
+            let library = SOURCE_LIBRARY("ghul-runtime", "31.0.3", "/runtime", LIST[string](["/runtime/a.ghul"]))
             let manifest = _manifest(ManifestKind.LIBRARY, _options("private", true, ["Collections"], ["X"], [], []))
             let libraries = LIST[SOURCE_LIBRARY]([library])
             let groups = COMPILER_ARGUMENTS.option_groups(manifest, BuildTarget.WASM, libraries)
@@ -203,7 +203,7 @@ namespace Ghul.Cli.Tests is
             od
 
             _same(
-                "--underscore-access private|--global-namespace|--default-use Collections|--define X|--library|--type-check|--target wasm|--library-source ghul-core@0.3.0=/core|/core/a.ghul",
+                "--underscore-access private|--global-namespace|--default-use Collections|--define X|--library|--type-check|--target wasm|--library-source ghul-runtime@31.0.3=/runtime|/runtime/a.ghul",
                 string.join("|", lines))
 
             _same(_joined(COMPILER_ARGUMENTS.options(manifest, BuildTarget.WASM, libraries)), _joined(flattened))

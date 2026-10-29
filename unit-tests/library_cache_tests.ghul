@@ -242,7 +242,7 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         a_short_url_names_its_directory_as_written() is
-            assert LIBRARY_CACHE.repository_directory_name("https://github.com/ghul-lang/ghul-core") =~ "https___github.com_ghul-lang_ghul-core"
+            assert LIBRARY_CACHE.repository_directory_name("https://github.com/ghul-lang/ghul-runtime") =~ "https___github.com_ghul-lang_ghul-runtime"
         si
 
         @Test()

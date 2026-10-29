@@ -8,22 +8,22 @@ namespace Ghul.Project is
     use Result.*
 
     /// The source libraries a manifest's own `dependencies` name, other than
-    /// ghul-core and ghul-runtime, which are compiled into every build for a
-    /// target with source libraries whether declared or not.
+    /// ghul-runtime, which is compiled into every build for a target with
+    /// source libraries whether declared or not.
     ///
     /// Each is a directory holding a `ghul-project.json`, declared by `path`
     /// or as a `git` repository at a `tag`, and fetched into the library cache
-    /// as ghul-core and ghul-runtime are. A library's own dependencies are
+    /// as ghul-runtime is. A library's own dependencies are
     /// found the same way, a `path` read relative to that library, and come
     /// before it, so every library follows everything it uses.
     class DEPENDENCY_LIBRARIES is
-        /// Whether `name` is one of the libraries every build for a target
-        /// with source libraries compiles in, which a manifest declares only
-        /// to choose where it comes from.
+        /// Whether `name` is the library every build for a target with
+        /// source libraries compiles in, which a manifest declares only to
+        /// choose where it comes from.
         ///
         /// - name: a key of a manifest's `dependencies`
         is_implicit(name: string) -> bool static =>
-            name =~ CORE_LIBRARY.NAME \/ name =~ RUNTIME_LIBRARY.NAME
+            name =~ RUNTIME_LIBRARY.NAME
 
         /// The libraries `manifest` depends on, each after the libraries it
         /// depends on, or the first problem finding them.

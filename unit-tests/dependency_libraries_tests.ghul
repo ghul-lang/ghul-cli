@@ -88,11 +88,11 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        ghul_core_and_ghul_runtime_are_not_among_them() is
+        ghul_runtime_is_not_among_them() is
             let scratch = _scratch()
 
             try
-                _project(Path.combine(scratch, "app"), "app", "\"wasm\"", "\"ghul-core\": {{ \"path\": \"../none\" }}, \"ghul-runtime\": {{ \"path\": \"../none\" }}")
+                _project(Path.combine(scratch, "app"), "app", "\"wasm\"", "\"ghul-runtime\": {{ \"path\": \"../none\" }}")
 
                 let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
 

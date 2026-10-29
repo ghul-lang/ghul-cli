@@ -6,7 +6,6 @@ namespace Ghul.Cli.Tests is
     use Ghul.Project.BUILD_MODE
     use Ghul.Project.BuildTarget
     use Ghul.Project.CompilerBuild
-    use Ghul.Project.CORE_LIBRARY
     use Ghul.Project.RUNTIME_LIBRARY
     use Ghul.Project.DEPENDENCY
     use Ghul.Project.LOADED_PROJECT

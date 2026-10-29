@@ -4,10 +4,11 @@ namespace Ghul.Project is
 
     use Result.*
 
-    /// The runtime library a build for the wasm target compiles in after
-    /// the core library: ghul-runtime, which supplies the pipes, ranges and
-    /// the rest of what `Ghul` and `Ghul.Pipes` declare, from the sources
-    /// its own manifest lists.
+    /// The source library a build for the wasm target compiles in:
+    /// ghul-runtime, which carries both the core sources, which give the
+    /// built-in types their members, and the runtime sources, which supply
+    /// the pipes, ranges and the rest of what `Ghul` and `Ghul.Pipes`
+    /// declare, as its own manifest lists them.
     ///
     /// A project declares ghul-runtime among the manifest's dependencies, as a
     /// version range, a tag or a path.

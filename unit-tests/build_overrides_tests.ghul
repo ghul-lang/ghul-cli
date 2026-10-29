@@ -36,13 +36,13 @@ namespace Ghul.Cli.Tests is
         @Test()
         a_build_command_line_reads_the_compiler_and_libraries() is
             let parsed = PROJECT_COMMAND_LINE.parse(
-                LIST[string](["--compiler", "dotnet /c/ghul.dll", "--library", "ghul-core=/l/core", "--target", "wasm"]),
+                LIST[string](["--compiler", "dotnet /c/ghul.dll", "--library", "ghul-runtime=/l/runtime", "--target", "wasm"]),
                 false)
 
             assert !parsed.problem?
             assert parsed.target =~ "wasm"
             assert parsed.overrides.compiler_command =~ "dotnet /c/ghul.dll"
-            assert parsed.overrides.libraries["ghul-core"] =~ IO.Path.get_full_path("/l/core")
+            assert parsed.overrides.libraries["ghul-runtime"] =~ IO.Path.get_full_path("/l/runtime")
         si
 
         @Test()
@@ -54,7 +54,7 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         a_library_without_a_name_and_a_path_is_refused() is
-            for value in ["ghul-core", "=/l/core", "ghul-core="] do
+            for value in ["ghul-runtime", "=/l/runtime", "ghul-runtime="] do
                 let parsed = PROJECT_COMMAND_LINE.parse(LIST[string](["--library", value]), false)
 
                 assert (parsed.problem ?? "").starts_with("--library needs <name>=<path>") else "accepted {value}"
@@ -64,20 +64,20 @@ namespace Ghul.Cli.Tests is
         @Test()
         an_override_option_first_asks_for_the_project() is
             assert PROJECT_COMMAND_LINE.names_project(LIST[string](["--compiler", "ghul-compiler"]))
-            assert PROJECT_COMMAND_LINE.names_project(LIST[string](["--library", "ghul-core=x"]))
+            assert PROJECT_COMMAND_LINE.names_project(LIST[string](["--library", "ghul-runtime=x"]))
         si
 
         @Test()
         a_library_override_replaces_the_manifest_dependency() is
             let dependencies = MAP[string, DEPENDENCY]()
 
-            dependencies["ghul-core"] = DEPENDENCY.GIT("https://example.com/core", "v1", null, null, null)
+            dependencies["ghul-runtime"] = DEPENDENCY.GIT("https://example.com/runtime", "v1", null, null, null)
 
-            let overrides = PROJECT_COMMAND_LINE.parse(LIST[string](["--library", "ghul-core=/l/core"]), false).overrides
+            let overrides = PROJECT_COMMAND_LINE.parse(LIST[string](["--library", "ghul-runtime=/l/runtime"]), false).overrides
             let applied = overrides.apply(_manifest(dependencies))
 
-            if let path: DEPENDENCY.PATH = applied.dependencies["ghul-core"] then
-                assert path.path =~ IO.Path.get_full_path("/l/core")
+            if let path: DEPENDENCY.PATH = applied.dependencies["ghul-runtime"] then
+                assert path.path =~ IO.Path.get_full_path("/l/runtime")
             else
                 assert false else "the dependency is not a path"
             fi

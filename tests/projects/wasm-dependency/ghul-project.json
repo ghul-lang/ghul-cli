@@ -1,1 +1,1 @@
-{ "name": "wasm-dependency", "targets": ["wasm"], "dependencies": { "ghul-core": { "version": ">=0.0.0" }, "ghul-runtime": { "version": ">=0.0.0" }, "greeting": { "path": "../../libraries/greeting" } } }
+{ "name": "wasm-dependency", "targets": ["wasm"], "dependencies": { "ghul-runtime": { "version": ">=0.0.0" }, "greeting": { "path": "../../libraries/greeting" } } }
