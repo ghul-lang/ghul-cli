@@ -30,11 +30,17 @@ namespace Ghul.Project is
     ///
     /// - part: the solution
     /// - commit: the commit the index was generated from, or null
+    /// - compiler_version: the ghul.compiler release the tasks are tested
+    ///   with, or null
+    /// - runtime_version: the ghul-runtime release the tasks are tested
+    ///   with, or null
     /// - raster_version: the ghul.raster release the tasks are tested with,
     ///   or null
     class ROSETTA_LOOKUP(
         part: ROSETTA_PART,
         commit: string?,
+        compiler_version: string?,
+        runtime_version: string?,
         raster_version: string?
     ) is si
 
@@ -68,6 +74,8 @@ namespace Ghul.Project is
 
             let root = document.root_element
             let commit = _string(root, "commit")
+            let compiler_version = _string(root, "compiler_version")
+            let runtime_version = _string(root, "runtime_version")
             let raster_version = _string(root, "raster_version")
             let wanted = ascii_name(name)
             let slug = name.split(['/'])[0]
@@ -93,7 +101,7 @@ namespace Ghul.Project is
 
                 for part in parts do
                     if (wanted =~ wanted_slug /\ parts.count == 1) \/ ascii_name(_string(part, "id") ?? "") =~ wanted then
-                        return OK(ROSETTA_LOOKUP(_part(part), commit, raster_version))
+                        return OK(ROSETTA_LOOKUP(_part(part), commit, compiler_version, runtime_version, raster_version))
                     fi
                 od
 
@@ -152,10 +160,14 @@ namespace Ghul.Project is
         /// - part: the solution
         /// - targets: the targets the project builds for
         /// - raster_version: the ghul.raster release to compile in, or null
+        /// - floors: the oldest release of each tool the project is written with, as `>=` ranges
         /// - libraries: the oldest release of ghul-runtime the project is written with, as `ghul new` writes them
-        manifest_text(name: string, part: ROSETTA_PART, targets: Collections.List[BuildTarget], raster_version: string?, libraries: Collections.List[(tool: string, version: string)]) -> string static is
+        manifest_text(name: string, part: ROSETTA_PART, targets: Collections.List[BuildTarget], raster_version: string?, floors: Collections.List[(tool: string, version: string)], libraries: Collections.List[(tool: string, version: string)]) -> string static is
             let raster = raster_release(raster_version, targets)
             let quoted = string.join(", ", targets |> map(t => "\"{BUILD_TARGETS.name(t)}\""))
+
+            let tools = string.join(", ", floors |> map(f => "\"{f.tool}\": \">={f.version}\""))
+            let tools_text = if floors.count > 0 then ",\n    \"tools\": {{ {tools} }}" else "" fi
 
             let entries = LIST[string]()
 
@@ -179,7 +191,7 @@ namespace Ghul.Project is
                 "    \"name\": \"{name}\",\n"
                 "    \"kind\": \"program\",\n"
                 "    \"targets\": [{quoted}],\n"
-                "    \"sources\": [\"src/**/*.ghul\"]{dependencies}\n"
+                "    \"sources\": [\"src/**/*.ghul\"]{tools_text}{dependencies}\n"
                 "}}\n"
         si
 

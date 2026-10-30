@@ -6,6 +6,8 @@ namespace Ghul.Cli.Tests is
     use Ghul.Project.MANIFEST_READER
     use Ghul.Project.ROSETTA_TASK
     use Ghul.Project.ReadOutcome
+    use Ghul.Project.PROJECT_TOOLS
+    use Ghul.Project.TOOL_FLOOR
 
     use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
     use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
@@ -28,11 +30,14 @@ namespace Ghul.Cli.Tests is
         _libraries() -> Collections.List[(tool: string, version: string)] =>
             LIST[(tool: string, version: string)]([(tool = "ghul-runtime", version = "3.4.0")])
 
-        _targets(targets: Collections.List[BuildTarget]) -> string =>
+        _no_floors() -> Collections.List[(tool: string, version: string)] =>
+            LIST[(tool: string, version: string)]()
+
+                _targets(targets: Collections.List[BuildTarget]) -> string =>
             string.join(",", [BUILD_TARGETS.name(t) for t in targets])
 
         _index: string =>
-            "{{ \"version\": 1, \"commit\": \"abc123\", \"raster_version\": \"0.13.0\", \"tasks\": [\n"
+            "{{ \"version\": 1, \"commit\": \"abc123\", \"compiler_version\": \"67.4.10\", \"runtime_version\": \"34.1.0\", \"raster_version\": \"0.13.0\", \"tasks\": [\n"
             "  {{ \"slug\": \"abc-words\", \"parts\": [\n"
             "    {{ \"id\": \"abc-words\", \"source\": \"tasks/abc-words/abc-words.ghul\", \"wasm\": true, \"native\": true,\n"
             "      \"files\": [{{ \"name\": \"unixdict.txt\", \"path\": \"data/unixdict.txt\" }}], \"args\": [\"first\", \"second\"], \"raster\": false }} ] }},\n"
@@ -59,6 +64,8 @@ namespace Ghul.Cli.Tests is
             _same("first second", string.join(" ", part.args))
             _same("abc123", found!.commit ?? "")
             _same("0.13.0", found!.raster_version ?? "")
+            _same("67.4.10", found!.compiler_version ?? "")
+            _same("34.1.0", found!.runtime_version ?? "")
         si
 
         @Test()
@@ -143,7 +150,7 @@ namespace Ghul.Cli.Tests is
         @Test()
         the_manifest_of_a_part_that_draws_compiles_in_ghul_raster() is
             let found = ROSETTA_TASK.find(_index, "fern")
-            let text = ROSETTA_TASK.manifest_text("fern", found!.part, found!.part.targets, found!.raster_version, _libraries())
+            let text = ROSETTA_TASK.manifest_text("fern", found!.part, found!.part.targets, found!.raster_version, _no_floors(), _libraries())
 
             let read = MANIFEST_READER.read(text, "/tmp/fern/ghul-project.json")
 
@@ -169,11 +176,28 @@ namespace Ghul.Cli.Tests is
         @Test()
         the_manifest_of_a_part_that_draws_nothing_declares_only_the_libraries() is
             let found = ROSETTA_TASK.find(_index, "abc-words")
-            let text = ROSETTA_TASK.manifest_text("abc-words", found!.part, found!.part.targets, found!.raster_version, _libraries())
+            let text = ROSETTA_TASK.manifest_text("abc-words", found!.part, found!.part.targets, found!.raster_version, _no_floors(), _libraries())
 
             assert !text.contains("ghul-raster") else text
             assert text.contains("\"ghul-runtime\": {{ \"version\": \">=3.4.0\" }}") else text
             assert text.contains("\"targets\": [\"llvm\", \"wasm\"]") else text
+        si
+
+        @Test()
+        the_manifest_accepts_the_tested_compiler_and_every_later_release() is
+            let found = ROSETTA_TASK.find(_index, "abc-words")
+            let floors = LIST[(tool: string, version: string)]([(tool = PROJECT_TOOLS.COMPILER, version = "67.4.10")])
+            let text = ROSETTA_TASK.manifest_text("abc-words", found!.part, found!.part.targets, found!.raster_version, floors, _libraries())
+
+            let read = MANIFEST_READER.read(text, "/tmp/abc-words/ghul-project.json")
+
+            if let problems: ReadOutcome.PROBLEMS = read then
+                assert false else "the manifest does not read: {problems.problems[0].describe()}\n{text}"
+            fi
+
+            assert text.contains("\"tools\": {{ \"compiler\": \">=67.4.10\" }}") else text
+            assert !TOOL_FLOOR.problem((cast ReadOutcome.OK(read)).manifest.tools, PROJECT_TOOLS.COMPILER, "68.0.0")? else text
+            assert TOOL_FLOOR.problem((cast ReadOutcome.OK(read)).manifest.tools, PROJECT_TOOLS.COMPILER, "66.24.2")? else text
         si
     si
 si
