@@ -568,7 +568,23 @@ namespace Ghul.Cli is
             fetched.add((path = file.name, bytes = read!))
         od
 
-        let manifest = Ghul.Project.ROSETTA_TASK.manifest_text(name, part, part.targets, found!.raster_version, new_project_libraries())
+        // The compiler and runtime the tasks are tested with are the oldest
+        // the project accepts. An index that does not say leaves the compiler
+        // free and takes the newest runtime, as `ghul new` does.
+        let floors = Collections.LIST[(tool: string, version: string)]()
+
+        if let compiler = found!.compiler_version then
+            floors.add((tool = Ghul.Project.PROJECT_TOOLS.COMPILER, version = compiler))
+        fi
+
+        let libraries =
+            if let runtime = found!.runtime_version then
+                Collections.LIST[(tool: string, version: string)]([(tool = Ghul.Project.RUNTIME_LIBRARY.NAME, version = runtime)])
+            else
+                new_project_libraries()
+            fi
+
+        let manifest = Ghul.Project.ROSETTA_TASK.manifest_text(name, part, part.targets, found!.raster_version, floors, libraries)
         let check = Ghul.Project.MANIFEST_READER.read(manifest, Path.join([directory, Ghul.Project.MANIFEST_LOCATION.FILE_NAME]))
 
         if let problems: Ghul.Project.ReadOutcome.PROBLEMS = check then
