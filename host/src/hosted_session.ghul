@@ -516,7 +516,7 @@ namespace Ghul.Repl.Host is
                 if want_server then
                     let server = SERVER_BACKEND(_start_server(compiler, files), spawn, files, say)
 
-                    let _ = server.warm_up()
+                    server.warm_up()
 
                     server
                 else

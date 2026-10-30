@@ -44,7 +44,7 @@ namespace Ghul.Repl.Host is
 
                     process.wait_for_exit()
 
-                    let _ = err_task.result
+                    err_task.result
 
                     return
                         case out_task.result.trim()

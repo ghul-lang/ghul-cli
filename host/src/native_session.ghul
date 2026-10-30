@@ -347,7 +347,7 @@ namespace Ghul.Repl.Host is
                     // Nothing is written to standard output; draining it keeps
                     // the server from ever blocking on it.
                     if started? then
-                        let _ = started.standard_output.read_to_end_async()
+                        started.standard_output.read_to_end_async()
                     fi
                 fi
 

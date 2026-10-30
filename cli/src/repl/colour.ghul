@@ -304,7 +304,7 @@ namespace Ghul.Cli.Repl is
                 // Reading from the console first puts it into the mode that
                 // does not echo, so the answer is not written back to the
                 // screen.
-                let _ = Std.key_available
+                Std.key_available
 
                 Std.write("\u001B]11;?\u001B\\")
 

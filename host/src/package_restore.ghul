@@ -68,7 +68,7 @@ namespace Ghul.Repl.Host is
             fi
 
             let said = output_read.result
-            let _ = error_read.result
+            error_read.result
 
             if process.exit_code != 0 then
                 return ERROR("could not restore {package}: {first_error(said) ?? "dotnet publish failed"}")

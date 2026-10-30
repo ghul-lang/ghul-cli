@@ -156,7 +156,7 @@ namespace Ghul.Cli is
                 client.default_request_headers.user_agent.parse_add("ghul-cli")
 
                 let request = System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.head, releases)
-                let _ = client.send_async(request).result
+                client.send_async(request).result
 
                 return OK(_)
             catch e: Ghul.Exception
