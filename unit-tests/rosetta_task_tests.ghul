@@ -40,7 +40,9 @@ namespace Ghul.Cli.Tests is
             "    {{ \"id\": \"fern\", \"source\": \"tasks/fern/fern.ghul\", \"wasm\": true, \"native\": false, \"files\": [], \"args\": [], \"raster\": true }} ] }},\n"
             "  {{ \"slug\": \"pair\", \"parts\": [\n"
             "    {{ \"id\": \"pair/01-one\", \"source\": \"tasks/pair/01-one/01-one.ghul\", \"wasm\": false, \"native\": false }},\n"
-            "    {{ \"id\": \"pair/02-two\", \"source\": \"tasks/pair/02-two/02-two.ghul\", \"wasm\": false, \"native\": true }} ] }}\n"
+            "    {{ \"id\": \"pair/02-two\", \"source\": \"tasks/pair/02-two/02-two.ghul\", \"wasm\": false, \"native\": true }} ] }},\n"
+            "  {{ \"slug\": \"erdős-woods-numbers\", \"parts\": [\n"
+            "    {{ \"id\": \"erdős-woods-numbers\", \"source\": \"tasks/erdős-woods-numbers/erdős-woods-numbers.ghul\", \"wasm\": true, \"native\": true }} ] }}\n"
             "] }}\n"
 
         @Test()
@@ -87,6 +89,29 @@ namespace Ghul.Cli.Tests is
 
             assert !found?
             _same("pair is solved more than one way; name one of pair/01-one, pair/02-two", (cast Result.ERROR(found)).error)
+        si
+
+        @Test()
+        an_accented_slug_names_its_project_with_plain_letters() is
+            let found = ROSETTA_TASK.find(_index, "erdős-woods-numbers")
+
+            assert found? else (cast Result.ERROR(found)).error
+            _same("erdos-woods-numbers", ROSETTA_TASK.directory_name(found!.part))
+        si
+
+        @Test()
+        a_slug_written_with_plain_letters_finds_the_accented_task() is
+            let found = ROSETTA_TASK.find(_index, "erdos-woods-numbers")
+
+            assert found? else (cast Result.ERROR(found)).error
+            _same("tasks/erdős-woods-numbers/erdős-woods-numbers.ghul", found!.part.source)
+        si
+
+        @Test()
+        an_ascii_name_writes_accented_latin_letters_plainly_and_keeps_the_rest() is
+            _same("erdos-selfridge", ROSETTA_TASK.ascii_name("Erdös-Selfridge"))
+            _same("lodz-aeiou-ss", ROSETTA_TASK.ascii_name("łódź-àéîõü-ss"))
+            _same("straße", ROSETTA_TASK.ascii_name("straße"))
         si
 
         @Test()

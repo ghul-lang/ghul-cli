@@ -54,7 +54,8 @@ namespace Ghul.Project is
             "https://raw.githubusercontent.com/ghul-lang/ghul-rosetta-code/{commit ?? "main"}/{path}"
 
         /// Finds `name` in the index text `index`: a task's slug, which
-        /// means its only part, or a part's id.
+        /// means its only part, or a part's id. Accented letters match their
+        /// plain letters, so `erdos-woods-numbers` finds `erdős-woods-numbers`.
         ///
         /// - index: the text of index.json
         /// - name: a slug, or `<slug>/<NN-name>`
@@ -68,7 +69,9 @@ namespace Ghul.Project is
             let root = document.root_element
             let commit = _string(root, "commit")
             let raster_version = _string(root, "raster_version")
+            let wanted = ascii_name(name)
             let slug = name.split(['/'])[0]
+            let wanted_slug = wanted.split(['/'])[0]
 
             let tasks: JsonElement mut
 
@@ -77,7 +80,7 @@ namespace Ghul.Project is
             fi
 
             for task in tasks.enumerate_array() do
-                if (_string(task, "slug") ?? "") !~ slug then
+                if ascii_name(_string(task, "slug") ?? "") !~ wanted_slug then
                     continue
                 fi
 
@@ -89,12 +92,12 @@ namespace Ghul.Project is
                 fi
 
                 for part in parts do
-                    if (name =~ slug /\ parts.count == 1) \/ (_string(part, "id") ?? "") =~ name then
+                    if (wanted =~ wanted_slug /\ parts.count == 1) \/ ascii_name(_string(part, "id") ?? "") =~ wanted then
                         return OK(ROSETTA_LOOKUP(_part(part), commit, raster_version))
                     fi
                 od
 
-                if name =~ slug then
+                if wanted =~ wanted_slug then
                     let ids = string.join(", ", [_string(p, "id") ?? "" for p in parts])
 
                     return ERROR("{slug} is solved more than one way; name one of {ids}")
@@ -111,7 +114,35 @@ namespace Ghul.Project is
         /// one way.
         ///
         /// - part: the solution
-        directory_name(part: ROSETTA_PART) -> string static => part.id.replace('/', '-')
+        directory_name(part: ROSETTA_PART) -> string static => ascii_name(part.id.replace('/', '-'))
+
+        /// `text` in lowercase with each accented Latin letter written as
+        /// the plain letter it is accented from: `erdős` is `erdos`. A
+        /// letter that has no single plain letter, such as `ß`, is kept.
+        ///
+        /// - text: a task's slug or a part's id
+        ascii_name(text: string) -> string static =>
+            text |> map(c => _ascii_letter(char.to_lower_invariant(c))) |> string()
+
+        // The plain letter for each character from U+00C0 to U+017F, or `?`
+        // where there is none. A table rather than Unicode decomposition,
+        // because a build with invariant globalization does not decompose.
+        _LATIN_LETTERS: string static =>
+            "aaaaaa?ceeeeiiiidnooooo?ouuuuy??aaaaaa?ceeeeiiiidnooooo?ouuuuy?y"
+            "aaaaaaccccccccddddeeeeeeeeeegggggggghhhhiiiiiiiiii??jjkk?lllllll"
+            "lllnnnnnn???oooooo??rrrrrrssssssssttttttuuuuuuuuuuuuwwyyyzzzzzz?"
+
+        _ascii_letter(c: char) -> char static is
+            let index = int(c) - 0xC0
+
+            if index < 0 \/ index >= _LATIN_LETTERS.length then
+                return c
+            fi
+
+            let plain = _LATIN_LETTERS[index]
+
+            return if plain == '?' then c else plain fi
+        si
 
         /// The manifest of a program named `name` that builds `part` for
         /// `targets` from the sources under `src/`, compiling in ghul.raster
