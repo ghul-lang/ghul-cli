@@ -180,7 +180,7 @@ namespace Ghul.Repl.Host is
 
                 try
                     if let server = _server then
-                        let _ = _through(server, CELL_REQUEST(0, WARM_UP_NAME, "0\n", 0, LIST[string](), 0, LIST[string]()))
+                        _through(server, CELL_REQUEST(0, WARM_UP_NAME, "0\n", 0, LIST[string](), 0, LIST[string]()))
                     fi
                 catch e: System.Exception
                     // A server that fails here fails the first cell too,
@@ -285,7 +285,7 @@ namespace Ghul.Repl.Host is
                 fi
 
                 if !_says_ready(first) then
-                    let _ = _give_up(server, "the compile server did not start")
+                    _give_up(server, "the compile server did not start")
 
                     return null
                 fi
@@ -296,7 +296,7 @@ namespace Ghul.Repl.Host is
             let answer = server.exchange(_check_line(text), REPLY_TIMEOUT_MS)
 
             if !answer? then
-                let _ = _give_up(server, "the compile server stopped answering")
+                _give_up(server, "the compile server stopped answering")
 
                 return null
             fi
@@ -304,7 +304,7 @@ namespace Ghul.Repl.Host is
             let reply = COMPILE_SERVER_REPLY.parse(answer, "check.ghul")
 
             if !reply? then
-                let _ = _give_up(server, "the compile server sent something that is not a reply")
+                _give_up(server, "the compile server sent something that is not a reply")
 
                 return null
             fi

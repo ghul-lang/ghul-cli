@@ -209,12 +209,12 @@ namespace Ghul.Jupyter is
                 // A shutdown can arrive on control while the shell thread
                 // is inside a cell, and that thread only sees the kernel
                 // stopping once the cell returns.
-                let _ = _session.interrupt()
+                _session.interrupt()
             when "interrupt_request" then
                 // False means no cell was running, which is what the
                 // stop button on an idle kernel asks. Either way the
                 // front end gets its reply.
-                let _ = _session.interrupt()
+                _session.interrupt()
 
                 channel.send(_messages.reply(request, "interrupt_reply", CONTENT.ok()))
             else
