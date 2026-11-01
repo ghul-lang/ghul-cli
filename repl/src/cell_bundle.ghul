@@ -73,7 +73,7 @@ namespace Ghul.Repl is
             fi
 
             try
-                if let offered: Collections.Iterable[(mime: string, content: ubyte[])] = representations.invoke(value, null) then
+                if let offered: Collections.Iterable[(mime: string, content: ARRAY[ubyte])] = representations.invoke(value, null) then
                     for (mime, content) in offered do
                         if _RASTER_TYPES |> Ghul.Pipes.any(t => t =~ mime) then
                             found.add((mime = mime, payload = System.Convert.to_base64_string(content)))
@@ -86,7 +86,7 @@ namespace Ghul.Repl is
             return found
         si
 
-        _RASTER_TYPES: string[] static => ["image/png", "image/jpeg", "image/gif"]
+        _RASTER_TYPES: ARRAY[string] static => ["image/png", "image/jpeg", "image/gif"]
 
         // A table, where the value is a sequence of things that share a
         // shape: a row each, and a column for each name that shape gives

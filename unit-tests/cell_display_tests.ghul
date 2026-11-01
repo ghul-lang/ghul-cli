@@ -157,7 +157,7 @@ namespace Ghul.Cli.Tests is
         @Test()
         type_name__uses_ghul_names_for_type_arguments() is
             assert CELL_DISPLAY.type_name(typeof(Collections.LIST[string])) =~ "List[string]";
-            assert CELL_DISPLAY.type_name(typeof(int[])) =~ "int[]";
+            assert CELL_DISPLAY.type_name(typeof(ARRAY[int])) =~ "int[]";
             assert CELL_DISPLAY.type_name(typeof(System.Nullable[int])) =~ "int?";
         si
     si

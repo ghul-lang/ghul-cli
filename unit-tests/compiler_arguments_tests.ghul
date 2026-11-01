@@ -25,10 +25,10 @@ namespace Ghul.Cli.Tests is
         _options(
             underscore_access: string?,
             global_namespace: bool,
-            default_use: string[],
-            define: string[],
-            suppress: string[],
-            warn_as_error: string[]
+            default_use: ARRAY[string],
+            define: ARRAY[string],
+            suppress: ARRAY[string],
+            warn_as_error: ARRAY[string]
         ) -> MANIFEST_OPTIONS =>
             MANIFEST_OPTIONS(
                 underscore_access,

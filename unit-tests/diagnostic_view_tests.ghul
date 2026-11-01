@@ -10,7 +10,7 @@ namespace Ghul.Cli.Tests is
     class DIAGNOSTIC_VIEW_TESTS is
         init() is si
 
-        _lines(diagnostics: string[], source: string) -> LIST[string] =>
+        _lines(diagnostics: ARRAY[string], source: string) -> LIST[string] =>
             DIAGNOSTIC_VIEW.lines(LIST[string](diagnostics), "cell-4", source, null)
 
         @Test()

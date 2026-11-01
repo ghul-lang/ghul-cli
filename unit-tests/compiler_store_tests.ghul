@@ -15,7 +15,7 @@ namespace Ghul.Cli.Tests is
     class COMPILER_STORE_TESTS is
         init() is si
 
-        _store(versions: string[]) -> (store: COMPILER_STORE, root: string) is
+        _store(versions: ARRAY[string]) -> (store: COMPILER_STORE, root: string) is
             let root = Path.combine(Path.get_temp_path(), "ghul-store-{System.Guid.new_guid().to_string("N")}")
 
             for v in versions do

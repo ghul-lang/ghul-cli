@@ -13,7 +13,7 @@ namespace Ghul.Repl.Host is
         // What goes on the command line before the caller's own
         // arguments: the assembly where there is one, nothing where there
         // is not.
-        leading_arguments() -> string[] =>
+        leading_arguments() -> ARRAY[string] =>
             if let dll: string = assembly then [dll] else [] fi
     si
 
@@ -278,7 +278,7 @@ namespace Ghul.Repl.Host is
         // Every version held, lowest first. A directory counts as a version
         // when it holds a compiler, so a scratch directory an interrupted
         // fetch left behind is not mistaken for one.
-        versions() -> string[] is
+        versions() -> ARRAY[string] is
             let found = LIST[string]()
 
             _collect_versions(root, found)

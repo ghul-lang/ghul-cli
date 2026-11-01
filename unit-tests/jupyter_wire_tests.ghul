@@ -19,13 +19,13 @@ namespace Ghul.Cli.Tests is
     class JUPYTER_WIRE_TESTS is
         init() is si
 
-        _bytes(text: string) -> ubyte[] => Encoding.utf8.get_bytes(text)
+        _bytes(text: string) -> ARRAY[ubyte] => Encoding.utf8.get_bytes(text)
 
         // The frames a front end sends: routing, the delimiter, the
         // signature, then the four JSON parts.
-        _frames(key: string, identity: string, header: string, content: string) -> LIST[ubyte[]] is
+        _frames(key: string, identity: string, header: string, content: string) -> LIST[ARRAY[ubyte]] is
             let signer = SIGNER(key)
-            let frames = LIST[ubyte[]]()
+            let frames = LIST[ARRAY[ubyte]]()
 
             frames.add(_bytes(identity))
             frames.add(_bytes(DELIMITER))
@@ -72,7 +72,7 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         decode__refuses_frames_with_no_delimiter() is
-            let frames = LIST[ubyte[]]()
+            let frames = LIST[ARRAY[ubyte]]()
 
             frames.add(_bytes("client-1"))
             frames.add(_bytes("{{}}"))
@@ -82,7 +82,7 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         decode__refuses_frames_that_stop_short_after_the_delimiter() is
-            let frames = LIST[ubyte[]]()
+            let frames = LIST[ARRAY[ubyte]]()
 
             frames.add(_bytes(DELIMITER))
             frames.add(_bytes(""))
@@ -112,7 +112,7 @@ namespace Ghul.Cli.Tests is
         // its identities.
         @Test()
         reply__carries_the_requests_identities_and_header() is
-            let identities = LIST[ubyte[]]()
+            let identities = LIST[ARRAY[ubyte]]()
 
             identities.add(_bytes("client-1"))
 

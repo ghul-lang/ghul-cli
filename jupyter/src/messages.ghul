@@ -18,7 +18,7 @@ namespace Ghul.Jupyter is
         // subscriber filters on, which is the message type for
         // everything this kernel publishes.
         published(parent: MESSAGE?, msg_type: string, content: string) -> MESSAGE is
-            let identities = LIST[ubyte[]]()
+            let identities = LIST[ARRAY[ubyte]]()
 
             identities.add(System.Text.Encoding.utf8.get_bytes(msg_type))
 

@@ -25,12 +25,12 @@ namespace Ghul.Cli.Tests is
 
         // A feed carrying `index_versions` in its index and a package for
         // each of `package_versions`.
-        _feed(index_versions: string[], package_versions: string[]) -> (server: FEED_SERVER, scratch: string) is
+        _feed(index_versions: ARRAY[string], package_versions: ARRAY[string]) -> (server: FEED_SERVER, scratch: string) is
             let scratch = Path.combine(Path.get_temp_path(), "ghul-feed-{System.Guid.new_guid().to_string("N")}")
 
             Directory.create_directory(scratch)
 
-            let packages = MAP[string, ubyte[]]()
+            let packages = MAP[string, ARRAY[ubyte]]()
 
             for v in package_versions do
                 let (path, body) = _package(scratch, v)
@@ -43,7 +43,7 @@ namespace Ghul.Cli.Tests is
                 cast System.Text.Json.JsonSerializerOptions(null))
             let index = _bytes("{{\"versions\":{listed}}}")
 
-            let handler = (path: string) -> ubyte[]? is
+            let handler = (path: string) -> ARRAY[ubyte]? is
                 if path =~ "/ghul.compiler/index.json" then
                     return index
                 fi
@@ -64,7 +64,7 @@ namespace Ghul.Cli.Tests is
         // A small hand-made package: what a compiler one carries under
         // `tools/net10.0/any`, plus a file outside that the install
         // leaves in the package.
-        _package(scratch: string, version: string) -> (path: string, body: ubyte[]) is
+        _package(scratch: string, version: string) -> (path: string, body: ARRAY[ubyte]) is
             let file = Path.combine(scratch, "ghul.compiler.{version}.nupkg")
 
             let zip = ZipFile.open(file, ZipArchiveMode.CREATE)
@@ -94,7 +94,7 @@ namespace Ghul.Cli.Tests is
             yrt
         si
 
-        _bytes(text: string) -> ubyte[] static =>
+        _bytes(text: string) -> ARRAY[ubyte] static =>
             System.Text.Encoding.utf8.get_bytes(text)
 
         _store() -> (store: COMPILER_STORE, root: string) is
@@ -255,11 +255,11 @@ namespace Ghul.Cli.Tests is
     // body for a path or null for a 404, and closing the connection after
     // each answer.
     class FEED_SERVER is
-        _handler: (string) -> ubyte[]?
+        _handler: (string) -> ARRAY[ubyte]?
         _listener: System.Net.Sockets.TcpListener
         _thread: System.Threading.Thread?
 
-        init(handler: (string) -> ubyte[]?) is
+        init(handler: (string) -> ARRAY[ubyte]?) is
             _handler = handler
             _listener = System.Net.Sockets.TcpListener(System.Net.IPAddress.loopback, 0)
             _listener.start()
@@ -321,7 +321,7 @@ namespace Ghul.Cli.Tests is
                 let status mut = "404 Not Found"
                 let answered mut = _bytes("")
 
-                if let body: ubyte[] = _handler(path) then
+                if let body: ARRAY[ubyte] = _handler(path) then
                     status = "200 OK"
                     answered = body
                 fi
@@ -337,7 +337,7 @@ namespace Ghul.Cli.Tests is
             yrt
         si
 
-        _bytes(text: string) -> ubyte[] static =>
+        _bytes(text: string) -> ARRAY[ubyte] static =>
             System.Text.Encoding.utf8.get_bytes(text)
     si
 si

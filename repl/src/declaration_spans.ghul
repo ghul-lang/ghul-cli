@@ -16,9 +16,9 @@ namespace Ghul.Repl is
     // not a parser, and says nothing useful about text that did not
     // compile.
     class DECLARATION_SPANS is
-        _TYPE_KINDS: string[] static => ["class", "struct", "union", "trait", "enum", "partial", "impl"]
-        _OPENERS: string[] static => ["is", "if", "do", "case", "try", "val", "(", "["]
-        _CLOSERS: string[] static => ["si", "fi", "od", "esac", "yrt", "lav", ")", "]"]
+        _TYPE_KINDS: ARRAY[string] static => ["class", "struct", "union", "trait", "enum", "partial", "impl"]
+        _OPENERS: ARRAY[string] static => ["is", "if", "do", "case", "try", "val", "(", "["]
+        _CLOSERS: ARRAY[string] static => ["si", "fi", "od", "esac", "yrt", "lav", ")", "]"]
 
         of(source: string) -> Collections.List[DECLARATION] static is
             let tokens = SOURCE_TOKENS.of(source)
@@ -107,7 +107,7 @@ namespace Ghul.Repl is
             return null
         si
 
-        _contains(words: string[], word: string) -> bool static is
+        _contains(words: ARRAY[string], word: string) -> bool static is
             for w in words do
                 if w =~ word then
                     return true

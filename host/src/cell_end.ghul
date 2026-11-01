@@ -49,7 +49,7 @@ namespace Ghul.Repl.Host is
         si
 
         // What finished text ending on these holds the cell open for.
-        _setup_kinds: string[] static => ["let", "assignment", "definition", "function"]
+        _setup_kinds: ARRAY[string] static => ["let", "assignment", "definition", "function"]
 
         // Forgets what was asked, for a new cell.
         clear() is
@@ -180,8 +180,8 @@ namespace Ghul.Repl.Host is
     class BLOCK_DEPTH is
         init() is si
 
-        _openers: string[] static => ["if", "case", "do", "try", "val", "is"]
-        _closers: string[] static => ["fi", "esac", "od", "yrt", "lav", "si"]
+        _openers: ARRAY[string] static => ["if", "case", "do", "try", "val", "is"]
+        _closers: ARRAY[string] static => ["fi", "esac", "od", "yrt", "lav", "si"]
 
         of(lines: Collections.List[string]) -> int static is
             let text = lines |> Ghul.Pipes.join("\n")
@@ -210,9 +210,9 @@ namespace Ghul.Repl.Host is
     class HELD_CONSTRUCT is
         init() is si
 
-        _openers: string[] static => ["if", "case", "for", "while", "do", "try"]
+        _openers: ARRAY[string] static => ["if", "case", "for", "while", "do", "try"]
 
-        _definitions: string[] static => [
+        _definitions: ARRAY[string] static => [
             "class", "struct", "trait", "union", "enum", "namespace", "partial", "impl"
         ]
 

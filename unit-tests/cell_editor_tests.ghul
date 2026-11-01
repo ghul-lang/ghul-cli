@@ -18,7 +18,7 @@ namespace Ghul.Cli.Tests is
         init() is si
 
         // A cell holding `lines`, the cursor at the end of the last one.
-        _cell(lines: string[]) -> CELL_BUFFER is
+        _cell(lines: ARRAY[string]) -> CELL_BUFFER is
             let buffer = CELL_BUFFER()
 
             buffer.replace(lines |> Ghul.Pipes.join("\n"))
@@ -257,7 +257,7 @@ namespace Ghul.Cli.Tests is
 
         _end() -> CELL_END => CELL_END(text => _check(text))
 
-        _step(lines: string[]) -> CellStep => _end().step_for(LIST[string](lines))
+        _step(lines: ARRAY[string]) -> CellStep => _end().step_for(LIST[string](lines))
 
         // A let, an assignment or a definition sets something up for what
         // follows, so it holds the cell open even on one line.
@@ -417,7 +417,7 @@ namespace Ghul.Cli.Tests is
     class BLOCK_DEPTH_TESTS is
         init() is si
 
-        _depth(lines: string[]) -> int => BLOCK_DEPTH.of(LIST[string](lines))
+        _depth(lines: ARRAY[string]) -> int => BLOCK_DEPTH.of(LIST[string](lines))
 
         @Test()
         of__counts_blocks_opened_and_not_closed() is

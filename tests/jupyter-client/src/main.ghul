@@ -9,7 +9,7 @@ namespace Ghul.Jupyter.Tests is
     // assembly to run, or an installed kernelspec to start it the way a
     // front end would, and a directory to work in; answers non-zero if
     // anything it checked did not hold.
-    entry(args: string[]) -> int is
+    entry(args: ARRAY[string]) -> int is
         if args.count < 2 then
             Std.error.write_line("usage: jupyter-client <kernel.dll | kernel.json> <directory> [--abandon]")
 

@@ -266,7 +266,7 @@ namespace Ghul.Cli is
         return Host.NATIVE_COMPILER_DOWNLOAD.of(store).install(version, say)
     si
 
-    read_all_stdin_bytes() -> ubyte[] is
+    read_all_stdin_bytes() -> ARRAY[ubyte] is
         let stdin = Std.open_standard_input()
         let buffer = IO.MemoryStream()
 
@@ -278,7 +278,7 @@ namespace Ghul.Cli is
     // The bytes of a script reference - a real path, or the `-` stdin
     // marker. Callers must already have confirmed the reference exists (or
     // is the stdin marker).
-    script_bytes(script_ref: string) -> ubyte[] is
+    script_bytes(script_ref: string) -> ARRAY[ubyte] is
         if is_stdin_marker(script_ref) then
             return read_all_stdin_bytes()
         fi
@@ -547,7 +547,7 @@ namespace Ghul.Cli is
 
         // Everything is fetched before anything is written, so a file that
         // cannot be read leaves no half-made project behind.
-        let fetched = Collections.LIST[(path: string, bytes: ubyte[])]()
+        let fetched = Collections.LIST[(path: string, bytes: ARRAY[ubyte])]()
         let source = LLVM_TOOLCHAIN.fetch(url(part.source))
 
         if let (error): ERROR = source then
@@ -1001,7 +1001,7 @@ namespace Ghul.Cli is
     // tool the build used: the build's exit status, and on success the
     // project it was built as and its output.
     build_native_script(
-        script: ubyte[],
+        script: ARRAY[ubyte],
         target: Ghul.Project.BuildTarget,
         reason: string?,
         force: bool
@@ -1130,7 +1130,7 @@ namespace Ghul.Cli is
     // Builds a script as `build_native_script` does, then runs what was
     // built.
     run_native_script(
-        script: ubyte[],
+        script: ARRAY[ubyte],
         target: Ghul.Project.BuildTarget,
         reason: string?,
         script_args: Collections.List[string],
@@ -1926,7 +1926,7 @@ namespace Ghul.Cli is
         ["run", "compile", "new", "add", "rosetta", "build", "project", "install-compiler", "install", "update", "cache", "repl", "version"]
             |> any(verb => verb =~ word)
 
-    entry(args: string[]) -> int is
+    entry(args: ARRAY[string]) -> int is
         if args.count < 1 then
             print_usage()
             return 1

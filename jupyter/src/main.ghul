@@ -4,7 +4,7 @@ namespace Ghul.Jupyter is
     use Ghul.Repl.Host.HOST_SESSIONS
     use IO.Std
 
-    entry(args: string[]) -> int is
+    entry(args: ARRAY[string]) -> int is
         if args.count < 1 then
             _write_usage()
 

@@ -20,7 +20,7 @@ namespace Ghul.Cli.Tests is
         _entry(version: string, lts: string, files: string) -> string static =>
             "{{\n        \"version\": \"{version}\",\n        \"lts\": {lts},\n        \"files\": [{files}]\n      }}"
 
-        _index(entries: string[]) -> string static =>
+        _index(entries: ARRAY[string]) -> string static =>
             "[\n      {string.join(",\n      ", entries)}\n    ]"
 
         // A Current release ahead of an LTS one: the LTS is taken, being

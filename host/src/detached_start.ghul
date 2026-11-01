@@ -9,7 +9,7 @@ namespace Ghul.Repl.Host is
     class DETACHED_START is
         init() is si
 
-        _setsid_paths: string[] static => ["/usr/bin/setsid", "/bin/setsid"]
+        _setsid_paths: ARRAY[string] static => ["/usr/bin/setsid", "/bin/setsid"]
 
         // A start for `file_name`, arguments to be added after.
         of(file_name: string) -> System.Diagnostics.ProcessStartInfo static is
