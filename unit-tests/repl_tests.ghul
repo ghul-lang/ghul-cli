@@ -292,7 +292,7 @@ namespace Ghul.Cli.Tests is
         _piped() -> CELL_INPUT => CELL_INPUT(text => _check(text), false)
 
         // Enters each line in turn and returns the step the last one took.
-        _enter(cell: CELL_INPUT, lines: string[]) -> CellStep is
+        _enter(cell: CELL_INPUT, lines: ARRAY[string]) -> CellStep is
             let step mut = CellStep.NOTHING
 
             for line in lines do

@@ -16,7 +16,7 @@ namespace Ghul.Cli.Tests is
 
         // A tools directory whose store holds a runtime under each of
         // `versions`, laid out as a .NET tool installs one.
-        _tools(versions: string[]) -> string is
+        _tools(versions: ARRAY[string]) -> string is
             let tools = Path.join([Path.get_temp_path(), "ghul-location-{System.Guid.new_guid()}"])
 
             for v in versions do

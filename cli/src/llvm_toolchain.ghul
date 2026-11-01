@@ -433,7 +433,7 @@ namespace Ghul.Cli is
         ///
         /// - archive: the archive's bytes
         /// - into: an empty directory to unpack into
-        unpack(archive: ubyte[], into: string) -> Result[string, string] static is
+        unpack(archive: ARRAY[ubyte], into: string) -> Result[string, string] static is
             let compressed = use IO.MemoryStream(archive)
             let decompressed = use System.IO.Compression.GZipStream(compressed, System.IO.Compression.CompressionMode.DECOMPRESS)
 
@@ -453,7 +453,7 @@ namespace Ghul.Cli is
         ///
         /// - content: the bytes downloaded
         /// - published: the text of the `.sha256` file
-        matches_checksum(content: ubyte[], published: string) -> bool static is
+        matches_checksum(content: ARRAY[ubyte], published: string) -> bool static is
             let expected = published.trim().split([' ', '\t'])[0].to_lower_invariant()
             let actual = System.Convert.to_hex_string(System.Security.Cryptography.SHA256.hash_data(content)).to_lower_invariant()
 
@@ -464,7 +464,7 @@ namespace Ghul.Cli is
         /// `file://` URL is read from the file it names.
         ///
         /// - url: an `http`, `https` or `file` URL
-        fetch(url: string) -> Result[ubyte[], string] static is
+        fetch(url: string) -> Result[ARRAY[ubyte], string] static is
             if url.starts_with("file://") then
                 let path = System.Uri(url).local_path
 

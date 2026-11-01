@@ -60,7 +60,7 @@ namespace Ghul.Jupyter.Tests is
             members.add((name = "version", value = JSON.quote(Ghul.Jupyter.PROTOCOL_VERSION)))
 
             return MESSAGE(
-                LIST[ubyte[]](),
+                LIST[ARRAY[ubyte]](),
                 JSON.object(members),
                 JSON.EMPTY_OBJECT,
                 JSON.EMPTY_OBJECT,
@@ -124,7 +124,7 @@ namespace Ghul.Jupyter.Tests is
             let deadline = System.DateTime.utc_now.add_seconds(60.0)
 
             while System.DateTime.utc_now < deadline do
-                let frames = Collections.LIST[ubyte[]]()
+                let frames = Collections.LIST[ARRAY[ubyte]]()
 
                 if !NetMQ.ReceivingSocketExtensions.try_receive_multipart_bytes(
                     _iopub,
@@ -160,7 +160,7 @@ namespace Ghul.Jupyter.Tests is
             let deadline = System.DateTime.utc_now.add(budget)
 
             while System.DateTime.utc_now < deadline do
-                let frames = Collections.LIST[ubyte[]]()
+                let frames = Collections.LIST[ARRAY[ubyte]]()
 
                 if !NetMQ.ReceivingSocketExtensions.try_receive_multipart_bytes(
                     _iopub,
@@ -210,7 +210,7 @@ namespace Ghul.Jupyter.Tests is
         si
 
         _saw_status(timeout: System.TimeSpan) -> bool is
-            let frames = Collections.LIST[ubyte[]]()
+            let frames = Collections.LIST[ARRAY[ubyte]]()
 
             if !NetMQ.ReceivingSocketExtensions.try_receive_multipart_bytes(
                 _iopub,

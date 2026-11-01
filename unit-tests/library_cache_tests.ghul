@@ -21,7 +21,7 @@ namespace Ghul.Cli.Tests is
         _scratch() -> string =>
             Path.combine(Path.get_temp_path(), "ghul-lc-{System.Guid.new_guid().to_string("N").substring(0, 8)}")
 
-        _git(directory: string, arguments: string[]) is
+        _git(directory: string, arguments: ARRAY[string]) is
             let result = GIT.run(LIST[string](arguments), directory)
 
             assert result.succeeded else "git {string.join(" ", arguments)} failed: {result.error}"

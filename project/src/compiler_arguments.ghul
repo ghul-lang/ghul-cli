@@ -93,7 +93,7 @@ namespace Ghul.Project is
             let result = LIST[Collections.List[string]]()
             let options = manifest.options
 
-            let add = (group: string[]) -> void => result.add(LIST[string](group))
+            let add = (group: ARRAY[string]) -> void => result.add(LIST[string](group))
 
             if let access = options.underscore_access then
                 add(["--underscore-access", access])

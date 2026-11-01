@@ -1,7 +1,7 @@
 namespace Greeter is
     use IO.Std.write_line
 
-    entry(args: string[]) is
+    entry(args: ARRAY[string]) is
         write_line(greeting(if args.count > 0 then args[0] else "world" fi))
     si
 si

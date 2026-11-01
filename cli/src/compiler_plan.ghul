@@ -114,7 +114,7 @@ namespace Ghul.Cli is
             esac
 
         /// Every kind of compiler, in the order they are refreshed.
-        all_kinds() -> CompilerKind[] static =>
+        all_kinds() -> ARRAY[CompilerKind] static =>
             [CompilerKind.MANAGED, CompilerKind.WASM, CompilerKind.NATIVE, CompilerKind.LLVM_BUILT]
 
         /// Whether the machine can hold a compiler of `kind` at all.

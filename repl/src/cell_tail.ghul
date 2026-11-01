@@ -11,8 +11,8 @@ namespace Ghul.Repl is
     // or the line before ends with an operator or a `,`. This is not a
     // parser, and says nothing useful about text that did not compile.
     class CELL_TAIL is
-        _OPENERS: string[] static => ["is", "if", "do", "case", "try", "val", "(", "[", "{{"]
-        _CLOSERS: string[] static => ["si", "fi", "od", "esac", "yrt", "lav", ")", "]", "}}"]
+        _OPENERS: ARRAY[string] static => ["is", "if", "do", "case", "try", "val", "(", "[", "{{"]
+        _CLOSERS: ARRAY[string] static => ["si", "fi", "od", "esac", "yrt", "lav", ")", "]", "}}"]
 
         of(source: string) -> string? static is
             let tokens = SOURCE_TOKENS.of(source)
@@ -125,7 +125,7 @@ namespace Ghul.Repl is
             od
         si
 
-        _index_of(words: string[], word: string) -> int static is
+        _index_of(words: ARRAY[string], word: string) -> int static is
             for i in 0..words.count do
                 if words[i] =~ word then
                     return i

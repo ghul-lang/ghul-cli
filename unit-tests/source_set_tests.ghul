@@ -60,7 +60,7 @@ namespace Ghul.Cli.Tests is
             assert actual =~ expected else "expected '{expected}', got '{actual}'"
         si
 
-        _expand(globs: string[]) -> string is
+        _expand(globs: ARRAY[string]) -> string is
             let root = _tree()
 
             try

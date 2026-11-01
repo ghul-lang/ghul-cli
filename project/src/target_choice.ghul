@@ -29,7 +29,7 @@ namespace Ghul.Project is
     /// `prefer`, the command line or `GHUL_TARGET` names it.
     class TARGET_CHOICE is
         /// The order targets are tried in where a project prefers none.
-        ORDER: BuildTarget[] static => [BuildTarget.WASM]
+        ORDER: ARRAY[BuildTarget] static => [BuildTarget.WASM]
 
         /// The target for a build of a project listing `listed`.
         ///

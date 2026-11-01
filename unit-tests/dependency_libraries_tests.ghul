@@ -36,7 +36,7 @@ namespace Ghul.Cli.Tests is
             fi
         si
 
-        _git(directory: string, arguments: string[]) is
+        _git(directory: string, arguments: ARRAY[string]) is
             let result = GIT.run(LIST[string](arguments), directory)
 
             assert result.succeeded else "git {string.join(" ", arguments)} failed: {result.error}"

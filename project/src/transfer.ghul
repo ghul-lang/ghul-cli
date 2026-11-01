@@ -11,7 +11,7 @@ namespace Ghul.Project is
         /// The body of a response, read a chunk at a time.
         ///
         /// - content: the response's content
-        read(content: System.Net.Http.HttpContent) -> ubyte[] static is
+        read(content: System.Net.Http.HttpContent) -> ARRAY[ubyte] static is
             let stream = use content.read_as_stream_async().result
             let memory = use IO.MemoryStream()
             let buffer = repeat(0ub, 65536) |> collect()

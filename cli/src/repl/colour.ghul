@@ -54,7 +54,7 @@ namespace Ghul.Cli.Repl is
                 0xCE9178, 0xD7BA7D, 0x6A9955, 0xB5CEA8, -1, -1
             ]), depth, 0xF14C4C, 0xCCA700)
 
-        _table(colours: int[]) -> LIST[int] static => LIST[int](colours)
+        _table(colours: ARRAY[int]) -> LIST[int] static => LIST[int](colours)
 
         colour(kind: TokenKind) -> int =>
             _colours[cast int(kind)]
@@ -163,7 +163,7 @@ namespace Ghul.Cli.Repl is
         si
 
         // xterm's defaults for the sixteen standard colours.
-        _sixteen: int[] static => [
+        _sixteen: ARRAY[int] static => [
             0x000000, 0xCD0000, 0x00CD00, 0xCDCD00, 0x0000EE, 0xCD00CD, 0x00CDCD, 0xE5E5E5,
             0x7F7F7F, 0xFF0000, 0x00FF00, 0xFFFF00, 0x5C5CFF, 0xFF00FF, 0x00FFFF, 0xFFFFFF
         ]

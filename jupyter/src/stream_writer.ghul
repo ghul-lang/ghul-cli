@@ -86,7 +86,7 @@ namespace Ghul.Jupyter is
 
             try
                 while _is_running do
-                    let frames mut = Collections.LIST[ubyte[]]()
+                    let frames mut = Collections.LIST[ARRAY[ubyte]]()
 
                     if NetMQ.ReceivingSocketExtensions.try_receive_multipart_bytes(
                         socket,

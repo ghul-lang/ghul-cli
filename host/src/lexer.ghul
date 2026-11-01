@@ -32,7 +32,7 @@ namespace Ghul.Repl.Host is
 
         // Control flow is coloured apart from every other keyword, as the
         // VS Code extension's grammar and ghul.dev both colour it.
-        _control_words: string[] static => [
+        _control_words: ARRAY[string] static => [
             "assert", "if", "then", "elif", "else", "fi",
             "for", "in", "while", "do", "od", "continue", "break",
             "case", "when", "default", "esac",
@@ -40,7 +40,7 @@ namespace Ghul.Repl.Host is
             "return", "yield", "await"
         ]
 
-        _keywords: string[] static => [
+        _keywords: ARRAY[string] static => [
             "namespace", "use", "class", "struct", "trait", "union", "enum",
             "partial", "impl", "is", "si",
             "val", "lav", "let", "mut",
@@ -50,13 +50,13 @@ namespace Ghul.Repl.Host is
             "new", "entry", "deconstruct", "stable"
         ]
 
-        _type_words: string[] static => [
+        _type_words: ARRAY[string] static => [
             "int", "bool", "char", "string", "object", "void",
             "byte", "ubyte", "short", "ushort", "uint", "long", "ulong",
             "word", "uword", "single", "double", "decimal", "bigint"
         ]
 
-        _constants: string[] static => ["true", "false", "null"]
+        _constants: ARRAY[string] static => ["true", "false", "null"]
 
         _operator_characters: string static => "=><!~?:&|+-*/^%\\.@#$"
 
@@ -279,7 +279,7 @@ namespace Ghul.Repl.Host is
             return true
         si
 
-        _contains(words: string[], word: string) -> bool static is
+        _contains(words: ARRAY[string], word: string) -> bool static is
             for candidate in words do
                 if candidate =~ word then
                     return true

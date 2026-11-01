@@ -12,11 +12,11 @@ namespace Ghul.Repl.Host is
         WIDTH: int static => 4
 
         // Words that end a line opening a block.
-        _openers: string[] static => ["is", "then", "else", "do", "try", "finally", "=>"]
+        _openers: ARRAY[string] static => ["is", "then", "else", "do", "try", "finally", "=>"]
 
         // Words that start a line closing a block, or starting the next
         // part of one, which sits at the level of the line that opened it.
-        _closers: string[] static => [
+        _closers: ARRAY[string] static => [
             "si", "fi", "od", "esac", "yrt", "lav",
             "else", "elif", "when", "catch", "finally"
         ]

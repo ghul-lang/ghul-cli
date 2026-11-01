@@ -8,7 +8,7 @@ namespace Ghul.Jupyter is
     // is signed is the bytes, so re-encoding a parsed form would risk
     // signing something other than what was checked.
     class MESSAGE(
-        identities: Collections.List[ubyte[]],
+        identities: Collections.List[ARRAY[ubyte]],
         header: string,
         parent_header: string,
         metadata: string,
@@ -102,7 +102,7 @@ namespace Ghul.Jupyter is
         // timeout, the frames do not make one, or the signature does not
         // match.
         try_receive(timeout: System.TimeSpan) -> MESSAGE? is
-            let frames mut = LIST[ubyte[]]()
+            let frames mut = LIST[ARRAY[ubyte]]()
 
             if !NetMQ.ReceivingSocketExtensions.try_receive_multipart_bytes(
                 _socket,
@@ -123,7 +123,7 @@ namespace Ghul.Jupyter is
         si
 
         send(message: MESSAGE) is
-            let frames = LIST[ubyte[]]()
+            let frames = LIST[ARRAY[ubyte]]()
 
             for identity in message.identities do
                 frames.add(identity)
@@ -153,14 +153,14 @@ namespace Ghul.Jupyter is
         // before it routes, and the six after it are the signature and
         // the four JSON parts. Anything else is not a message this
         // kernel can answer.
-        decode(frames: Collections.List[ubyte[]], signer: SIGNER) -> MESSAGE? static is
+        decode(frames: Collections.List[ARRAY[ubyte]], signer: SIGNER) -> MESSAGE? static is
             let delimiter_at = _index_of_delimiter(frames)
 
             if delimiter_at < 0 \/ frames.count < delimiter_at + 6 then
                 return null
             fi
 
-            let identities = LIST[ubyte[]]()
+            let identities = LIST[ARRAY[ubyte]]()
 
             for i in 0..delimiter_at do
                 identities.add(frames[i])
@@ -183,7 +183,7 @@ namespace Ghul.Jupyter is
             return message
         si
 
-        _index_of_delimiter(frames: Collections.List[ubyte[]]) -> int static is
+        _index_of_delimiter(frames: Collections.List[ARRAY[ubyte]]) -> int static is
             for i in 0..frames.count do
                 if Encoding.utf8.get_string(frames[i]) =~ DELIMITER then
                     return i

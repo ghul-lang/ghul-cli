@@ -22,9 +22,9 @@ namespace Ghul.Cli.Tests is
             return path
         si
 
-        _bytes(text: string) -> ubyte[] static => System.Text.Encoding.utf8.get_bytes(text)
+        _bytes(text: string) -> ARRAY[ubyte] static => System.Text.Encoding.utf8.get_bytes(text)
 
-        _sha256_line(content: ubyte[], name: string) -> string static =>
+        _sha256_line(content: ARRAY[ubyte], name: string) -> string static =>
             "{System.Convert.to_hex_string(System.Security.Cryptography.SHA256.hash_data(content)).to_lower_invariant()}  {name}\n"
 
         @Test()
@@ -168,7 +168,7 @@ namespace Ghul.Cli.Tests is
 
         // A release mirror over HTTP, serving the latest-release document and
         // the install script of v1.2.3, with `checksum` as its .sha256.
-        _mirror(script: ubyte[], checksum: string?) -> FEED_SERVER static is
+        _mirror(script: ARRAY[ubyte], checksum: string?) -> FEED_SERVER static is
             let server = FEED_SERVER(path is
                 if path =~ "/api/releases/latest" then
                     return _bytes("{{\"tag_name\": \"v1.2.3\"}}")

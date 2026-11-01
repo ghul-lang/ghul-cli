@@ -105,7 +105,7 @@ namespace Ghul.Cli.Tests is
     class INDENTATION_TESTS is
         init() is si
 
-        _after(lines: string[]) -> int => INDENTATION.for_next_line(LIST[string](lines))
+        _after(lines: ARRAY[string]) -> int => INDENTATION.for_next_line(LIST[string](lines))
 
         @Test()
         for_next_line__starts_the_first_line_at_the_margin() is
@@ -194,7 +194,7 @@ namespace Ghul.Cli.Tests is
     class COLOUR_CHOICE_TESTS is
         init() is si
 
-        _environment(values: string[]) -> (string) -> string? =>
+        _environment(values: ARRAY[string]) -> (string) -> string? =>
             name => (
                 for i in 0..values.count / 2 do
                     if values[2 * i] =~ name then

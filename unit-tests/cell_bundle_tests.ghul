@@ -15,7 +15,7 @@ namespace Ghul.Cli.Tests is
     class BUNDLE_PICTURE: Ghul.Renderable is
         init() is si
 
-        representations() -> Collections.Iterable[(mime: string, content: ubyte[])] pure =>
+        representations() -> Collections.Iterable[(mime: string, content: ARRAY[ubyte])] pure =>
             [
                 (mime = "image/svg+xml", content = [60ub]),
                 (mime = "image/png", content = [1ub, 2ub, 3ub]),

@@ -55,7 +55,7 @@ namespace Ghul.Cli.Tests is
 
         // A flat gzip-tar of `ghul.wasm` and `ghul.mjs`, the shape the
         // release packs: no wrapping directory, unlike the AOT archive.
-        _archive(wasm: string, loader: string) -> ubyte[] static is
+        _archive(wasm: string, loader: string) -> ARRAY[ubyte] static is
             let name = "ghul-wasm-archive-{System.Guid.new_guid().to_string("N")}"
             let scratch = Path.combine(Path.get_temp_path(), name)
             // Outside `scratch`, so taring the directory never tries to
@@ -95,7 +95,7 @@ namespace Ghul.Cli.Tests is
         install__unpacks_the_module_and_loader_straight_into_the_store() is
             let body = _archive("module bytes", "loader bytes")
 
-            let handler = (path: string) -> ubyte[]? is
+            let handler = (path: string) -> ARRAY[ubyte]? is
                 if path =~ "/v7.0.0/ghul-compiler-wasm.tar.gz" then body else null fi
             si
 
