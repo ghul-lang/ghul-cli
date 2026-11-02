@@ -77,6 +77,7 @@ namespace Ghul.Project is
     // Where a library comes from: a git repository at a tag or a branch,
     // or a directory already on disk. A dependency with both a `git` and
     // a `path` is a problem rather than a third form of this.
+    @suppress("non-pascal-case-name")
     union DEPENDENCY is
         GIT(url: string, tag: string?, branch: string?, directory: string?, version: VERSION_RANGE?);
         PATH(path: string);
