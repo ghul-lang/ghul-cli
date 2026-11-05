@@ -213,14 +213,14 @@ namespace Ghul.Project is
                 if (Path.get_file_name(Path.get_directory_name(held) ?? "") ?? "") =~ newest then
                     say("the wasmtime host {newest} is the latest")
 
-                    return OK(_)
+                    return OK(unit())
                 fi
             fi
 
             if check_only then
                 say("the wasmtime host has {newest} available")
 
-                return OK(_)
+                return OK(unit())
             fi
 
             say("updating the wasmtime host to {newest}")
@@ -258,7 +258,7 @@ namespace Ghul.Project is
                 if File.exists(Path.join([directory, "ghul-wasmtime"])) then
                     say("ghul-wasmtime {name} is already installed")
 
-                    return OK(_)
+                    return OK(unit())
                 fi
 
 
@@ -282,7 +282,7 @@ namespace Ghul.Project is
                     Directory.create_directory(directory)
                     File.move(scratch, Path.join([directory, "ghul-wasmtime"]))
 
-                    return OK(_)
+                    return OK(unit())
                 catch e: System.Exception
                     if File.exists(scratch) then
                         File.delete(scratch)

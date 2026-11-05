@@ -190,7 +190,7 @@ namespace Ghul.Cli is
     // wasm programs run under it.
     ensure_node(show: bool) -> Result[unit, string] is
         if Ghul.Project.WASM_HOST_SELECTION.resolve("node")? then
-            return OK(_)
+            return OK(unit())
         fi
 
         let store = Ghul.Project.NODE_STORE.for_this_user()
@@ -205,7 +205,7 @@ namespace Ghul.Cli is
 
         work?.finish("Node.js {LOG.version(store.highest_usable() ?? "")} installed")
 
-        return OK(_)
+        return OK(unit())
     si
 
     // The compiler the machine can actually run: the managed one where a

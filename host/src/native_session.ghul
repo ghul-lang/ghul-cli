@@ -522,7 +522,7 @@ namespace Ghul.Repl.Host is
         // terminal's.
         _start_host() -> Result[unit, string] is
             if _host? then
-                return OK(_)
+                return OK(unit())
             fi
 
             let commands = IO.Path.join([_directory, "commands"])
@@ -558,7 +558,7 @@ namespace Ghul.Repl.Host is
             _host = host
             _commands = IO.StreamWriter(IO.FileStream(commands, IO.FileMode.OPEN, IO.FileAccess.READ_WRITE))
 
-            return OK(_)
+            return OK(unit())
         si
 
         // Loads and runs one cell in the host, relaying what it prints as it

@@ -247,7 +247,7 @@ namespace Ghul.Repl.Host is
             let destination = IO.Path.join([directory, "{name}.dll"])
 
             if IO.File.exists(destination) then
-                return OK(_)
+                return OK(unit())
             fi
 
             IO.File.copy(path, destination)
@@ -261,7 +261,7 @@ namespace Ghul.Repl.Host is
 
             _analysis?.add(destination)
 
-            return OK(_)
+            return OK(unit())
         si
 
         // The request with the added assemblies referenced as well.

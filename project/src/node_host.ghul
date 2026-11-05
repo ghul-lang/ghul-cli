@@ -315,21 +315,21 @@ namespace Ghul.Project is
             if _store.is_installed(newest) then
                 say("node {newest} is the latest")
 
-                return OK(_)
+                return OK(unit())
             fi
 
             if let held: string = _store.highest_usable() then
                 if NODE_RUNTIME.compare_versions(newest, held) <= 0 then
                     say("node {held} is the latest")
 
-                    return OK(_)
+                    return OK(unit())
                 fi
             fi
 
             if check_only then
                 say("node has {newest} available")
 
-                return OK(_)
+                return OK(unit())
             fi
 
             say("updating node to {newest}")
@@ -370,7 +370,7 @@ namespace Ghul.Project is
             if _store.is_installed(name) then
                 say("node {name} is already installed")
 
-                return OK(_)
+                return OK(unit())
             fi
 
             let sums = _get("{base()}/v{name}/SHASUMS256.txt")
@@ -438,7 +438,7 @@ namespace Ghul.Project is
 
                 IO.File.write_all_bytes(destination, bytes)
 
-                return OK(_)
+                return OK(unit())
             catch e: System.Exception
                 if File.exists(destination) then
                     File.delete(destination)
@@ -490,7 +490,7 @@ namespace Ghul.Project is
                 catch e: IO.IOException
                     // Another process finished the same release first: its
                     // copy is complete, and ours is redundant.
-                    return OK(_)
+                    return OK(unit())
                 yrt
 
                 if !System.OperatingSystem.is_windows() then
@@ -501,7 +501,7 @@ namespace Ghul.Project is
                     fi
                 fi
 
-                return OK(_)
+                return OK(unit())
             finally
                 _delete_directory(unpacked_directory)
             yrt
@@ -554,7 +554,7 @@ namespace Ghul.Project is
                 if archive.ends_with(".zip") then
                     System.IO.Compression.ZipFile.extract_to_directory(archive, destination, true)
 
-                    return OK(_)
+                    return OK(unit())
                 fi
 
                 let input = use FileStream(archive, FileMode.OPEN, FileAccess.READ, FileShare.NONE)
@@ -562,7 +562,7 @@ namespace Ghul.Project is
 
                 TarFile.extract_to_directory(gzip, destination, true)
 
-                return OK(_)
+                return OK(unit())
             catch e: System.Exception
                 return ERROR("the node archive could not be read ({e.get_type().name})")
             yrt

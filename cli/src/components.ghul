@@ -79,7 +79,7 @@ namespace Ghul.Cli is
                 return ERROR(error)
             fi
 
-            return OK(_)
+            return OK(unit())
         si
     si
 
@@ -127,7 +127,7 @@ namespace Ghul.Cli is
                 say("ghul: cannot fetch the cell host: {error}")
             fi
 
-            return OK(_)
+            return OK(unit())
         si
     si
 

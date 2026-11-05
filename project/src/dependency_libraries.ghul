@@ -85,7 +85,7 @@ namespace Ghul.Project is
                 fi
             od
 
-            return OK(_)
+            return OK(unit())
         si
 
         _visit(name: string, declared: DEPENDENCY, directory: string, from: string) -> Result[unit, string] is
@@ -108,7 +108,7 @@ namespace Ghul.Project is
                     return ERROR("{name} is declared both at {seen} and at {root}")
                 fi
 
-                return OK(_)
+                return OK(unit())
             fi
 
             let manifest_path = MANIFEST_LOCATION.find_in(root)
@@ -148,7 +148,7 @@ namespace Ghul.Project is
                     root,
                     SOURCE_SET.expand(root, manifest.sources)))
 
-            return OK(_)
+            return OK(unit())
         si
 
         // The release a git dependency is read at: its tag, or the newest
