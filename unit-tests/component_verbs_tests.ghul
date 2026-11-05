@@ -47,7 +47,7 @@ namespace Ghul.Cli.Tests is
             newest_flags.add(is_newest)
             held = version
 
-            return OK(_)
+            return OK(unit())
         si
     si
 

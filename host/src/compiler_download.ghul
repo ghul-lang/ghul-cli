@@ -160,7 +160,7 @@ namespace Ghul.Repl.Host is
                         _delete_directory(scratch_directory)
                     yrt
 
-                    return OK(_)
+                    return OK(unit())
                 finally
                     _delete_directory(scratch_directory)
                 yrt
@@ -186,7 +186,7 @@ namespace Ghul.Repl.Host is
 
                 File.copy(path, destination, true)
 
-                return OK(_)
+                return OK(unit())
             fi
 
             let client = System.Net.Http.HttpClient()
@@ -202,7 +202,7 @@ namespace Ghul.Repl.Host is
 
                 File.write_all_bytes(destination, bytes)
 
-                return OK(_)
+                return OK(unit())
             catch e: System.Exception
                 return ERROR("ghul.compiler {version} could not be downloaded ({e.get_type().name})")
             finally
@@ -252,7 +252,7 @@ namespace Ghul.Repl.Host is
                     yrt
                 od
 
-                return OK(_)
+                return OK(unit())
             catch e: System.Exception
                 return ERROR("the ghul.compiler package could not be read ({e.get_type().name})")
             finally

@@ -86,7 +86,7 @@ namespace Ghul.Repl.Host is
                         _delete_directory(scratch_directory)
                     yrt
 
-                    return OK(_)
+                    return OK(unit())
                 finally
                     _delete_directory(scratch_directory)
                 yrt
@@ -112,7 +112,7 @@ namespace Ghul.Repl.Host is
 
                 File.write_all_bytes(destination, bytes)
 
-                return OK(_)
+                return OK(unit())
             catch e: System.Exception
                 return ERROR("the wasm-built compiler for ghul.compiler {version} could not be downloaded ({e.get_type().name})")
             finally
@@ -133,7 +133,7 @@ namespace Ghul.Repl.Host is
                 try
                     TarFile.extract_to_directory(gzip, destination, true)
 
-                    return OK(_)
+                    return OK(unit())
                 finally
                     gzip.dispose()
                 yrt

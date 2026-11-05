@@ -25,9 +25,9 @@ namespace Ghul.Cli is
                 // running needs Node, or the wasmtime host where that is
                 // named.
                 if !_will_run then
-                    OK(_)
+                    OK(unit())
                 elif Ghul.Project.WASM_HOST_SELECTION.chosen_for_wasm(_manifest_host_wasm, _global_host_wasm) then
-                    OK(_)
+                    OK(unit())
                 else
                     ERROR(no_node())
                 fi
@@ -57,7 +57,7 @@ namespace Ghul.Cli is
             let named = System.Environment.get_environment_variable("GHUL_LLVM")
 
             if named? /\ named.length > 0 then
-                return OK(_)
+                return OK(unit())
             fi
 
             let triple = LLVM_TOOLCHAIN.triple()
@@ -69,14 +69,14 @@ namespace Ghul.Cli is
             let toolchain = LLVM_TOOLCHAIN.for_this_user()
 
             if toolchain.has_any(triple) then
-                return OK(_)
+                return OK(unit())
             fi
 
             if let (problem): Result.ERROR = toolchain.fetch_problem() then
                 return ERROR("ghul-llvm cannot be fetched: {problem}")
             fi
 
-            return OK(_)
+            return OK(unit())
         si
     si
 si
