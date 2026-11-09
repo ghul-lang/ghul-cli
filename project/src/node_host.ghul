@@ -417,13 +417,13 @@ namespace Ghul.Project is
             let client = use System.Net.Http.HttpClient()
 
             try
-                let response = use client.get_async(url).result
+                let answer = TRANSFER.get(client, url)
 
-                if !response.is_success_status_code then
-                    return ERROR("node {version} has no release file for this platform (HTTP {cast int(response.status_code)})")
+                if !answer.is_success then
+                    return ERROR("node {version} has no release file for this platform (HTTP {answer.status})")
                 fi
 
-                let bytes = TRANSFER.read(response.content)
+                let bytes = answer.body!
 
                 if bytes.count == 0 then
                     return ERROR("node {version} downloaded no bytes")
@@ -572,13 +572,13 @@ namespace Ghul.Project is
             let client = use System.Net.Http.HttpClient()
 
             try
-                let response = use client.get_async(url).result
+                let answer = TRANSFER.get(client, url)
 
-                if !response.is_success_status_code then
-                    return ERROR("{url} answered HTTP {cast int(response.status_code)}")
+                if !answer.is_success then
+                    return ERROR("{url} answered HTTP {answer.status}")
                 fi
 
-                return OK(response.content.read_as_string_async().result)
+                return OK(answer.text)
             catch e: System.Exception
                 return ERROR("{url} could not be read ({e.get_type().name})")
             yrt

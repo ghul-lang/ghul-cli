@@ -59,13 +59,13 @@ namespace Ghul.Repl.Host is
                     text = File.read_all_text(path)
                 else
                     try
-                        let response = client.get_async(url).result
+                        let answer = Ghul.Project.TRANSFER.get(client, url)
 
-                        if !response.is_success_status_code then
-                            return ERROR("the feed at {url} answered HTTP {cast int(response.status_code)}")
+                        if !answer.is_success then
+                            return ERROR("the feed at {url} answered HTTP {answer.status}")
                         fi
 
-                        text = response.content.read_as_string_async().result
+                        text = answer.text
                     catch e: System.Exception
                         return ERROR("the feed at {url} could not be read ({e.get_type().name})")
                     yrt
@@ -192,13 +192,13 @@ namespace Ghul.Repl.Host is
             let client = System.Net.Http.HttpClient()
 
             try
-                let response = client.get_async(url).result
+                let answer = Ghul.Project.TRANSFER.get(client, url)
 
-                if !response.is_success_status_code then
-                    return ERROR("ghul.compiler {version} is not on the feed (HTTP {cast int(response.status_code)})")
+                if !answer.is_success then
+                    return ERROR("ghul.compiler {version} is not on the feed (HTTP {answer.status})")
                 fi
 
-                let bytes = Ghul.Project.TRANSFER.read(response.content)
+                let bytes = answer.body!
 
                 File.write_all_bytes(destination, bytes)
 
