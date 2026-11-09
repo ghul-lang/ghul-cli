@@ -149,7 +149,7 @@ namespace Ghul.Project is
         // The commit a tag points at, peeled through an annotated tag.
         _resolve_tag(url: string, tag: string) -> Result[(directory: string, commit: string), string] is
             let tag_ref = "refs/tags/{tag}"
-            let result = GIT.run(LIST[string](["ls-remote", url, tag_ref, "{tag_ref}^{{}}"]), null)
+            let result = GIT.run_with_retries(LIST[string](["ls-remote", url, tag_ref, "{tag_ref}^{{}}"]), null, () is si)
 
             if !result.succeeded then
                 return ERROR("cannot read {url}: {result.error.trim()}")
@@ -186,9 +186,10 @@ namespace Ghul.Project is
             let scratch = Path.join([repository, ".tmp-{System.Guid.new_guid().to_string("N").substring(0, 8)}"])
 
             try
-                let cloned = GIT.run(
+                let cloned = GIT.run_with_retries(
                     LIST[string](["-c", "advice.detachedHead=false", "-c", "core.longpaths=true", "clone", "--quiet", "--depth", "1", "--branch", tag, url, scratch]),
-                    null)
+                    null,
+                    () is _delete(scratch); si)
 
                 if !cloned.succeeded then
                     return ERROR("cannot fetch {tag} from {url}: {cloned.error.trim()}")

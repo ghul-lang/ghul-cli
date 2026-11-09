@@ -1,0 +1,186 @@
+namespace Ghul.Cli.Tests is
+    use Collections.LIST
+    use Ghul.Pipes.collect
+    use Ghul.Pipes.repeat
+
+    use Ghul.Project.GIT
+    use Ghul.Project.TRANSFER
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // Asking again where a server fails, against a local server that answers
+    // from a script: nothing here reaches the network.
+    @TestClass()
+    class TRANSFER_TESTS is
+        init() is si
+
+        _get(server: SCRIPTED_SERVER) -> Ghul.Project.HTTP_ANSWER is
+            TRANSFER.retry_delay_milliseconds = 1
+
+            let client = System.Net.Http.HttpClient()
+
+            try
+                return TRANSFER.get(client, server.url())
+            finally
+                client.dispose()
+                server.stop()
+            yrt
+        si
+
+        @Test()
+        get__asks_again_after_a_server_error() is
+            let server = SCRIPTED_SERVER([(503, "", -1), (200, "body", -1)])
+
+            let answer = _get(server)
+
+            assert answer.is_success /\ answer.text =~ "body";
+            assert server.requests == 2;
+        si
+
+        @Test()
+        get__answers_a_not_found_without_asking_again() is
+            let server = SCRIPTED_SERVER([(404, "", -1), (200, "body", -1)])
+
+            let answer = _get(server)
+
+            assert !answer.is_success /\ answer.status == 404;
+            assert server.requests == 1;
+        si
+
+        // A body that stops short of the length its answer gave is not
+        // taken for the whole of it.
+        @Test()
+        get__asks_again_where_a_body_stops_short() is
+            let server = SCRIPTED_SERVER([(200, "par", 10), (200, "whole body", -1)])
+
+            let answer = _get(server)
+
+            assert answer.is_success /\ answer.text =~ "whole body";
+            assert server.requests == 2;
+        si
+
+        @Test()
+        get__gives_up_on_a_server_that_keeps_failing() is
+            let server = SCRIPTED_SERVER([(503, "", -1)])
+
+            let answer = _get(server)
+
+            assert !answer.is_success /\ answer.status == 503;
+            assert server.requests == TRANSFER.attempts;
+        si
+
+        @Test()
+        get__throws_where_nothing_answers() is
+            TRANSFER.retry_delay_milliseconds = 1
+
+            let listener = System.Net.Sockets.TcpListener(System.Net.IPAddress.loopback, 0)
+            listener.start()
+            let port = (cast System.Net.IPEndPoint?(listener.local_endpoint))?.port ?? 0
+            listener.stop()
+
+            let client = System.Net.Http.HttpClient()
+            let threw mut = false
+
+            try
+                TRANSFER.get(client, "http://127.0.0.1:{port}/")
+            catch e: System.Exception
+                threw = true
+            finally
+                client.dispose()
+            yrt
+
+            assert threw;
+        si
+
+        @Test()
+        is_transient_failure__recognises_what_the_network_and_server_cause() is
+            assert GIT.is_transient_failure("fatal: unable to access 'https://github.com/x/y/': Could not resolve host: github.com");
+            assert GIT.is_transient_failure("error: RPC failed; HTTP 502 curl 22 The requested URL returned error: 502");
+            assert GIT.is_transient_failure("fatal: early EOF");
+        si
+
+        @Test()
+        is_transient_failure__leaves_out_what_another_attempt_cannot_change() is
+            assert !GIT.is_transient_failure("warning: Could not find remote branch v9.9.9 to clone.\nfatal: Remote branch v9.9.9 not found in upstream origin");
+            assert !GIT.is_transient_failure("fatal: repository 'https://github.com/x/missing/' not found");
+        si
+    si
+
+    // Answers each request with the next entry of a script - a status, a
+    // body, and the length to claim for it, or -1 for its own length - and
+    // keeps answering with the last entry once the script runs out.
+    class SCRIPTED_SERVER is
+        _script: LIST[(int, string, int)]
+        _listener: System.Net.Sockets.TcpListener
+
+        requests: int public
+
+        init(script: ARRAY[(int, string, int)]) is
+            _script = LIST[(int, string, int)](script)
+            _listener = System.Net.Sockets.TcpListener(System.Net.IPAddress.loopback, 0)
+            _listener.start()
+
+            let thread =
+                System.Threading.Thread(
+                    () -> void is
+                        do
+                            try
+                                _answer(_listener.accept_tcp_client())
+                            catch e: System.Exception
+                                return
+                            yrt
+                        od
+                    si)
+
+            thread.is_background = true
+            thread.start()
+        si
+
+        url() -> string is
+            let endpoint = cast System.Net.IPEndPoint?(_listener.local_endpoint)
+
+            return "http://127.0.0.1:{endpoint?.port ?? 0}/"
+        si
+
+        stop() is
+            _listener.stop()
+        si
+
+        _answer(client: System.Net.Sockets.TcpClient) is
+            try
+                let stream = client.get_stream()
+                let buffer = repeat(0ub, 1024) |> collect()
+                let header mut = ""
+
+                while !header.contains("\r\n\r\n") do
+                    let read = stream.read(buffer, 0, buffer.count)
+
+                    if read == 0 then
+                        client.close()
+                        return
+                    fi
+
+                    header = "{header}{System.Text.Encoding.utf8.get_string(buffer, 0, read)}"
+                od
+
+                let index = if requests < _script.count then requests else _script.count - 1 fi
+                let (status, text, claimed) = _script[index]
+
+                requests = requests + 1
+
+                let body = System.Text.Encoding.utf8.get_bytes(text)
+                let length = if claimed >= 0 then claimed else body.count fi
+
+                let head = System.Text.Encoding.utf8.get_bytes(
+                    "HTTP/1.1 {status} Scripted\r\nContent-Type: application/octet-stream\r\nConnection: close\r\nContent-Length: {length}\r\n\r\n")
+
+                stream.write(head, 0, head.count)
+                stream.write(body, 0, body.count)
+
+                client.close()
+            catch e: System.Exception
+            yrt
+        si
+    si
+si

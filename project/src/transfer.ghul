@@ -8,7 +8,76 @@ namespace Ghul.Project is
         /// the response does not say. Set by whatever draws progress.
         handler: ((long, long) -> void)? static;
 
-        /// The body of a response, read a chunk at a time.
+        /// How long to wait before a request is made again, in milliseconds;
+        /// each later wait is twice the one before.
+        retry_delay_milliseconds: int static public
+
+        /// How many times a request is made before its failure is reported.
+        attempts: int static => 5
+
+        init() static is
+            retry_delay_milliseconds = 1000
+        si
+
+        /// GETs `url` and reads its body whole. See `send`.
+        ///
+        /// - client: the client to send with
+        /// - url: what to get
+        get(client: System.Net.Http.HttpClient, url: string) -> HTTP_ANSWER static =>
+            send(client, () => System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.get, url))
+
+        /// Sends a request and reads its answer's body whole. The request is
+        /// made again, waiting longer each time, where the server answers
+        /// with an error of its own, a request timeout or too many requests
+        /// (5xx, 408, 429), where there is no answer at all, and where the
+        /// body stops short of the length the answer gave. Any other answer
+        /// is the caller's to read. Throws what the last attempt threw where
+        /// every attempt failed with no answer.
+        ///
+        /// - client: the client to send with
+        /// - request: makes the request, once for each attempt, since a
+        ///   request can be sent only once
+        send(
+            client: System.Net.Http.HttpClient,
+            request: () -> System.Net.Http.HttpRequestMessage
+        ) -> HTTP_ANSWER static is
+            let delay mut = retry_delay_milliseconds
+
+            for attempt in 1::attempts do
+                try
+                    let response = use client.send_async(request(), System.Net.Http.HttpCompletionOption.RESPONSE_HEADERS_READ).result
+                    let status = cast int(response.status_code)
+
+                    if response.is_success_status_code then
+                        return HTTP_ANSWER(status, read(response.content))
+                    fi
+
+                    if !is_transient(status) \/ attempt == attempts then
+                        return HTTP_ANSWER(status, null)
+                    fi
+                catch e: System.Exception
+                    if attempt == attempts then
+                        throw e
+                    fi
+                yrt
+
+                System.Threading.Thread.sleep(delay)
+
+                delay = delay * 2
+            od
+
+            throw System.InvalidOperationException("no attempt was made")
+        si
+
+        /// Whether an answer with `status` is worth asking again for: an error
+        /// of the server's own, a request timeout, or too many requests.
+        ///
+        /// - status: the HTTP status the server answered with
+        is_transient(status: int) -> bool static =>
+            status >= 500 \/ status == 408 \/ status == 429
+
+        /// The body of a response, read a chunk at a time. Throws where it
+        /// ends before the length the response gave.
         ///
         /// - content: the response's content
         read(content: System.Net.Http.HttpContent) -> ARRAY[ubyte] static is
@@ -31,7 +100,21 @@ namespace Ghul.Project is
                 read = stream.read(buffer, 0, buffer.count)
             od
 
+            if total > 0L /\ got != total then
+                throw IO.IOException("the answer ended after {got} of its {total} bytes")
+            fi
+
             return memory.to_array()
         si
+    si
+
+    /// What a request was answered with: the HTTP status, and the body,
+    /// read whole, where the status says it succeeded.
+    class HTTP_ANSWER(status: int public, body: ARRAY[ubyte]? public) is
+        /// Whether the answer has a body: its status says it succeeded.
+        is_success: bool => body?
+
+        /// The body as UTF-8 text, or empty where there is none.
+        text: string => if let b = body then System.Text.Encoding.utf8.get_string(b) else "" fi
     si
 si

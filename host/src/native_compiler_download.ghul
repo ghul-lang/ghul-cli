@@ -143,13 +143,13 @@ namespace Ghul.Repl.Host is
             let client = System.Net.Http.HttpClient()
 
             try
-                let response = client.get_async(url).result
+                let answer = Ghul.Project.TRANSFER.get(client, url)
 
-                if !response.is_success_status_code then
-                    return ERROR("ghul.compiler {version} has no {kind()} compiler for this platform (HTTP {cast int(response.status_code)})")
+                if !answer.is_success then
+                    return ERROR("ghul.compiler {version} has no {kind()} compiler for this platform (HTTP {answer.status})")
                 fi
 
-                let bytes = Ghul.Project.TRANSFER.read(response.content)
+                let bytes = answer.body!
 
                 File.write_all_bytes(destination, bytes)
 

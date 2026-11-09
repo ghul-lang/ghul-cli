@@ -202,13 +202,13 @@ namespace Ghul.Cli is
                 // GitHub's API refuses a request that names no client.
                 client.default_request_headers.user_agent.parse_add("ghul-cli")
 
-                let response = client.get_async(url).result
+                let answer = Ghul.Project.TRANSFER.get(client, url)
 
-                if !response.is_success_status_code then
-                    return ERROR("{url} answered HTTP {cast int(response.status_code)}")
+                if !answer.is_success then
+                    return ERROR("{url} answered HTTP {answer.status}")
                 fi
 
-                return OK(Ghul.Project.TRANSFER.read(response.content))
+                return OK(answer.body!)
             catch e: System.Exception
                 return ERROR("{url} could not be read ({e.get_type().name})")
             finally

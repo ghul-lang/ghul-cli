@@ -49,5 +49,61 @@ namespace Ghul.Project is
 
             return GIT_RESULT.not_run("git could not be started")
         si
+
+        /// Runs `git` as `run` does, again where it fails in a way that
+        /// another attempt could get past - no connection, a timeout, a
+        /// server error, a transfer cut short - waiting longer each time, as
+        /// `TRANSFER.send` does for a request.
+        ///
+        /// - arguments: everything after `git` on the command line
+        /// - directory: the working directory, or null for the current one
+        /// - before_retry: undoes what a failed attempt left behind
+        run_with_retries(arguments: Collections.List[string], directory: string?, before_retry: () -> void) -> GIT_RESULT static is
+            let delay mut = TRANSFER.retry_delay_milliseconds
+            let result mut = run(arguments, directory)
+            let attempt mut = 1
+
+            while !result.succeeded /\ attempt < TRANSFER.attempts /\ is_transient_failure(result.error) do
+                System.Threading.Thread.sleep(delay)
+
+                delay = delay * 2
+                attempt = attempt + 1
+
+                before_retry()
+
+                result = run(arguments, directory)
+            od
+
+            return result
+        si
+
+        /// Whether what `git` wrote on failing says the network or the server
+        /// failed it, rather than the repository or the request.
+        ///
+        /// - error: what `git` wrote to its standard error
+        is_transient_failure(error: string) -> bool static is
+            let text = error.to_lower_invariant()
+
+            for sign in [
+                "could not resolve host",
+                "failed to connect",
+                "timed out",
+                "connection reset",
+                "early eof",
+                "rpc failed",
+                "unexpected disconnect",
+                "remote end hung up",
+                "the requested url returned error: 5",
+                "the requested url returned error: 429",
+                "gnutls",
+                "ssl"
+            ] do
+                if text.contains(sign) then
+                    return true
+                fi
+            od
+
+            return false
+        si
     si
 si
