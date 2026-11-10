@@ -70,7 +70,8 @@ namespace Ghul.Cli.Tests is
         @Test()
         the_llvm_built_compiler__is_chosen_by_the_manifest_and_only_where_it_is_published() is
             assert _order("linux-x64", true, true, false, null, true) =~ "LLVM_BUILT"
-            assert _order("linux-arm64", true, true, false, null, true) =~ "problem: there is no llvm-built compiler for linux-arm64"
+            assert _order("linux-arm64", true, true, false, null, true) =~ "LLVM_BUILT"
+            assert _order("osx-arm64", true, true, false, null, true) =~ "problem: there is no llvm-built compiler for osx-arm64"
         si
     si
 si
