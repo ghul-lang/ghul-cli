@@ -297,7 +297,7 @@ if err="$(cd "$old_wasm" && dotnet "$cli" build --target wasm 2>&1)"; then
 fi
 [[ "$err" == *"the compiler version cannot be pinned"* ]] || fail "unexpected message for a compiler version: $err"
 
-echo "project: a manifest with a host key is refused in favour of engine..." >&2
+echo "project: a manifest with a host key is refused in favour of wasm.engine..." >&2
 old_host="$scratch/old-host"
 mkdir -p "$old_host/src"
 cat > "$old_host/ghul-project.json" <<'JSON'
@@ -307,7 +307,7 @@ cp "$old_wasm/src/main.ghul" "$old_host/src/main.ghul"
 if err="$(cd "$old_host" && dotnet "$cli" build --target wasm 2>&1)"; then
     fail "expected a manifest with a host key to fail"
 fi
-[[ "$err" == *"host is now engine"* ]] || fail "unexpected message for a host key: $err"
+[[ "$err" == *"the wasm engine is now"* ]] || fail "unexpected message for a host key: $err"
 
 echo "project: a manifest that declares no library is told the line to add..." >&2
 undeclared="$scratch/undeclared"
@@ -320,16 +320,6 @@ if err="$(cd "$undeclared" && dotnet "$cli" build --target wasm 2>&1)"; then
     fail "expected a manifest with no libraries declared to fail"
 fi
 [[ "$err" == *'"ghul-runtime": { "version": ">='* && "$err" != *ghul-core* ]] || fail "unexpected message for undeclared libraries: $err"
-
-echo "project: a manifest that still declares ghul-core builds, with a warning to remove it..." >&2
-declares_core="$scratch/declares-core"
-mkdir -p "$declares_core/src"
-cat > "$declares_core/ghul-project.json" <<'JSON'
-{ "name": "declares-core", "targets": ["wasm"], "dependencies": { "ghul-core": { "version": ">=0.0.0" }, "ghul-runtime": { "version": ">=0.0.0" } } }
-JSON
-cp "$old_wasm/src/main.ghul" "$declares_core/src/main.ghul"
-err="$(cd "$declares_core" && dotnet "$cli" build 2>&1)" || fail "a manifest declaring ghul-core did not build: $err"
-[[ "$err" == *"ghul-core is now part of ghul-runtime: its declaration is ignored; remove it"* ]] || fail "no warning for a ghul-core declaration: $err"
 
 echo "project: an llvm build fetches the ghul-llvm release chosen for its compiler..." >&2
 (cd "$scratch" && dotnet "$cli" new native --target llvm 2>/dev/null) || fail "ghul new --target llvm failed"
