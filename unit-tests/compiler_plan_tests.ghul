@@ -28,10 +28,11 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        a_machine_with_dotnet__uses_the_managed_compiler() is
-            assert _order("linux-x64", true, false, false, null) =~ "MANAGED"
-            assert _order("linux-arm64", true, true, false, null) =~ "MANAGED"
-            assert _order("osx-arm64", true, true, false, null) =~ "MANAGED"
+        a_machine_with_dotnet__chooses_as_one_without_it_does() is
+            assert _order("linux-x64", true, false, false, null) =~ "LLVM_BUILT WASM"
+            assert _order("linux-arm64", true, true, false, null) =~ "LLVM_BUILT WASM"
+            assert _order("osx-arm64", true, true, false, null) =~ "WASM"
+            assert _order("win-x64", true, true, false, null) =~ "WASM"
         si
 
         @Test()
@@ -57,9 +58,15 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        a_machine_with_dotnet__keeps_the_managed_compiler_where_an_llvm_built_one_is_published() is
-            assert _order("linux-x64", true, true, true, null) =~ "MANAGED"
-            assert _order("linux-arm64", true, false, false, null) =~ "MANAGED"
+        a_machine_with_dotnet__takes_the_llvm_built_compiler_where_one_is_published() is
+            assert _order("linux-x64", true, true, true, null) =~ "LLVM_BUILT WASM"
+            assert _order("linux-arm64", true, false, false, null) =~ "LLVM_BUILT WASM"
+        si
+
+        @Test()
+        the_managed_compiler__is_used_only_where_it_is_named() is
+            assert !(_order("linux-x64", true, true, false, null).contains("MANAGED"))
+            assert !(_order("osx-arm64", true, true, false, null).contains("MANAGED"))
         si
 
         @Test()
