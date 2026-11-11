@@ -189,7 +189,10 @@ looks for them.
   packages. POSIX `sh`, `tar`, and `curl` or `wget`, and nothing else —
   no SDK, no runtime, no build tooling, since the two binaries are
   statically linked and run on the C library alone. `GHUL_CLI_RELEASES`
-  and `GHUL_CLI_API` name another base for a mirror or a test. The tool is
+  and `GHUL_CLI_API` name another base for a mirror or a test, and
+  `GHUL_CLI_RELEASES_INDEX` the recent-releases list it reads where the
+  latest release has no archive for the platform (the arm64 one is optional
+  for a release), to install the newest release that has. The tool is
   installed to `~/.local/opt/ghul` and the compiler it ships is copied into
   the compiler store the tool reads, which is the same single place every
   other compiler goes, so there is one cache to clear and one directory to

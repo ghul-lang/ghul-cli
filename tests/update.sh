@@ -102,6 +102,32 @@ if out="$("$installed" update --version "v$running" 2>&1)"; then
 fi
 grep -q "update takes no version" <<< "$out" || fail "expected --version to be refused with a message, got: $out"
 
+# A release whose build for this platform did not succeed carries the install
+# script but no archive for it.
+lacking="98.0.0"
+mkdir -p "$mirror/download/v$lacking"
+cp "$repo_root/install.sh" "$mirror/download/v$lacking/ghul-cli-install.sh"
+(cd "$mirror/download/v$lacking" && sha256sum ghul-cli-install.sh > ghul-cli-install.sh.sha256)
+
+latest "v$lacking"
+
+echo "update: a latest release with no build for this platform leaves the tool as it is..." >&2
+out="$("$installed" update 2>&1)" || fail "'ghul update' failed: $out"
+grep -q "has no build for $rid" <<< "$out" || fail "expected update to say the latest release has no build for $rid, got: $out"
+"$installed" version | grep -q "ghul $running" || fail "an update to a release with no build changed the installed tool"
+
+echo "update: install.sh installs the newest release that has a build for this platform..." >&2
+index="$scratch/releases-index.json"
+printf '[{"tag_name": "v%s", "assets": []}, {"tag_name": "v%s", "assets": [{"browser_download_url": "https://github.com/ghul-lang/ghul-cli/releases/download/v%s/ghul-cli-%s.tar.gz"}]}]\n' \
+    "$lacking" "$running" "$running" "$rid" > "$index"
+GHUL_CLI_RELEASES_INDEX="file://$index" sh "$repo_root/install.sh" --dir "$scratch/fallback" > "$scratch/fallback.out" 2>&1 || {
+    cat "$scratch/fallback.out" >&2
+    fail "install.sh could not fall back from a release with no build for $rid"
+}
+grep -q "installing v$running, the newest release built for $rid" "$scratch/fallback.out" \
+    || fail "expected install.sh to say it installs v$running, got: $(cat "$scratch/fallback.out")"
+"$scratch/fallback/ghul" version | grep -q "ghul $running" || fail "the fallback install is not ghul $running"
+
 latest "v$newer"
 
 echo "update: --check reports a newer release and changes nothing..." >&2

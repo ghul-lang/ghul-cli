@@ -31,7 +31,9 @@ usage() {
     cat <<EOF
 usage: install.sh [--version <tag>] [--dir <path>] [--no-node] [--dry-run] [--help]
 
-  --version <tag>   the ghul-cli release to install, 'latest' by default
+  --version <tag>   the ghul-cli release to install, 'latest' by default;
+                    where the latest has no archive for this platform, the
+                    newest release that has one
   --dir <path>      where to install it, ${DEFAULT_ROOT} by default
   --no-node         do not fetch Node.js where no usable one is found
   --dry-run         report what would happen and install nothing
@@ -165,6 +167,9 @@ fi
 # from elsewhere. The same shape as GHUL_COMPILER_FEED in the tool itself.
 downloads="${GHUL_CLI_RELEASES:-https://github.com/${REPOSITORY}/releases/download}"
 api="${GHUL_CLI_API:-https://api.github.com/repos/${REPOSITORY}}"
+# The recent releases, newest first, to find one built for this platform where
+# the latest is not.
+releases_index="${GHUL_CLI_RELEASES_INDEX:-${api}/releases?per_page=30}"
 
 if [ "${version}" = "latest" ]; then
     say "looking up the latest ${REPOSITORY} release..."
@@ -177,6 +182,21 @@ if [ "${version}" = "latest" ]; then
 
     if [ -z "${version}" ]; then
         fail "the latest release of ${REPOSITORY} could not be read"
+    fi
+
+    # A release can come without the arm64 archive, where its arm64 build did
+    # not succeed; the newest release that has one is installed instead.
+    if ! fetch "${downloads}/${version}/ghul-cli-${rid}.tar.gz.sha256" /dev/null 2>/dev/null; then
+        say "the latest release, ${version}, has no ghul-cli-${rid}.tar.gz; looking for the newest that has..."
+        index="$(fetch_to_stdout "${releases_index}")" || fail "the releases of ${REPOSITORY} could not be read"
+        found=$(printf '%s' "${index}" | grep -o "\"browser_download_url\": *\"[^\"]*/ghul-cli-${rid}.tar.gz\"" | head -n 1 | sed 's|.*"\([^"]*\)"$|\1|')
+
+        if [ -z "${found}" ]; then
+            fail "no recent release of ${REPOSITORY} has ghul-cli-${rid}.tar.gz"
+        fi
+
+        version=$(printf '%s' "${found}" | sed 's|.*/download/\([^/]*\)/[^/]*$|\1|')
+        say "installing ${version}, the newest release built for ${rid}"
     fi
 fi
 

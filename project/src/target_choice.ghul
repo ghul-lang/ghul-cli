@@ -62,10 +62,16 @@ namespace Ghul.Project is
                 return CHOSEN_TARGET(listed[0], null, null)
             fi
 
+            return _first_buildable(_order(listed, prefer), availability, "the targets the manifest lists")
+        si
+
+        // The first of `order` the machine can build, with why where those
+        // before it could not be; `what` names the targets in the problem.
+        _first_buildable(order: Collections.List[BuildTarget], availability: TargetAvailability, what: string) -> CHOSEN_TARGET static is
             let reasons = LIST[string]()
             let per_target = LIST[string]()
 
-            for target in _order(listed, prefer) do
+            for target in order do
                 if let (why): Result.ERROR = availability.why_not(target) then
                     reasons.add(why)
                     per_target.add("{BUILD_TARGETS.name(target)}: {why}")
@@ -84,7 +90,31 @@ namespace Ghul.Project is
                 return CHOSEN_TARGET(target, reason, null)
             od
 
-            return CHOSEN_TARGET(null, null, "none of the targets the manifest lists can be built here: {string.join("; ", per_target)}")
+            return CHOSEN_TARGET(null, null, "none of {what} can be built here: {string.join("; ", per_target)}")
+        si
+
+        /// The target for a script, which has no manifest: the one
+        /// `GHUL_TARGET` names, or otherwise the first target in order the
+        /// machine can build.
+        ///
+        /// - named: the target the environment names, or null
+        /// - availability: what this machine can build
+        for_script(named: string?, availability: TargetAvailability) -> CHOSEN_TARGET static is
+            let all = LIST[BuildTarget]([BuildTarget.WASM, BuildTarget.LLVM])
+
+            if let name: string = named then
+                if BUILD_TARGETS.is_dotnet(name) then
+                    return CHOSEN_TARGET(null, null, BUILD_TARGETS.DOTNET_UNSUPPORTED)
+                fi
+
+                if let target = BUILD_TARGETS.named(name) then
+                    return CHOSEN_TARGET(target, null, null)
+                fi
+
+                return CHOSEN_TARGET(null, null, "GHUL_TARGET is '{name}', which is not a target ghul builds: {BUILD_TARGETS.names}")
+            fi
+
+            return _first_buildable(_order(all, LIST[BuildTarget]()), availability, "the targets a script can be built for")
         si
 
         // The targets `listed` names, in the order they are tried.

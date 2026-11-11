@@ -762,6 +762,11 @@ namespace Ghul.Cli is
             return 0
         fi
 
+        if let rid: string = Host.HOST.rid() /\ !update.has_archive(tag, rid) then
+            LOG.say("the latest release, {LOG.version(tag)}, has no build for {rid}; ghul {LOG.version(running)} stays installed")
+            return 0
+        fi
+
         if check_only then
             LOG.say("ghul {LOG.version(tag)} available, {LOG.version(running)} installed; run ghul update")
             return 0
@@ -978,9 +983,7 @@ namespace Ghul.Cli is
         fi
 
         let chosen =
-            Ghul.Project.TARGET_CHOICE.choose(
-                Collections.LIST[Ghul.Project.BuildTarget](Ghul.Project.TARGET_CHOICE.ORDER),
-                Collections.LIST[Ghul.Project.BuildTarget](),
+            Ghul.Project.TARGET_CHOICE.for_script(
                 environment_target(),
                 MACHINE_TARGETS(will_run, true, global_host, null))
 
