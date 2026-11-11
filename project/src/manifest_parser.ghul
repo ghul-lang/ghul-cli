@@ -11,7 +11,6 @@ namespace Ghul.Project is
     class MANIFEST_PARSER is
         _problems: Collections.LIST[MANIFEST_PROBLEM]
         _ignored_dotnet: bool
-        _ignored_core: bool
 
         init() is
             _problems = LIST[MANIFEST_PROBLEM]()
@@ -31,6 +30,7 @@ namespace Ghul.Project is
                 return _container(root, kind)
             fi
 
+            _reject_old_keys(root)
             _check_keys(root, _top_level_keys())
 
             // Each of these reports what it can and moves on, so one
@@ -39,12 +39,16 @@ namespace Ghul.Project is
             let version = _string_member(root, "version")
             let targets = _targets(root, kind)
             let sources = _sources(root)
-            _reject_tool_pins(root)
-            let compiler_build = _compiler_build(root)
-            let prefer = _prefer(root, targets, kind)
-            let host_wasm = _host_wasm(root)
-            let tools = _tools(root)
-            let options = _options(root)
+            let tools = MAP[string, VERSION_RANGE]()
+            _requires(root, "requires", PROJECT_TOOLS.COMPILER, tools)
+            let wasm = _target_section(root, "wasm", _wasm_keys())
+            let llvm = _target_section(root, "llvm", _llvm_keys())
+            let host_wasm = _engine(wasm)
+            let optimise = _optimise(llvm)
+            if let section = llvm then
+                _requires(section, "llvm.requires", PROJECT_TOOLS.LLVM, tools)
+            fi
+            let options = _options(root, optimise)
             let dependencies = _dependencies(root)
 
             // A manifest with anything wrong with it is not a manifest,
@@ -54,10 +58,9 @@ namespace Ghul.Project is
                 return null
             fi
 
-            let manifest = MANIFEST(name, version, kind, targets, sources, options, dependencies, compiler_build, prefer, host_wasm, tools)
+            let manifest = MANIFEST(name, version, kind, targets, sources, options, dependencies, host_wasm, tools)
 
             manifest.ignores_dotnet = _ignored_dotnet
-            manifest.ignores_core = _ignored_core
 
             return manifest
         si
@@ -67,6 +70,8 @@ namespace Ghul.Project is
         // sources or dependencies, and a workspace lists the projects under
         // it as `members`.
         _container(root: JsonElement, kind: ManifestKind) -> MANIFEST? is
+            _reject_old_keys(root)
+
             let keys = LIST[string](["kind", "name", "version"])
 
             if kind == ManifestKind.WORKSPACE then
@@ -89,12 +94,10 @@ namespace Ghul.Project is
                 kind,
                 LIST[BuildTarget](),
                 LIST[string](),
-                _options(root),
-                _dependencies(root),
-                CompilerBuild.DEFAULT,
-                LIST[BuildTarget](),
+                _options(root, null),
+                MAP[string, DEPENDENCY](),
                 null,
-                _tools(root)
+                MAP[string, VERSION_RANGE]()
             )
 
             manifest.members.add_range(members)
@@ -349,51 +352,70 @@ namespace Ghul.Project is
             _problems.add(MANIFEST_PROBLEM(key, message))
         si
 
-        // The tools a project needs, each as the versions it accepts. The
-        // compiler is always the newest release; a range here is checked
-        // against it, and a floor (`>=`) is what `ghul new` writes.
-        _tools(root: JsonElement) -> Collections.Map[string, VERSION_RANGE] is
-            let tools = MAP[string, VERSION_RANGE]()
+        // The version of `tool` the project needs, from `key`'s object, as
+        // a range: a floor (`>=`) is what `ghul new` writes. The compiler is
+        // always the newest release; the range is checked against it.
+        _requires(element: JsonElement, key: string, tool: string, tools: MAP[string, VERSION_RANGE]) is
             let value: JsonElement mut
+            let name = if key.contains(".") then key.substring(key.last_index_of('.') + 1) else key fi
 
-            if !root.try_get_property("tools", value ref) then
-                return tools
+            if !element.try_get_property(name, value ref) then
+                return
             fi
 
             if value.value_kind != JsonValueKind.OBJECT then
-                _report("tools", "the value is not an object")
-                return tools
+                _report(key, "the value is not an object")
+                return
             fi
 
             for member in value.enumerate_object() do
-                if member.name !~ PROJECT_TOOLS.COMPILER /\ member.name !~ PROJECT_TOOLS.LLVM then
-                    _report("tools.{member.name}", "not a tool a project can name: the tools are {PROJECT_TOOLS.COMPILER} and {PROJECT_TOOLS.LLVM}")
+                if member.name !~ tool then
+                    _report("{key}.{member.name}", "not something {key} can name: it names {tool}")
                     continue
                 fi
 
                 if member.value.value_kind != JsonValueKind.STRING then
-                    _report("tools.{member.name}", "the value is not a string")
+                    _report("{key}.{member.name}", "the value is not a string")
                     continue
                 fi
 
                 let range = VERSION_RANGE.parse(member.value.get_string() ?? "")
 
                 if let (problem): Result.ERROR = range then
-                    _report("tools.{member.name}", problem)
+                    _report("{key}.{member.name}", problem)
                 else
-                    tools.add(member.name, range!)
+                    tools[member.name] = range!
                 fi
             od
-
-            return tools
         si
 
-        // The compiler version is named under `tools`, as a range.
-        _reject_tool_pins(root: JsonElement) is
+        // The keys version 1 of the manifest had, each refused with the
+        // spelling that replaced it. None is read.
+        _reject_old_keys(root: JsonElement) is
             let value: JsonElement mut
 
+            if root.try_get_property("tools", value ref) then
+                _report("tools", "tools is now requires: write \"requires\": {{ \"compiler\": \">=...\" }}, and the ghul-llvm floor under llvm.requires")
+            fi
+
             if root.try_get_property("compiler", value ref) then
-                _report("compiler", "the compiler version cannot be pinned here: name a floor under tools")
+                _report("compiler", "the compiler version cannot be pinned: name a floor as \"requires\": {{ \"compiler\": \">=...\" }}")
+            fi
+
+            if root.try_get_property("options", value ref) then
+                _report("options", "options are now language (underscore-access, global-namespace, default-use, define) and diagnostics (suppress, warn-as-error, warn, warn-as-hint), with optimise under llvm")
+            fi
+
+            if root.try_get_property("prefer", value ref) then
+                _report("prefer", "prefer is gone: list the targets in the order they are preferred")
+            fi
+
+            if root.try_get_property("engine", value ref) \/ root.try_get_property("host", value ref) then
+                _report(if root.try_get_property("engine", value ref) then "engine" else "host" fi, "the wasm engine is now \"wasm\": {{ \"engine\": \"node\" }} or wasmtime")
+            fi
+
+            if root.try_get_property("compiler-build", value ref) then
+                _report("compiler-build", "a manifest no longer chooses the compiler's host: pass --compiler-host, or set defaults.compiler-host in ~/.config/ghul/config.json")
             fi
         si
 
@@ -407,29 +429,7 @@ namespace Ghul.Project is
             od
         si
 
-        _check_option_keys(options: JsonElement) is
-            let known = LIST[string]()
-
-            known.add("underscore-access")
-            known.add("default-use")
-            known.add("define")
-            known.add("global-namespace")
-            known.add("suppress")
-            known.add("warn-as-error")
-            known.add("optimise")
-
-            _check_keys(options, known)
-        si
-
         _dependency(name: string, value: JsonElement) -> DEPENDENCY? is
-            // ghul-core's sources now ship inside ghul-runtime. Released
-            // libraries still declare it, so the declaration is skipped
-            // rather than refused, and flagged so the reader can say so.
-            if name =~ "ghul-core" then
-                _ignored_core = true
-                return null
-            fi
-
             if value.value_kind != JsonValueKind.OBJECT then
                 _report("dependencies.{name}", "the value is not an object")
                 return null
@@ -460,7 +460,7 @@ namespace Ghul.Project is
             fi
 
             // Which keys a dependency may carry is settled by which form
-            // it turned out to be: a `tag` says nothing about where a
+            // it turned out to be: a `version` says nothing about where a
             // directory on disk came from.
             if has_path then
                 _check_keys(value, _path_keys())
@@ -492,26 +492,20 @@ namespace Ghul.Project is
             keys.add("branch")
             keys.add("directory")
             keys.add("git")
-            keys.add("tag")
             keys.add("version")
 
             return keys
         si
 
-        // A git dependency is a repository to read, and either a tag or a
-        // branch to read it at. With neither there is nothing to fetch.
+        // A git dependency is a repository to read, and either the versions
+        // it accepts, read from the repository's release tags, or a branch to
+        // read it at. With neither there is nothing to fetch.
         _git_dependency(name: string, entry: JsonElement, url: string) -> DEPENDENCY? is
-            let tag = _dependency_string(name, entry, "tag")
             let version_text = _dependency_string(name, entry, "version")
 
             let version: VERSION_RANGE? mut = null
 
             if let text = version_text then
-                if tag? then
-                    _report("dependencies.{name}", "a git dependency has both tag and version")
-                    return null
-                fi
-
                 let range = VERSION_RANGE.parse(text)
 
                 if let (problem): Result.ERROR = range then
@@ -525,12 +519,12 @@ namespace Ghul.Project is
             let branch = _dependency_string(name, entry, "branch")
             let directory = _dependency_string(name, entry, "directory")
 
-            if !tag? /\ !branch? /\ !version? then
-                _report("dependencies.{name}", "a git dependency has none of version, tag and branch")
+            if !branch? /\ !version? then
+                _report("dependencies.{name}", "a git dependency has neither version nor branch")
                 return null
             fi
 
-            return DEPENDENCY.GIT(url, tag, branch, directory, version)
+            return DEPENDENCY.GIT(url, null, branch, directory, version)
         si
 
         // Where the compiler's library is fetched from, or null for any
@@ -558,47 +552,94 @@ namespace Ghul.Project is
             return value.get_string()
         si
 
-        _options(root: JsonElement) -> MANIFEST_OPTIONS is
+        // The compiler options: `language`, which change the program, and
+        // `diagnostics`, which change only what is reported, with the llvm
+        // section's optimisation level.
+        _options(root: JsonElement, optimise: int?) -> MANIFEST_OPTIONS is
             let underscore_access: string? mut = null
             let global_namespace mut = false
             let default_use mut = LIST[string]()
             let define mut = LIST[string]()
             let suppress mut = LIST[string]()
             let warn_as_error mut = LIST[string]()
-            let optimise: int? mut = null
+            let warn mut = LIST[string]()
+            let warn_as_hint mut = LIST[string]()
 
+            if let language = _section(root, "language", ["underscore-access", "global-namespace", "default-use", "define"]) then
+                for member in language.enumerate_object() do
+                    let key = "language.{member.name}"
+
+                    if member.name =~ "underscore-access" then
+                        underscore_access = _string_option(key, member.value)
+                    elif member.name =~ "global-namespace" then
+                        global_namespace = _option_boolean(key, member.value)
+                    elif member.name =~ "default-use" then
+                        default_use = _string_list_option(key, member.value)
+                    elif member.name =~ "define" then
+                        define = _string_list_option(key, member.value)
+                    fi
+                od
+            fi
+
+            if let diagnostics = _section(root, "diagnostics", ["suppress", "warn-as-error", "warn", "warn-as-hint"]) then
+                for member in diagnostics.enumerate_object() do
+                    let key = "diagnostics.{member.name}"
+
+                    if member.name =~ "suppress" then
+                        suppress = _string_list_option(key, member.value)
+                    elif member.name =~ "warn-as-error" then
+                        warn_as_error = _string_list_option(key, member.value)
+                    elif member.name =~ "warn" then
+                        warn = _string_list_option(key, member.value)
+                    elif member.name =~ "warn-as-hint" then
+                        warn_as_hint = _string_list_option(key, member.value)
+                    fi
+                od
+            fi
+
+            return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error, warn, warn_as_hint, optimise)
+        si
+
+        // The object under `key`, with its keys checked against `known`, or
+        // null where the manifest has none or it is not an object.
+        _section(root: JsonElement, key: string, known: ARRAY[string]) -> JsonElement? is
             let value: JsonElement mut
 
-            if !root.try_get_property("options", value ref) then
-                return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error, optimise)
+            if !root.try_get_property(key, value ref) then
+                return null
             fi
 
             if value.value_kind != JsonValueKind.OBJECT then
-                _report("options", "the value is not an object")
-                return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error, optimise)
+                _report(key, "the value is not an object")
+                return null
             fi
 
-            _check_option_keys(value)
-
             for member in value.enumerate_object() do
-                if member.name =~ "underscore-access" then
-                    underscore_access = _string_option(member.name, member.value)
-                elif member.name =~ "global-namespace" then
-                    global_namespace = _option_boolean(member.name, member.value)
-                elif member.name =~ "default-use" then
-                    default_use = _string_list_option(member.name, member.value)
-                elif member.name =~ "define" then
-                    define = _string_list_option(member.name, member.value)
-                elif member.name =~ "suppress" then
-                    suppress = _string_list_option(member.name, member.value)
-                elif member.name =~ "warn-as-error" then
-                    warn_as_error = _string_list_option(member.name, member.value)
-                elif member.name =~ "optimise" then
-                    optimise = _optimisation_level(member.name, member.value)
+                if !(known |> Ghul.Pipes.any(k => k =~ member.name)) then
+                    _report("{key}.{member.name}", "unknown key")
                 fi
             od
 
-            return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error, optimise)
+            return value
+        si
+
+        // A target's own section: what only that target reads.
+        _target_section(root: JsonElement, key: string, known: ARRAY[string]) -> JsonElement? =>
+            _section(root, key, known)
+
+        _wasm_keys() -> ARRAY[string] static => ["engine"]
+
+        _llvm_keys() -> ARRAY[string] static => ["optimise", "requires"]
+
+        // The llvm build's optimisation level, where its section sets one.
+        _optimise(llvm: JsonElement?) -> int? is
+            let value: JsonElement mut
+
+            if let section = llvm /\ section.try_get_property("optimise", value ref) then
+                return _optimisation_level("llvm.optimise", value)
+            fi
+
+            return null
         si
 
         _string_option(name: string, value: JsonElement) -> string? is
@@ -645,50 +686,19 @@ namespace Ghul.Project is
             return _target_list("targets", value, kind)
         si
 
-        // The targets the project prefers, in order: empty where it names
-        // none, and only targets it lists.
-        _prefer(root: JsonElement, targets: Collections.List[BuildTarget], kind: ManifestKind) -> Collections.List[BuildTarget] is
-            let value: JsonElement mut
-
-            if !root.try_get_property("prefer", value ref) then
-                return LIST[BuildTarget]()
-            fi
-
-            let prefer = _target_list("prefer", value, kind)
-
-            for target in prefer do
-                if !(targets |> Ghul.Pipes.any(t => t == target)) then
-                    _report("prefer", "{BUILD_TARGETS.name(target)} is not one of the targets")
-                fi
-            od
-
-            return prefer
-        si
-
-        // The program that runs the project's wasm build, where the
-        // manifest says: `wasmtime` or `node`. Null where it says nothing,
+        // The program that runs the project's wasm build, where the wasm
+        // section says: `wasmtime` or `node`. Null where it says nothing,
         // which leaves the choice to the user's global defaults and the
         // built-in one after those.
-        _host_wasm(root: JsonElement) -> string? is
-            let host: JsonElement mut
-
-            if root.try_get_property("host", host ref) then
-                _report("host", "host is now engine: write \"engine\": {{ \"wasm\": \"node\" }} or wasmtime")
-                return null
-            fi
-
-            if !root.try_get_property("engine", host ref) then
-                return null
-            fi
-
+        _engine(wasm: JsonElement?) -> string? is
             let value: JsonElement mut
 
-            if !host.try_get_property("wasm", value ref) then
+            if !wasm? \/ !wasm.try_get_property("engine", value ref) then
                 return null
             fi
 
             if value.value_kind != JsonValueKind.STRING then
-                _report("engine", "wasm is not a string")
+                _report("wasm.engine", "the value is not a string")
                 return null
             fi
 
@@ -698,7 +708,7 @@ namespace Ghul.Project is
                 return name
             fi
 
-            _report("engine", "wasm is neither wasmtime nor node")
+            _report("wasm.engine", "the value is neither wasmtime nor node")
 
             return null
         si
@@ -740,51 +750,30 @@ namespace Ghul.Project is
             return targets
         si
 
-        // Which build of the compiler the project names, `default` where it
-        // names none.
-        _compiler_build(root: JsonElement) -> CompilerBuild is
-            let value: JsonElement mut
-
-            if !root.try_get_property("compiler-build", value ref) then
-                return CompilerBuild.DEFAULT
-            fi
-
-            if value.value_kind != JsonValueKind.STRING then
-                _report("compiler-build", "the value is not a string")
-                return CompilerBuild.DEFAULT
-            fi
-
-            let text = value.get_string()
-
-            if text =~ "llvm" then
-                return CompilerBuild.LLVM
-            fi
-
-            if text !~ "default" then
-                _report("compiler-build", "unknown compiler build '{text}'")
-            fi
-
-            return CompilerBuild.DEFAULT
-        si
-
         // The keys a manifest's own object may carry, so a misspelling is
         // reported rather than read as a key that does nothing.
         _top_level_keys() -> Collections.LIST[string] static is
             let keys = LIST[string]()
 
-            keys.add("compiler")
-            keys.add("compiler-build")
             keys.add("dependencies")
-            keys.add("engine")
-            keys.add("host")
+            keys.add("diagnostics")
             keys.add("kind")
+            keys.add("language")
+            keys.add("llvm")
             keys.add("name")
-            keys.add("options")
-            keys.add("prefer")
+            keys.add("requires")
             keys.add("sources")
             keys.add("targets")
-            keys.add("tools")
             keys.add("version")
+            keys.add("wasm")
+            // Refused by _reject_old_keys, which names the new spelling.
+            keys.add("compiler")
+            keys.add("compiler-build")
+            keys.add("engine")
+            keys.add("host")
+            keys.add("options")
+            keys.add("prefer")
+            keys.add("tools")
 
             return keys
         si
