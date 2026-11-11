@@ -978,9 +978,7 @@ namespace Ghul.Cli is
         fi
 
         let chosen =
-            Ghul.Project.TARGET_CHOICE.choose(
-                Collections.LIST[Ghul.Project.BuildTarget](Ghul.Project.TARGET_CHOICE.ORDER),
-                Collections.LIST[Ghul.Project.BuildTarget](),
+            Ghul.Project.TARGET_CHOICE.for_script(
                 environment_target(),
                 MACHINE_TARGETS(will_run, true, global_host, null))
 

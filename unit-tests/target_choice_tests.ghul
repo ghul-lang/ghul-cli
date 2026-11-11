@@ -99,5 +99,35 @@ namespace Ghul.Cli.Tests is
             assert !chosen.target?
             assert chosen.problem =~ "none of the targets the manifest lists can be built here: llvm: no llvm; wasm: no wasm" else chosen.problem ?? "null"
         si
+
+        @Test()
+        a_script__is_built_for_the_target_ghul_target_names() is
+            let chosen = TARGET_CHOICE.for_script("llvm", _MACHINE([BuildTarget.WASM, BuildTarget.LLVM]))
+
+            assert chosen.target =~ BuildTarget.LLVM else chosen.problem ?? "null"
+        si
+
+        @Test()
+        a_script__is_built_for_wasm_where_ghul_target_names_none() is
+            let chosen = TARGET_CHOICE.for_script(null, _MACHINE([BuildTarget.WASM, BuildTarget.LLVM]))
+
+            assert chosen.target =~ BuildTarget.WASM else chosen.problem ?? "null"
+        si
+
+        @Test()
+        a_script__names_no_manifest_in_what_it_reports() is
+            let unknown = TARGET_CHOICE.for_script("jvm", _MACHINE([BuildTarget.WASM]))
+
+            assert !unknown.target?
+            assert unknown.problem =~ "GHUL_TARGET is 'jvm', which is not a target ghul builds: wasm, llvm" else unknown.problem ?? "null"
+
+            let dotnet = TARGET_CHOICE.for_script("dotnet", _MACHINE([BuildTarget.WASM]))
+
+            assert dotnet.problem =~ BUILD_TARGETS.DOTNET_UNSUPPORTED else dotnet.problem ?? "null"
+
+            let nothing = TARGET_CHOICE.for_script(null, _MACHINE([]))
+
+            assert nothing.problem =~ "none of the targets a script can be built for can be built here: wasm: no wasm" else nothing.problem ?? "null"
+        si
     si
 si
