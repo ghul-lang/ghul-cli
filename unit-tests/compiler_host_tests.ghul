@@ -21,6 +21,7 @@ namespace Ghul.Cli.Tests is
             assert COMPILER_HOST.read("wasm").host =~ CompilerHost.WASM;
             assert COMPILER_HOST.read("DotNet").host =~ CompilerHost.DOTNET;
             assert COMPILER_HOST.read(" native ").host =~ CompilerHost.NATIVE;
+            assert COMPILER_HOST.read("LLVM").host =~ CompilerHost.LLVM;
         si
 
         @Test()

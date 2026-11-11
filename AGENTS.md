@@ -37,13 +37,14 @@ looks for them.
   same-content smoke test). Finds its compiler through
   `Ghul.Repl.Host.COMPILER_STORE` and installs into it
   on first use (or on-demand for a specific version via `install-compiler`),
-  choosing the one the machine can actually run: `COMPILER_DOWNLOAD`, which
-  fetches the package straight from the NuGet flat-container feed - no
-  `dotnet tool` call, so a machine with only the .NET runtime works -
-  where there is a .NET host, and `NATIVE_COMPILER_DOWNLOAD`, which
-  fetches the Native AOT archive the `ghul.compiler` release carries,
-  where there is none, since a managed compiler cannot be started without
-  one. The version is resolved from the NuGet index either way, being an
+  choosing the one the machine can actually run, as `COMPILER_PLAN.order`
+  decides: `COMPILER_DOWNLOAD`, which fetches the package straight from
+  the NuGet flat-container feed - no `dotnet tool` call, so a machine with
+  only the .NET runtime works - where there is a .NET host, and where there
+  is none, since a managed compiler cannot be started without one, the
+  llvm-built compiler where the release carries one for the platform
+  (`NATIVE_COMPILER_DOWNLOAD`, Linux on x64 and arm64) and the wasm-built
+  one under Node elsewhere. The version is resolved from the NuGet index either way, being an
   HTTP document rather than a .NET one. `GHUL_COMPILER_FEED` and
   `GHUL_COMPILER_AOT_BASE` name another feed and another release base.
   Computes a cache key from the
