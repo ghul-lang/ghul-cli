@@ -24,8 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      tag: ${{ steps.version.outputs.tag }}
-      package: ${{ steps.version.outputs.package }}
+      tag: ${{ steps.published.outputs.tag || steps.version.outputs.tag }}
+      package: ${{ steps.published.outputs.package || steps.version.outputs.package }}
 
     permissions:
       contents: read
@@ -43,6 +43,32 @@ jobs:
       uses: ghul-lang/create-version@v1.0.0
       with:
         prerelease: ${{ github.event_name == 'pull_request' && format('beta.{0}', github.run_number) || '' }}
+
+    # The tags alone can name a version nuget.org already has: a release run
+    # that published and then failed before tagging leaves one, and the next
+    # run would derive it again. So a release takes the next patch after the
+    # highest version any of its packages has there, where that is higher.
+    - name: Skip versions nuget.org already has
+      id: published
+      if: ${{ github.event_name != 'pull_request' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        derived="${{ steps.version.outputs.package }}"
+        highest=""
+        for id in ghul.cli ghul.repl ghul.repl.host ghul.jupyter ghul.project; do
+          index="$(curl -fsSL --retry 3 "https://api.nuget.org/v3-flatcontainer/${id}/index.json" || echo '{"versions": []}')"
+          for v in $(jq -r '.versions[]' <<< "${index}" | grep -v -- '-' || true); do
+            highest="$(printf '%s\n%s\n' "${highest}" "${v}" | sed '/^$/d' | sort -V | tail -n 1)"
+          done
+        done
+        if [ -n "${highest}" ] && [ "$(printf '%s\n%s\n' "${derived}" "${highest}" | sort -V | tail -n 1)" = "${highest}" ]; then
+          IFS=. read -r major minor patch <<< "${highest}"
+          next="${major}.${minor}.$((patch + 1))"
+          echo "::warning::${derived} is not above ${highest}, which nuget.org already has; releasing ${next}"
+          echo "package=${next}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${next}" >> "$GITHUB_OUTPUT"
+        fi
 
   unit_tests:
     name: Unit tests
@@ -192,12 +218,21 @@ jobs:
       with:
         user: ${{ secrets.NUGET_USER }}
 
+    # A version nuget.org already has fails the push, since the release would
+    # otherwise carry packages other than the ones published under its
+    # number. The exception is a rerun of this same run, which built the
+    # same packages from the same commit: a push that failed part way leaves
+    # some of them published, and the rerun publishes the rest.
     - name: Publish package to NuGet
       run: |
+        skip=()
+        if [ "${{ github.run_attempt }}" -gt 1 ]; then
+          skip=(--skip-duplicate)
+        fi
         dotnet nuget push ./nupkg/*.nupkg \
           --api-key ${{ steps.login.outputs.NUGET_API_KEY }} \
           --source https://api.nuget.org/v3/index.json \
-          --skip-duplicate \
+          "${skip[@]}" \
           --no-symbols
 
   # What a user installs when they have no .NET: the tool compiled with
