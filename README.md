@@ -86,12 +86,11 @@ none, `ghul` says so and that `ghul install node` brings one in, and on Linux
 x64 that the llvm target builds a native executable without it. Both fetch
 ghul-runtime with `git`.
 
-Without .NET, the compiler itself is the wasm-built one, run by Node: a
-single archive every release publishes for every platform, fetched the first
-time it is needed. The Node it runs under is the one on `PATH`, or the one
-`ghul install node` brought in. On a machine with no Node, `ghul` fetches the
-Native AOT compiler instead, which is published for Linux x64 only; on arm64
-there is none, so the machine needs Node, and `ghul install node` brings one in.
+Without .NET, the compiler itself is the one built for llvm, a native
+executable, on Linux x64 and arm64, fetched the first time it is needed; it
+needs no Node to run. Elsewhere it is the wasm-built one, run by Node: a
+single archive every release publishes for every platform. The Node it runs
+under is the one on `PATH`, or the one `ghul install node` brought in.
 
 Which machines that covers follows from the builds that exist. `ghul` is a
 .NET tool except as its Linux x64 native archive, so a machine with no .NET at
@@ -540,8 +539,9 @@ Node.js, since an editor analyses the project rather than running it.
 project builds with, installing it first if need be, as the only line on
 standard output. That is the newest
 installed, so it can change after a compiler is installed. On a machine with
-no .NET it is the wasm-built compiler run by Node.js, which serves analysis
-from 66.1.0. The program is named by its full path where `PATH` finds it, so
+no .NET it is the compiler built for llvm on Linux x64 and arm64, which serves
+analysis from 71.11.5, and elsewhere the wasm-built compiler run by Node.js,
+which serves analysis from 66.1.0. The program is named by its full path where `PATH` finds it, so
 a client started with a different `PATH` runs the same one. `--json` prints
 the command as a JSON array of strings, the program first, for a client to
 start as it stands rather than splitting a command line.
