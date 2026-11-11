@@ -119,7 +119,7 @@ namespace Ghul.Repl.Host is
 
             let diagnostics = LIST[CELL_DIAGNOSTIC]()
 
-            if let process = System.Diagnostics.Process.start(start_info) then
+            if let process = Ghul.Project.PROCESS_START.start(start_info) then
                 // Both streams are read at once, as everything else here
                 // that redirects a child's output does: reading one to
                 // the end first deadlocks as soon as the other fills its

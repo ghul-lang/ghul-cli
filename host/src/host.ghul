@@ -81,10 +81,18 @@ namespace Ghul.Repl.Host is
                 fi
             fi
 
-            if let host = on_path(DOTNET_FILE_NAME) then
-                if _runs(host) then
-                    return host
-                fi
+            if let path: string = System.Environment.get_environment_variable("PATH") then
+                for directory in path.split([PATH_SEPARATOR]) do
+                    if directory.length == 0 then
+                        continue
+                    fi
+
+                    let host = Path.join([directory, DOTNET_FILE_NAME])
+
+                    if File.exists(host) /\ _runs(host) then
+                        return host
+                    fi
+                od
             fi
 
             return null

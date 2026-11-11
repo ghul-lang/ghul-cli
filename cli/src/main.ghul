@@ -843,7 +843,7 @@ namespace Ghul.Cli is
             // on stderr only if the update fails.
             start.redirect_standard_output = true
 
-            let process = System.Diagnostics.Process.start(start)
+            let process = Ghul.Project.PROCESS_START.start(start)
 
             if !process? then
                 work.finish("ghul not updated: sh could not be started")

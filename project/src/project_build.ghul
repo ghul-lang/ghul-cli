@@ -247,7 +247,7 @@ namespace Ghul.Project is
 
             start_info.argument_list.add("@{response_file}")
 
-            if let process: System.Diagnostics.Process = System.Diagnostics.Process.start(start_info) then
+            if let process: System.Diagnostics.Process = PROCESS_START.start(start_info) then
                 let copied = process.standard_output.base_stream.copy_to_async(IO.Std.open_standard_error())
 
                 let refused = _pass_on(process.standard_error, quiet)
@@ -264,7 +264,7 @@ namespace Ghul.Project is
                 return process.exit_code
             fi
 
-            say("failed to start the compiler")
+            say("cannot start the compiler {start_info.file_name}; it is missing, or cannot be run")
             return 1
         si
 
