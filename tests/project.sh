@@ -172,6 +172,18 @@ if [[ "$(uname -s)" == Linux && "$(uname -m)" =~ ^(x86_64|aarch64)$ ]]; then
     (cd "$llvm_built" && eval "$llvm_compiler" "@$scratch/llvm-built.rsp" src/main.ghul src/greeting.ghul -o "$editor_build/llvm-built.wasm") >&2 \
         || fail "the llvm-built compiler ghul named did not compile the project's sources with the response file"
     [[ -f "$editor_build/llvm-built.wasm" ]] || fail "expected the llvm-built editor round trip to produce llvm-built.wasm"
+
+    echo "project: --compiler-host chooses an editor's compiler, in place of GHUL_COMPILER_HOST..." >&2
+    named="$(cd "$program" && dotnet "$cli" project compiler --json --compiler-host llvm 2>/dev/null)" || fail "ghul project compiler --compiler-host llvm failed"
+    [[ "$named" == *"/compilers/llvm/"* ]] || fail "expected --compiler-host llvm to name the llvm-built compiler, got: $named"
+    named="$(cd "$program" && GHUL_COMPILER_HOST=wasm dotnet "$cli" project compiler --json --compiler-host auto 2>/dev/null)" || fail "ghul project compiler --compiler-host auto failed"
+    [[ "$named" != *"/compilers/wasm/"* ]] || fail "expected --compiler-host auto to leave GHUL_COMPILER_HOST aside, got: $named"
+    (cd "$program" && dotnet "$cli" project response-file --compiler-host llvm --output "$scratch/host.rsp") >&2 \
+        || fail "ghul project response-file --compiler-host llvm failed"
+    if err="$(cd "$program" && dotnet "$cli" project compiler --compiler-host jvm 2>&1)"; then
+        fail "expected --compiler-host jvm to be refused"
+    fi
+    [[ "$err" == *"--compiler-host is 'jvm'"* ]] || fail "unexpected message for --compiler-host jvm: $err"
 fi
 
 echo "project: the editor files report a manifest's problems..." >&2

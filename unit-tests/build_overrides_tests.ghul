@@ -29,7 +29,7 @@ namespace Ghul.Cli.Tests is
                 ManifestKind.PROGRAM,
                 LIST[BuildTarget]([BuildTarget.WASM]),
                 LIST[string](["src/**/*.ghul"]),
-                MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](), null),
+                MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](), null, LIST[string](), LIST[string]()),
                 dependencies,
                 CompilerBuild.DEFAULT, LIST[BuildTarget](), null, MAP[string, VERSION_RANGE]())
 
@@ -119,6 +119,26 @@ namespace Ghul.Cli.Tests is
             assert parsed.json
             assert parsed.overrides.compiler_command =~ "ghul-compiler"
             assert !RESPONSE_FILE_COMMAND_LINE.parse(LIST[string](), false).json
+        si
+
+        @Test()
+        project_commands__read_the_compiler_host_auto_as_named_with_none() is
+            let llvm = RESPONSE_FILE_COMMAND_LINE.parse(LIST[string](["--compiler-host", "LLVM", "--json"]), false)
+
+            assert !llvm.problem? /\ llvm.host_named /\ llvm.host =~ Ghul.Project.CompilerHost.LLVM
+            assert llvm.json
+
+            let auto = RESPONSE_FILE_COMMAND_LINE.parse(LIST[string](["--compiler-host", "auto"]), false)
+
+            assert !auto.problem? /\ auto.host_named /\ !auto.host?
+
+            let none = RESPONSE_FILE_COMMAND_LINE.parse(LIST[string](), false)
+
+            assert !none.host_named /\ !none.host?
+
+            let bad = RESPONSE_FILE_COMMAND_LINE.parse(LIST[string](["--compiler-host", "jvm"]), false)
+
+            assert bad.problem =~ "--compiler-host is 'jvm', which is none of auto, wasm, dotnet, native and llvm" else bad.problem ?? "null"
         si
 
         @Test()

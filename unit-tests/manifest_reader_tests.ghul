@@ -29,7 +29,7 @@ namespace Ghul.Cli.Tests is
             "    \"kind\": \"program\",\n"
             "    \"targets\": [\"wasm\", \"llvm\"],\n"
             "    \"sources\": [\"src/**/*.ghul\", \"extra/*.ghul\"],\n"
-            "    \"options\": {{\"underscore-access\": \"private\", \"global-namespace\": true, \"default-use\": [\"Collections\", \"IO.Std.write_line\"], \"define\": [\"DEBUG\"], \"suppress\": [\"redundant-semicolon\"], \"warn-as-error\": [\"cast-may-throw\"]}},\n"
+            "    \"options\": {{\"underscore-access\": \"private\", \"global-namespace\": true, \"default-use\": [\"Collections\", \"IO.Std.write_line\"], \"define\": [\"DEBUG\"], \"suppress\": [\"redundant-semicolon\"], \"warn-as-error\": [\"cast-may-throw\"], \"warn\": [\"redundant-semicolon\"], \"warn-as-hint\": [\"shadowed-non-callable\", \"impure-function-argument\"]}},\n"
             "    \"dependencies\": {{\"tagged\": {{\"git\": \"https://github.com/ghul-lang/tagged\", \"tag\": \"v1.2.0\"}}, \"parsing\": {{\"git\": \"https://example.com/libs.git\", \"branch\": \"main\", \"directory\": \"parsing\"}}, \"scratch\": {{\"path\": \"../scratch\"}}}}\n"
             "}}"
 
@@ -247,6 +247,8 @@ namespace Ghul.Cli.Tests is
             assert options.define[0] =~ "DEBUG";
             assert options.suppress[0] =~ "redundant-semicolon";
             assert options.warn_as_error[0] =~ "cast-may-throw";
+            assert options.warn.count == 1 /\ options.warn[0] =~ "redundant-semicolon";
+            assert options.warn_as_hint.count == 2 /\ options.warn_as_hint[1] =~ "impure-function-argument";
         si
 
         @Test()
@@ -361,6 +363,8 @@ namespace Ghul.Cli.Tests is
             assert options.define.count == 0;
             assert options.suppress.count == 0;
             assert options.warn_as_error.count == 0;
+            assert options.warn.count == 0;
+            assert options.warn_as_hint.count == 0;
         si
 
         @Test()

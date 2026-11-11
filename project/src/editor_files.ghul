@@ -116,19 +116,23 @@ namespace Ghul.Project is
 
     /// What `ghul project response-file` or `ghul project compiler` was
     /// asked for: where to write the response file and, optionally, the
-    /// globs file, which target, what the build overrides, and whether the
-    /// compiler command is wanted as JSON.
+    /// globs file, which target, what the build overrides, whether the
+    /// compiler command is wanted as JSON, and how the compiler is run where
+    /// `--compiler-host` says: `host_named` is whether it was given, and
+    /// `host` the host it names, null for `auto`.
     class RESPONSE_FILE_COMMAND_LINE(
         output: string?,
         source_globs: string?,
         target: string?,
         overrides: BUILD_OVERRIDES,
         problem: string?,
-        json: bool
+        json: bool,
+        host_named: bool,
+        host: CompilerHost?
     ) is
         /// Reads `[--output <path>] [--source-globs <path>] [--target <name>]
-        /// [--compiler <command>] [--library <name>=<path>]... [--json]`, which needs
-        /// `--output`.
+        /// [--compiler <command>] [--compiler-host <host>] [--library <name>=<path>]...
+        /// [--json]`, which needs `--output`.
         ///
         /// - arguments: what follows `response-file` on the command line
         parse(arguments: Collections.List[string]) -> RESPONSE_FILE_COMMAND_LINE static => parse(arguments, true)
@@ -145,6 +149,8 @@ namespace Ghul.Project is
             let target: string? mut = null
             let overrides mut = BUILD_OVERRIDES.none()
             let json mut = false
+            let host_named mut = false
+            let host: CompilerHost? mut = null
             let i mut = 0
 
             while i < arguments.count do
@@ -158,13 +164,13 @@ namespace Ghul.Project is
 
                 if
                     option !~ "--output" /\ option !~ "--source-globs" /\ option !~ "--target" /\
-                    !BUILD_OVERRIDES.is_option(option)
+                    option !~ "--compiler-host" /\ !BUILD_OVERRIDES.is_option(option)
                 then
-                    return RESPONSE_FILE_COMMAND_LINE(null, null, null, overrides, "unexpected argument {option}", false)
+                    return _problem(overrides, "unexpected argument {option}")
                 fi
 
                 if i + 1 >= arguments.count then
-                    return RESPONSE_FILE_COMMAND_LINE(null, null, null, overrides, "{option} needs a value", false)
+                    return _problem(overrides, "{option} needs a value")
                 fi
 
                 let value = arguments[i + 1]
@@ -175,13 +181,25 @@ namespace Ghul.Project is
                     source_globs = value
                 elif option =~ "--target" then
                     target = value
+                elif option =~ "--compiler-host" then
+                    host_named = true
+
+                    if value.trim().to_lower_invariant() !~ "auto" then
+                        let read = COMPILER_HOST.read(value)
+
+                        if !read.host? then
+                            return _problem(overrides, "--compiler-host is '{value}', which is none of auto, wasm, dotnet, native and llvm")
+                        fi
+
+                        host = read.host
+                    fi
                 else
                     let problem: string? mut = null
 
                     if let changed = BUILD_OVERRIDES.with(overrides, option, value, problem ref) then
                         overrides = changed
                     else
-                        return RESPONSE_FILE_COMMAND_LINE(null, null, null, overrides, problem ?? "{option} is not valid", false)
+                        return _problem(overrides, problem ?? "{option} is not valid")
                     fi
                 fi
 
@@ -189,10 +207,13 @@ namespace Ghul.Project is
             od
 
             if needs_output /\ !output? then
-                return RESPONSE_FILE_COMMAND_LINE(null, null, null, overrides, "--output is required", false)
+                return _problem(overrides, "--output is required")
             fi
 
-            return RESPONSE_FILE_COMMAND_LINE(output, source_globs, target, overrides, null, json)
+            return RESPONSE_FILE_COMMAND_LINE(output, source_globs, target, overrides, null, json, host_named, host)
         si
+
+        _problem(overrides: BUILD_OVERRIDES, problem: string) -> RESPONSE_FILE_COMMAND_LINE static =>
+            RESPONSE_FILE_COMMAND_LINE(null, null, null, overrides, problem, false, false, null)
     si
 si

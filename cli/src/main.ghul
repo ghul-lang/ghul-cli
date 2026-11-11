@@ -323,8 +323,8 @@ namespace Ghul.Cli is
         out.write_line("       ghul rosetta <task>[/<part>] [<directory>]")
         out.write_line("       ghul build [--target <name>] [--debug] [--optimise <0-3>]")
         out.write_line("       ghul run [--target <name>] [--debug] [--optimise <0-3>] [-- args...]")
-        out.write_line("       ghul project response-file --output <path> [--source-globs <path>] [--target <name>]")
-        out.write_line("       ghul project compiler")
+        out.write_line("       ghul project response-file --output <path> [--source-globs <path>] [--target <name>] [--compiler-host <host>]")
+        out.write_line("       ghul project compiler [--json] [--compiler-host <host>]")
         out.write_line("       ghul install <compiler|wasmtime|node|llvm>")
         out.write_line("       ghul update [--check]")
         out.write_line("       ghul cache clear")
@@ -1050,7 +1050,7 @@ namespace Ghul.Cli is
             Ghul.Project.MANIFEST(
                 "script", null, Ghul.Project.ManifestKind.PROGRAM,
                 Collections.LIST[Ghul.Project.BuildTarget]([target]), Collections.LIST[string](["script.ghul"]),
-                Ghul.Project.MANIFEST_OPTIONS(null, false, Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), null),
+                Ghul.Project.MANIFEST_OPTIONS(null, false, Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), null, Collections.LIST[string](), Collections.LIST[string]()),
                 script_dependencies(), Ghul.Project.CompilerBuild.DEFAULT,
                 Collections.LIST[Ghul.Project.BuildTarget](), null, Collections.MAP[string, Ghul.Project.VERSION_RANGE]())
 
@@ -1385,7 +1385,7 @@ namespace Ghul.Cli is
             Ghul.Project.MANIFEST(
                 "repl", null, Ghul.Project.ManifestKind.PROGRAM,
                 Collections.LIST[Ghul.Project.BuildTarget]([Ghul.Project.BuildTarget.LLVM]), Collections.LIST[string](["repl.ghul"]),
-                Ghul.Project.MANIFEST_OPTIONS(null, false, Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), null),
+                Ghul.Project.MANIFEST_OPTIONS(null, false, Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), null, Collections.LIST[string](), Collections.LIST[string]()),
                 script_dependencies(), Ghul.Project.CompilerBuild.DEFAULT,
                 Collections.LIST[Ghul.Project.BuildTarget](), null, Collections.MAP[string, Ghul.Project.VERSION_RANGE]())
 
@@ -1681,6 +1681,12 @@ namespace Ghul.Cli is
             return ERROR(message)
         fi
 
+        return planned_stores(llvm_built, forced)
+    si
+
+    // The same, with the host given rather than read from the environment:
+    // null leaves the choice to the plan.
+    planned_stores(llvm_built: bool, forced: Ghul.Project.CompilerHost?) -> Result[Collections.List[Host.COMPILER_STORE], string] is
         let order = COMPILER_PLAN.order(MACHINE.this_machine(), forced, llvm_built)
 
         if let (error): ERROR = order then
@@ -1714,8 +1720,9 @@ namespace Ghul.Cli is
     // wasm-built one under node.
     tool_compiler(
         manifest: Ghul.Project.MANIFEST,
-        overrides: Ghul.Project.BUILD_OVERRIDES
+        options: Ghul.Project.RESPONSE_FILE_COMMAND_LINE
     ) -> (compiler: Ghul.Project.COMPILER_PROCESS, version: string, runtime_assembly: string?)? is
+        let overrides = options.overrides
         let request = Ghul.Project.COMPILER_REQUEST.from_environment(overrides.compiler_command)
 
         if let problem: Ghul.Project.CompilerRequest.PROBLEM = request then
@@ -1727,7 +1734,11 @@ namespace Ghul.Cli is
             return command_compiler(named.command)
         fi
 
-        let planned = planned_stores(manifest.compiler_build == Ghul.Project.CompilerBuild.LLVM)
+        // `--compiler-host` takes the place of GHUL_COMPILER_HOST where it is
+        // given, so an editor's setting is not overridden by the environment
+        // the editor happened to start in.
+        let llvm_built = manifest.compiler_build == Ghul.Project.CompilerBuild.LLVM
+        let planned = if options.host_named then planned_stores(llvm_built, options.host) else planned_stores(llvm_built) fi
 
         if let (problem): ERROR = planned then
             LOG.say(problem)
@@ -1851,8 +1862,8 @@ namespace Ghul.Cli is
         let say = (message: string) -> void => LOG.say("{message}")
 
         if rest.count < 1 \/ (rest[0] !~ "response-file" /\ rest[0] !~ "compiler") then
-            Std.error.write_line("usage: ghul project response-file --output <path> [--source-globs <path>] [--target <name>]")
-            Std.error.write_line("       ghul project compiler [--json]")
+            Std.error.write_line("usage: ghul project response-file --output <path> [--source-globs <path>] [--target <name>] [--compiler-host <host>]")
+            Std.error.write_line("       ghul project compiler [--json] [--compiler-host <host>]")
             return 1
         fi
 
@@ -1876,7 +1887,7 @@ namespace Ghul.Cli is
 
         let manifest = read.manifest!
 
-        if let (compiler, compiler_version, runtime_assembly) = tool_compiler(manifest, options.overrides) then
+        if let (compiler, compiler_version, runtime_assembly) = tool_compiler(manifest, options) then
             if !wants_response_file then
                 Std.out.write_line(
                     if options.json then Ghul.Project.EDITOR_FILES.command_json(compiler) else Ghul.Project.EDITOR_FILES.command_line(compiler) fi)

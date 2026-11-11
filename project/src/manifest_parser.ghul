@@ -416,6 +416,8 @@ namespace Ghul.Project is
             known.add("global-namespace")
             known.add("suppress")
             known.add("warn-as-error")
+            known.add("warn")
+            known.add("warn-as-hint")
             known.add("optimise")
 
             _check_keys(options, known)
@@ -565,17 +567,19 @@ namespace Ghul.Project is
             let define mut = LIST[string]()
             let suppress mut = LIST[string]()
             let warn_as_error mut = LIST[string]()
+            let warn mut = LIST[string]()
+            let warn_as_hint mut = LIST[string]()
             let optimise: int? mut = null
 
             let value: JsonElement mut
 
             if !root.try_get_property("options", value ref) then
-                return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error, optimise)
+                return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error, optimise, warn, warn_as_hint)
             fi
 
             if value.value_kind != JsonValueKind.OBJECT then
                 _report("options", "the value is not an object")
-                return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error, optimise)
+                return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error, optimise, warn, warn_as_hint)
             fi
 
             _check_option_keys(value)
@@ -593,12 +597,16 @@ namespace Ghul.Project is
                     suppress = _string_list_option(member.name, member.value)
                 elif member.name =~ "warn-as-error" then
                     warn_as_error = _string_list_option(member.name, member.value)
+                elif member.name =~ "warn-as-hint" then
+                    warn_as_hint = _string_list_option(member.name, member.value)
+                elif member.name =~ "warn" then
+                    warn = _string_list_option(member.name, member.value)
                 elif member.name =~ "optimise" then
                     optimise = _optimisation_level(member.name, member.value)
                 fi
             od
 
-            return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error, optimise)
+            return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error, optimise, warn, warn_as_hint)
         si
 
         _string_option(name: string, value: JsonElement) -> string? is

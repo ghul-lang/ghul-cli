@@ -115,6 +115,14 @@ namespace Ghul.Project is
                 add(["--suppress", string.join(",", options.suppress)])
             fi
 
+            if options.warn.count > 0 then
+                add(["--warn", string.join(",", options.warn)])
+            fi
+
+            if options.warn_as_hint.count > 0 then
+                add(["--warn-as-hint", string.join(",", options.warn_as_hint)])
+            fi
+
             if options.warn_as_error.count > 0 then
                 add(["--warn-as-error", string.join(",", options.warn_as_error)])
             fi

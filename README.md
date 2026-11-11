@@ -524,8 +524,8 @@ Two commands exist for editors and other tools that analyse a project the
 way its build compiles it, rather than for building it:
 
 ```sh
-ghul project response-file --output <path> [--source-globs <path>] [--target <name>]
-ghul project compiler [--json]
+ghul project response-file --output <path> [--source-globs <path>] [--target <name>] [--compiler-host <host>]
+ghul project compiler [--json] [--compiler-host <host>]
 ```
 
 `ghul project response-file` writes the options a build passes the compiler,
@@ -548,7 +548,15 @@ analysis from 71.11.5, and elsewhere the wasm-built compiler run by Node.js,
 which serves analysis from 66.1.0. The program is named by its full path where `PATH` finds it, so
 a client started with a different `PATH` runs the same one. `--json` prints
 the command as a JSON array of strings, the program first, for a client to
-start as it stands rather than splitting a command line.
+start as it stands rather than splitting a command line. A manifest's
+`"compiler-build": "llvm"` names the llvm-built compiler, as it does for a
+build.
+
+`--compiler-host` (`auto`, `dotnet`, `llvm`, `wasm` or `native`) chooses how
+the compiler is run, for both commands, in place of `GHUL_COMPILER_HOST`:
+an editor passes its own setting, and `auto` leaves the choice to `ghul`
+whatever the environment says. A manifest's `compiler-build` is still the
+project's own choice.
 
 Both report a manifest's problems on standard error and exit non-zero.
 
