@@ -54,8 +54,8 @@ namespace Ghul.Jupyter is
 
         if !compiler? then
             Std.error.write_line(
-                "ghul-jupyter: no ghul-compiler found; install the ghul.cli tool and run a script once, "
-                "or point GHUL_COMPILER at one")
+                "ghul-jupyter: no managed ghul-compiler found; install one with the ghul.cli tool, "
+                "as ghul install compiler --compiler-host dotnet, or point GHUL_COMPILER at one")
 
             return 1
         fi

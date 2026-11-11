@@ -630,6 +630,8 @@ namespace Ghul.Cli is
     cmd_install(rest: Collections.List[string]) -> int is
         let positional = Collections.LIST[string]()
         let llvm_built mut = false
+        let named_host: Ghul.Project.CompilerHost? mut = null
+        let host_named mut = false
         let i mut = 0
 
 
@@ -641,6 +643,23 @@ namespace Ghul.Cli is
                 return 1
             elif argument =~ "--llvm" then
                 llvm_built = true
+            elif argument =~ "--compiler-host" then
+                if i + 1 >= rest.count then
+                    LOG.say("--compiler-host needs a host: wasm, dotnet, native or llvm")
+                    return 1
+                fi
+
+                let read = Ghul.Project.COMPILER_HOST.read(rest[i + 1])
+
+                if let problem: string = read.problem then
+                    LOG.say(problem)
+                    return 1
+                fi
+
+                // `auto` names the built-in choice, whatever the configuration says.
+                host_named = true
+                named_host = read.host
+                i = i + 1
             elif !argument.starts_with("-") then
                 positional.add(argument)
             fi
@@ -649,7 +668,7 @@ namespace Ghul.Cli is
         od
 
         if positional.count == 0 then
-            Std.error.write_line("usage: ghul install <compiler|llvm|node|wasmtime>")
+            Std.error.write_line("usage: ghul install <compiler|llvm|node|wasmtime> [--compiler-host <host>]")
             return 1
         fi
 
@@ -667,7 +686,7 @@ namespace Ghul.Cli is
 
         // `--llvm` asks for the llvm-built compiler, as a compiler host of
         // llvm does.
-        let forced = if llvm_built then Ghul.Project.CompilerHost.LLVM else configured fi
+        let forced = if llvm_built then Ghul.Project.CompilerHost.LLVM elif host_named then named_host else configured fi
 
         let component = COMPONENTS.named(MACHINE.this_machine(), positional[0], forced)
 
