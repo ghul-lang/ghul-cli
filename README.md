@@ -166,13 +166,14 @@ Compiler messages go to standard error.
 
 `ghul install compiler` installs `ghul.compiler` into `ghul`'s own compiler
 store, so that the first script does not wait for the install. It installs the
-compiler this machine uses: the managed compiler where there is a .NET host to
-run it, the compiler built for llvm where there is none on Linux for x64 or
-arm64, and the wasm-built compiler, run by Node.js, everywhere else, with a
-Node.js fetched first where there is none. A Native AOT compiler is installed
-only by an earlier release's install, and kept up to date while it is there.
-The configuration file's `defaults.compiler-host` (see "compiler hosts" below)
-names the one to use instead. `install compiler` installs the latest release, and nothing if it is
+compiler this machine uses, whether or not it has .NET: the compiler built for
+llvm on Linux for x64 and arm64, and the wasm-built compiler, run by Node.js,
+everywhere else, with a Node.js fetched first where there is none. The managed
+compiler is installed only where it is named, by `--compiler-host dotnet` or by
+the configuration file's `defaults.compiler-host` (see "compiler hosts"
+below), which names the one to use instead of the built-in choice. A store
+that already holds a managed or a Native AOT compiler is kept up to date while
+it is there. `install compiler` installs the latest release, and nothing if it is
 already installed. A version cannot be chosen: the compiler, ghul-llvm,
 Node.js, wasmtime and the compiler's library ghul-runtime are tools, and
 always the newest release. What a project depends on is pinned in its
@@ -440,10 +441,12 @@ in the configuration file, for every build and every editor:
 { "defaults": { "compiler-host": "llvm" } }
 ```
 
-Named by neither, `ghul` chooses: the managed compiler where there is .NET;
-otherwise the compiler built for llvm where one is published, for Linux on x64
-and arm64, with the wasm-built one as its fallback; and otherwise the
-wasm-built one under Node.
+Named by neither, `ghul` chooses the same way on every machine, with .NET or
+without: the compiler built for llvm where one is published, for Linux on x64
+and arm64, with the wasm-built one as its fallback, and otherwise the
+wasm-built one under Node. The managed compiler is used only where it is
+named. A machine that used the managed compiler before this choice changed
+fetches the compiler built for llvm on its next build, and says so.
 
 - `wasm`: the wasm-built compiler, run by Node; `ghul` fetches a Node where
   there is none it can run.
@@ -557,10 +560,10 @@ Node.js, since an editor analyses the project rather than running it.
 
 `ghul project compiler` prints the command that runs the compiler the
 project builds with, installing it first if need be, as the only line on
-standard output. That is the newest
-installed, so it can change after a compiler is installed. On a machine with
-no .NET it is the compiler built for llvm on Linux x64 and arm64, which serves
-analysis from 71.11.5, and elsewhere the wasm-built compiler run by Node.js,
+standard output. It is chosen as `ghul build` chooses it, so it is the newest
+installed that the project's `requires` admits, and a compiler older than that
+is updated first. Unless a host is named, it is the compiler built for llvm on
+Linux x64 and arm64, which serves analysis from 71.11.5, and elsewhere the wasm-built compiler run by Node.js,
 which serves analysis from 66.1.0. The program is named by its full path where `PATH` finds it, so
 a client started with a different `PATH` runs the same one. `--json` prints
 the command as a JSON array of strings, the program first, for a client to
