@@ -1707,9 +1707,10 @@ namespace Ghul.Cli is
     si
 
     // The compiler an editor analyses a project with: the command
-    // `--compiler` gave, or the one the environment or the manifest names,
-    // installed if need be - where this machine has no .NET to run the
-    // managed one, the llvm-built one where it is published, or the
+    // `--compiler` gave, or the one the environment or the manifest names -
+    // the llvm-built one where its `compiler-build` says so, as a build
+    // takes it - installed if need be: where this machine has no .NET to
+    // run the managed one, the llvm-built one where it is published, or the
     // wasm-built one under node.
     tool_compiler(
         manifest: Ghul.Project.MANIFEST,
@@ -1726,7 +1727,7 @@ namespace Ghul.Cli is
             return command_compiler(named.command)
         fi
 
-        let planned = planned_stores(false)
+        let planned = planned_stores(manifest.compiler_build == Ghul.Project.CompilerBuild.LLVM)
 
         if let (problem): ERROR = planned then
             LOG.say(problem)

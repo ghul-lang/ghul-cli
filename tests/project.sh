@@ -157,6 +157,23 @@ mkdir -p "$editor_build"
     || fail "the compiler ghul named did not compile the project's sources with the response file"
 [[ -f "$editor_build/greeter.wasm" ]] || fail "expected the editor round trip to produce greeter.wasm"
 
+# The llvm-built compiler is published for Linux on x64 and arm64.
+if [[ "$(uname -s)" == Linux && "$(uname -m)" =~ ^(x86_64|aarch64)$ ]]; then
+    echo "project: an editor gets the llvm-built compiler a manifest's compiler-build names, as a build does..." >&2
+    llvm_built="$scratch/llvm-built-greeter"
+    cp -r "$program" "$llvm_built"
+    sed -i 's/"name": "greeter",/"name": "greeter",\n    "compiler-build": "llvm",/' "$llvm_built/ghul-project.json"
+    grep -q '"compiler-build": "llvm"' "$llvm_built/ghul-project.json" || fail "the test could not write compiler-build into the manifest"
+    named="$(cd "$llvm_built" && dotnet "$cli" project compiler --json 2>/dev/null)" || fail "ghul project compiler failed for compiler-build llvm"
+    [[ "$named" == *"/compilers/llvm/"*"ghul-compiler"* ]] || fail "expected ghul project compiler to name the llvm-built compiler, got: $named"
+    llvm_compiler="$(cd "$llvm_built" && dotnet "$cli" project compiler 2>/dev/null)"
+    (cd "$llvm_built" && dotnet "$cli" project response-file --output "$scratch/llvm-built.rsp" --source-globs "$scratch/llvm-built.globs") >&2 \
+        || fail "ghul project response-file failed for compiler-build llvm"
+    (cd "$llvm_built" && eval "$llvm_compiler" "@$scratch/llvm-built.rsp" src/main.ghul src/greeting.ghul -o "$editor_build/llvm-built.wasm") >&2 \
+        || fail "the llvm-built compiler ghul named did not compile the project's sources with the response file"
+    [[ -f "$editor_build/llvm-built.wasm" ]] || fail "expected the llvm-built editor round trip to produce llvm-built.wasm"
+fi
+
 echo "project: the editor files report a manifest's problems..." >&2
 if err="$(cd "$broken" && dotnet "$cli" project response-file --output "$scratch/x.rsp" 2>&1)"; then
     fail "expected ghul project response-file to fail on a bad manifest"
