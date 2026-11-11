@@ -11,8 +11,6 @@ namespace Ghul.Project is
         sources: Collections.List[string],
         options: MANIFEST_OPTIONS,
         dependencies: Collections.Map[string, DEPENDENCY],
-        compiler_build: CompilerBuild,
-        prefer: Collections.List[BuildTarget],
         host_wasm: string?,
         tools: Collections.Map[string, VERSION_RANGE]
     ) is
@@ -20,10 +18,6 @@ namespace Ghul.Project is
         /// builds for, which ghul leaves out of its targets.
         ignores_dotnet: bool public
 
-        /// Whether the manifest declares ghul-core, whose sources now ship
-        /// inside ghul-runtime, so the declaration is left out of its
-        /// dependencies.
-        ignores_core: bool public
 
         /// The members a `workspace` manifest lists, as paths or globs
         /// relative to its directory; empty for every other kind.
@@ -71,6 +65,8 @@ namespace Ghul.Project is
         define: Collections.List[string],
         suppress: Collections.List[string],
         warn_as_error: Collections.List[string],
+        warn: Collections.List[string],
+        warn_as_hint: Collections.List[string],
         optimise: int?
     ) is si
 

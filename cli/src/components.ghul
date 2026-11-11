@@ -198,10 +198,9 @@ namespace Ghul.Cli is
         /// - machine: the machine
         /// - name: compiler, llvm, node or wasmtime
         /// - forced: the compiler host the environment names, or null
-        /// - llvm_built: whether the llvm-built compiler is asked for
-        named(machine: MACHINE, name: string, forced: Ghul.Project.CompilerHost?, llvm_built: bool) -> Result[Component, string] static is
+        named(machine: MACHINE, name: string, forced: Ghul.Project.CompilerHost?) -> Result[Component, string] static is
             if name =~ "compiler" then
-                let order = COMPILER_PLAN.order(machine, forced, llvm_built)
+                let order = COMPILER_PLAN.order(machine, forced)
 
                 if let (problem): ERROR = order then
                     return ERROR(problem)
@@ -267,7 +266,7 @@ namespace Ghul.Cli is
         /// - machine: the machine
         installed_compiler(machine: MACHINE) -> (store: Host.COMPILER_STORE, version: string)? static is
             let kinds = LIST[CompilerKind]()
-            let preferred = COMPILER_PLAN.order(machine, null, false)
+            let preferred = COMPILER_PLAN.order(machine, null)
 
             if preferred? then
                 for kind in preferred! do

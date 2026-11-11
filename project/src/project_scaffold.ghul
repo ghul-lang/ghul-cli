@@ -106,13 +106,7 @@ namespace Ghul.Project is
                 quoted.add("\"{COMPILER_ARGUMENTS.target_name(target)}\"")
             od
 
-            let tools = LIST[string]()
-
-            for floor in floors do
-                tools.add("\"{floor.tool}\": \">={floor.version}\"")
-            od
-
-            let tools_text = if tools.count > 0 then ",\n    \"tools\": {{ {string.join(", ", tools)} }}" else "" fi
+            let tools_text = MANIFEST_TEXT.requirements(floors, targets)
 
             let dependencies = LIST[string]()
 

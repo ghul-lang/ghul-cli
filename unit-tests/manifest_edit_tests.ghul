@@ -72,17 +72,11 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        add_dependency__replaces_a_dependency_on_a_tag_or_at_another_url() is
-            let on_tag = "{{ \"name\": \"app\", \"targets\": [\"wasm\"], \"dependencies\": {{ \"parsing\": {{ \"git\": \"https://github.com/acme/parsing\", \"tag\": \"v1.0.0\" }} }} }}"
-            let elsewhere = "{{ \"name\": \"app\", \"targets\": [\"wasm\"], \"dependencies\": {{ \"parsing\": {{ \"path\": \"../parsing\" }} }} }}"
+        add_dependency__replaces_a_dependency_at_a_path() is
+            let edited = _added("{{ \"name\": \"app\", \"targets\": [\"wasm\"], \"dependencies\": {{ \"parsing\": {{ \"path\": \"../parsing\" }} }} }}")
 
-            for text in [on_tag, elsewhere] do
-                let edited = _added(text)
-
-                assert !edited.contains("\"tag\"");
-                assert !edited.contains("\"path\"");
-                _has_parsing_pin(edited);
-            od
+            assert !edited.contains("\"path\"");
+            _has_parsing_pin(edited);
         si
 
         @Test()

@@ -34,7 +34,7 @@ namespace Ghul.Cli.Tests is
         // machine and the build chooses among them.
         @Test()
         a_name_alone_lists_every_target_in_choice_order() is
-            let parsed = PROJECT_SCAFFOLD.parse(LIST[string](["hello"]), TARGET_CHOICE.ORDER)
+            let parsed = PROJECT_SCAFFOLD.parse(LIST[string](["hello"]), [BuildTarget.WASM])
 
             assert parsed? else (cast Result.ERROR(parsed)).error
             _same("hello", parsed!.directory ?? "")
@@ -104,7 +104,8 @@ namespace Ghul.Cli.Tests is
 
             let text = PROJECT_SCAFFOLD.manifest_text("hello", LIST[BuildTarget]([BuildTarget.WASM, BuildTarget.LLVM]), floors, LIST[(tool: string, version: string)]())
 
-            assert text.contains("\"tools\": {{ \"compiler\": \">=66.7.0\", \"ghul-llvm\": \">=1.0.0\" }}") else text
+            assert text.contains("\"requires\": {{ \"compiler\": \">=66.7.0\" }}") else text
+            assert text.contains("\"llvm\": {{ \"requires\": {{ \"ghul-llvm\": \">=1.0.0\" }} }}") else text
 
             let read = MANIFEST_READER.read(text, "ghul-project.json")
 

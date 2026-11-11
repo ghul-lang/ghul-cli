@@ -53,17 +53,10 @@ namespace Ghul.Project is
                 IO.Std.error.write_line("ghul: warning: {MANIFEST_LOCATION.FILE_NAME}: ghul does not build for dotnet, so the dotnet target is ignored")
             fi
 
-            if manifest.ignores_core /\ !_warned_core then
-                _warned_core = true
-
-                IO.Std.error.write_line("ghul: warning: {MANIFEST_LOCATION.FILE_NAME}: ghul-core is now part of {RUNTIME_LIBRARY.NAME}: its declaration is ignored; remove it")
-            fi
-
             return (manifest = manifest, messages = messages)
         si
 
         _warned_dotnet: bool static
-        _warned_core: bool static
 
         /// The project in `directory`, built for `target_name`.
         ///
@@ -109,17 +102,7 @@ namespace Ghul.Project is
                     return CHOSEN_TARGET(null, null, null)
                 fi
 
-                // The manifest's own preference stands; the machine's
-                // global defaults fill the gap a manifest leaves.
-                let prefer =
-                    if manifest.prefer.count > 0 then
-                        manifest.prefer
-                    else
-                        let problem: string? mut = null
-                        GLOBAL_DEFAULTS.read(GLOBAL_DEFAULTS.path(), problem ref).prefer ?? manifest.prefer
-                    fi
-
-                return TARGET_CHOICE.choose(manifest.targets, prefer, named, availability)
+                return TARGET_CHOICE.choose(manifest.targets, named, availability)
             fi
 
             return CHOSEN_TARGET(null, null, null)

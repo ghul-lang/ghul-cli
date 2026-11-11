@@ -1,0 +1,33 @@
+namespace Ghul.Project is
+    use Collections.LIST
+
+    /// Pieces of manifest text the commands that write a manifest share.
+    class MANIFEST_TEXT is
+        /// The `requires` and `llvm` members that name `floors`, each a
+        /// line of its own after a comma, or empty where there are none: the
+        /// compiler's floor under `requires`, and ghul-llvm's under the llvm
+        /// section's `requires`, where the project builds for llvm.
+        ///
+        /// - floors: the oldest release of each tool the project is written with
+        /// - targets: the targets the project builds for
+        requirements(floors: Collections.List[(tool: string, version: string)], targets: Collections.List[BuildTarget]) -> string static is
+            let text = LIST[string]()
+
+            for floor in floors do
+                if floor.tool =~ PROJECT_TOOLS.COMPILER then
+                    text.add(",\n    \"requires\": {{ \"{floor.tool}\": \">={floor.version}\" }}")
+                fi
+            od
+
+            let builds_llvm = targets |> Ghul.Pipes.any(t => t == BuildTarget.LLVM)
+
+            for floor in floors do
+                if floor.tool =~ PROJECT_TOOLS.LLVM /\ builds_llvm then
+                    text.add(",\n    \"llvm\": {{ \"requires\": {{ \"{floor.tool}\": \">={floor.version}\" }} }}")
+                fi
+            od
+
+            return string.join("", text)
+        si
+    si
+si

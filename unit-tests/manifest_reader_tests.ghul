@@ -29,11 +29,12 @@ namespace Ghul.Cli.Tests is
             "    \"kind\": \"program\",\n"
             "    \"targets\": [\"wasm\", \"llvm\"],\n"
             "    \"sources\": [\"src/**/*.ghul\", \"extra/*.ghul\"],\n"
-            "    \"options\": {{\"underscore-access\": \"private\", \"global-namespace\": true, \"default-use\": [\"Collections\", \"IO.Std.write_line\"], \"define\": [\"DEBUG\"], \"suppress\": [\"redundant-semicolon\"], \"warn-as-error\": [\"cast-may-throw\"]}},\n"
-            "    \"dependencies\": {{\"tagged\": {{\"git\": \"https://github.com/ghul-lang/tagged\", \"tag\": \"v1.2.0\"}}, \"parsing\": {{\"git\": \"https://example.com/libs.git\", \"branch\": \"main\", \"directory\": \"parsing\"}}, \"scratch\": {{\"path\": \"../scratch\"}}}}\n"
+            "    \"language\": {{\"underscore-access\": \"private\", \"global-namespace\": true, \"default-use\": [\"Collections\", \"IO.Std.write_line\"], \"define\": [\"DEBUG\"]}},\n"
+            "    \"diagnostics\": {{\"suppress\": [\"redundant-semicolon\"], \"warn-as-error\": [\"cast-may-throw\"], \"warn\": [\"implicit-mutable-let\"], \"warn-as-hint\": [\"non-snake-case-name\"]}},\n"
+            "    \"dependencies\": {{\"versioned\": {{\"git\": \"https://github.com/ghul-lang/versioned\", \"version\": \"1.2.0\"}}, \"parsing\": {{\"git\": \"https://example.com/libs.git\", \"branch\": \"main\", \"directory\": \"parsing\"}}, \"scratch\": {{\"path\": \"../scratch\"}}}}\n"
             "}}"
 
-    EXPLICIT_FALSE: string static => "{{\"name\": \"app\", \"options\": {{\"global-namespace\": false}}}}"
+    EXPLICIT_FALSE: string static => "{{\"name\": \"app\", \"language\": {{\"global-namespace\": false}}}}"
 
     DEFAULT: string static => "{{\"name\": \"small\"}}"
     NO_NAME: string static => "{{\"version\": \"0.1.0\"}}"
@@ -44,19 +45,16 @@ namespace Ghul.Cli.Tests is
     BAD_NAME_UNDERSCORE: string static => "{{\"name\": \"app_1\"}}"
     GOOD_NAME: string static => "{{\"name\": \"my-app-2\"}}"
     UNKNOWN_KEY: string static => "{{\"name\": \"app\", \"nmae\": \"typo\"}}"
-    UNKNOWN_OPTION: string static => "{{\"name\": \"app\", \"options\": {{\"under-score-access\": \"private\"}}}}"
-    UNKNOWN_DEPENDENCY_KEY: string static => "{{\"name\": \"app\", \"dependencies\": {{\"lib\": {{\"git\": \"u\", \"tag\": \"v1\", \"rev\": \"abc\"}}}}}}"
-    OPTIMISE: string static => "{{\"name\": \"app\", \"options\": {{\"optimise\": 3}}}}"
-    BAD_OPTIMISE: string static => "{{\"name\": \"app\", \"options\": {{\"optimise\": 4}}}}"
-    PREFER: string static => "{{\"name\": \"app\", \"targets\": [\"wasm\", \"llvm\"], \"prefer\": [\"wasm\"]}}"
-    PREFER_UNLISTED: string static => "{{\"name\": \"app\", \"targets\": [\"wasm\"], \"prefer\": [\"llvm\"]}}"
-    LLVM_COMPILER: string static => "{{\"name\": \"app\", \"compiler-build\": \"llvm\"}}"
-    UNKNOWN_COMPILER_BUILD: string static => "{{\"name\": \"app\", \"compiler-build\": \"jit\"}}"
+    UNKNOWN_OPTION: string static => "{{\"name\": \"app\", \"language\": {{\"under-score-access\": \"private\"}}}}"
+    UNKNOWN_DEPENDENCY_KEY: string static => "{{\"name\": \"app\", \"dependencies\": {{\"lib\": {{\"git\": \"u\", \"version\": \"1.0.0\", \"rev\": \"abc\"}}}}}}"
+    OPTIMISE: string static => "{{\"name\": \"app\", \"llvm\": {{\"optimise\": 3}}}}"
+    BAD_OPTIMISE: string static => "{{\"name\": \"app\", \"llvm\": {{\"optimise\": 4}}}}"
+    UNKNOWN_LLVM_KEY: string static => "{{\"name\": \"app\", \"llvm\": {{\"rtti\": true}}}}"
     LLVM_TARGET: string static => "{{\"name\": \"app\", \"targets\": [\"llvm\"]}}"
     UNKNOWN_TARGET: string static => "{{\"name\": \"app\", \"targets\": [\"wasm\", \"js\"]}}"
     UNKNOWN_KIND: string static => "{{\"name\": \"app\", \"kind\": \"script\"}}"
-    OPTION_WRONG_TYPE: string static => "{{\"name\": \"app\", \"options\": {{\"global-namespace\": \"yes\"}}}}"
-    OPTION_WRONG_ENTRY: string static => "{{\"name\": \"app\", \"options\": {{\"suppress\": [1]}}}}"
+    OPTION_WRONG_TYPE: string static => "{{\"name\": \"app\", \"language\": {{\"global-namespace\": \"yes\"}}}}"
+    OPTION_WRONG_ENTRY: string static => "{{\"name\": \"app\", \"diagnostics\": {{\"suppress\": [1]}}}}"
     BOTH_GIT_AND_PATH: string static => "{{\"name\": \"app\", \"dependencies\": {{\"lib\": {{\"git\": \"u\", \"path\": \"../lib\"}}}}}}"
     COLLECTION: string static => "{{\"kind\": \"collection\"}}"
     NAMED_COLLECTION: string static => "{{\"kind\": \"collection\", \"name\": \"tests\"}}"
@@ -69,11 +67,11 @@ namespace Ghul.Cli.Tests is
     WORKSPACE_MEMBER_ESCAPES: string static => "{{\"kind\": \"workspace\", \"members\": [\"../other\"]}}"
     WORKSPACE_MEMBER_ABSOLUTE: string static => "{{\"kind\": \"workspace\", \"members\": [\"/etc\"]}}"
     NEITHER_GIT_NOR_PATH: string static =>"{{\"name\": \"app\", \"dependencies\": {{\"lib\": {{}}}}}}"
-    GIT_NO_TAG_NO_BRANCH: string static => "{{\"name\": \"app\", \"dependencies\": {{\"lib\": {{\"git\": \"u\"}}}}}}"
-    GIT_TAG_AND_BRANCH: string static => "{{\"name\": \"app\", \"dependencies\": {{\"lib\": {{\"git\": \"u\", \"tag\": \"v1\", \"branch\": \"main\"}}}}}}"
+    GIT_NO_VERSION_NO_BRANCH: string static => "{{\"name\": \"app\", \"dependencies\": {{\"lib\": {{\"git\": \"u\"}}}}}}"
+    GIT_VERSION_AND_BRANCH: string static => "{{\"name\": \"app\", \"dependencies\": {{\"lib\": {{\"git\": \"u\", \"version\": \"1.0.0\", \"branch\": \"main\"}}}}}}"
     WRONG_VERSION: string static => "{{\"name\": \"app\", \"version\": 1}}"
     WRONG_SOURCES: string static => "{{\"name\": \"app\", \"sources\": \"src\"}}"
-    WRONG_OPTIONS: string static => "{{\"name\": \"app\", \"options\": []}}"
+    WRONG_LANGUAGE: string static => "{{\"name\": \"app\", \"language\": []}}"
     WRONG_DEPENDENCIES: string static => "{{\"name\": \"app\", \"dependencies\": []}}"
     WRONG_TARGETS: string static => "{{\"name\": \"app\", \"targets\": \"wasm\"}}"
     DOTNET_TARGET: string static => "{{\"name\": \"app\", \"targets\": [\"dotnet\", \"wasm\"]}}"
@@ -115,7 +113,7 @@ namespace Ghul.Cli.Tests is
             let problems = _problems("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"compiler\": \"64.5.38\" }}")
 
             assert problems.count == 1;
-            assert problems[0].contains("compiler version cannot be pinned here");
+            assert problems[0].contains("compiler version cannot be pinned");
         si
 
         @Test()
@@ -132,23 +130,6 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        a_ghul_core_dependency_is_ignored_and_flagged_as_now_part_of_ghul_runtime() is
-            for declaration in ["{{ \"version\": \">=0.0.0\" }}", "{{ \"path\": \"../core\" }}", "{{ \"git\": \"https://github.com/ghul-lang/ghul-core\", \"tag\": \"v1.0.0\" }}", "{{}}", "\"1.0.0\""] do
-                let manifest = _read("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"dependencies\": {{\"ghul-core\": {declaration}, \"ghul-runtime\": {{ \"version\": \"^31.0.0\" }}}} }}")
-
-                assert manifest? else "{declaration} does not read";
-                assert manifest!.ignores_core else "{declaration} is not flagged";
-                assert !manifest!.dependencies.contains_key("ghul-core") else "{declaration} is a dependency";
-                assert manifest!.dependencies.contains_key("ghul-runtime") else "{declaration} lost ghul-runtime";
-            od
-        si
-
-        @Test()
-        a_manifest_not_declaring_ghul_core__does_not_ignore_it() is
-            assert !_read("{{\"name\": \"app\", \"targets\": [\"wasm\"]}}")!.ignores_core;
-        si
-
-        @Test()
         a_path_for_the_compilers_library_is_accepted() is
             let outcome = MANIFEST_READER.read("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"dependencies\": {{\"ghul-runtime\": {{\"path\": \"../runtime\"}}}} }}", "ghul-project.json")
 
@@ -156,8 +137,8 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        tools_name_a_version_range_for_the_compiler_and_ghul_llvm() is
-            let outcome = MANIFEST_READER.read("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"llvm\"], \"sources\": [\"src/*.ghul\"], \"tools\": {{ \"compiler\": \">=66.7.0\", \"ghul-llvm\": \"^1.0.0\" }} }}", "ghul-project.json")
+        requires_names_the_compiler_and_the_llvm_section_ghul_llvm() is
+            let outcome = MANIFEST_READER.read("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"llvm\"], \"sources\": [\"src/*.ghul\"], \"requires\": {{ \"compiler\": \">=66.7.0\" }}, \"llvm\": {{ \"requires\": {{ \"ghul-llvm\": \"^1.0.0\" }} }} }}", "ghul-project.json")
             let manifest = cast ReadOutcome.OK(outcome)
 
             assert manifest.manifest.tools["compiler"].to_string() =~ ">=66.7.0";
@@ -165,25 +146,34 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        a_tool_a_project_cannot_name_or_a_bad_range_is_refused() is
-            let problems = _problems("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"tools\": {{ \"node\": \">=22.0.0\", \"compiler\": \"newest\" }} }}")
+        a_tool_requires_cannot_name_or_a_bad_range_is_refused() is
+            let problems = _problems("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"requires\": {{ \"ghul-llvm\": \">=1.0.0\", \"compiler\": \"newest\" }} }}")
 
             assert problems.count == 2;
-            assert problems[0].contains("not a tool a project can name");
+            assert problems[0].contains("requires.ghul-llvm") /\ problems[0].contains("it names compiler") else problems[0];
             assert problems[1].contains("not a version range");
         si
 
         @Test()
-        a_host_key_is_refused_in_favour_of_engine() is
-            let problems = _problems("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"host\": {{ \"wasm\": \"node\" }} }}")
+        each_version_1_key__is_refused_naming_what_replaced_it() is
+            for (key, value, replacement) in [
+                ("tools", "{{ \"compiler\": \">=1.0.0\" }}", "requires"),
+                ("options", "{{ \"suppress\": [] }}", "diagnostics"),
+                ("prefer", "[\"wasm\"]", "in the order they are preferred"),
+                ("engine", "{{ \"wasm\": \"node\" }}", "\"wasm\": {{ \"engine\""),
+                ("host", "{{ \"wasm\": \"node\" }}", "\"wasm\": {{ \"engine\""),
+                ("compiler-build", "\"llvm\"", "--compiler-host")
+            ] do
+                let problems = _problems("{{ \"name\": \"app\", \"targets\": [\"wasm\"], \"{key}\": {value} }}")
 
-            assert problems.count == 1;
-            assert problems[0].contains("host is now engine");
+                assert problems.count == 1 else "{key}: {problems |> join("; ")}";
+                assert problems[0].contains(key) /\ problems[0].contains(replacement) else "{key}: {problems[0]}";
+            od
         si
 
         @Test()
         an_engine_names_what_runs_wasm() is
-            let outcome = MANIFEST_READER.read("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"engine\": {{ \"wasm\": \"wasmtime\" }} }}", "ghul-project.json")
+            let outcome = MANIFEST_READER.read("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"wasm\": {{ \"engine\": \"wasmtime\" }} }}", "ghul-project.json")
 
             assert isa ReadOutcome.OK(outcome);
             assert (cast ReadOutcome.OK(outcome)).manifest.host_wasm =~ "wasmtime";
@@ -201,11 +191,11 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        a_git_dependency_with_both_a_tag_and_a_version_is_refused() is
+        a_git_dependency_naming_a_tag_is_refused() is
             let problems = _problems("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"dependencies\": {{ \"parsing\": {{ \"git\": \"https://example.com/p\", \"tag\": \"v1.0.0\", \"version\": \"1.0.0\" }} }} }}")
 
             assert problems.count == 1;
-            assert problems[0].contains("both tag and version");
+            assert problems[0].contains("dependencies.parsing.tag") /\ problems[0].contains("a tag is now a version") else problems[0];
         si
         // What reading a manifest that should not have read produced, as
         // the messages a caller would report.
@@ -247,6 +237,8 @@ namespace Ghul.Cli.Tests is
             assert options.define[0] =~ "DEBUG";
             assert options.suppress[0] =~ "redundant-semicolon";
             assert options.warn_as_error[0] =~ "cast-may-throw";
+            assert options.warn[0] =~ "implicit-mutable-let";
+            assert options.warn_as_hint[0] =~ "non-snake-case-name";
         si
 
         @Test()
@@ -256,33 +248,11 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        a_preference__is_read_and_defaults_to_none() is
-            let prefer = (_read(PREFER)!).prefer
-
-            assert prefer.count == 1 /\ prefer[0] == BuildTarget.WASM
-            assert (_read(DEFAULT)!).prefer.count == 0
-        si
-
-        @Test()
-        a_preferred_target_the_project_does_not_list__is_a_problem() is
-            let problems = _problems(PREFER_UNLISTED)
+        a_key_the_llvm_section_does_not_hold__is_a_problem_naming_it() is
+            let problems = _problems(UNKNOWN_LLVM_KEY)
 
             assert problems.count == 1
-            assert problems[0].contains("llvm is not one of the targets") else problems[0]
-        si
-
-        @Test()
-        a_compiler_build__is_read_and_defaults_to_the_default_build() is
-            assert (_read(LLVM_COMPILER)!).compiler_build == CompilerBuild.LLVM
-            assert (_read(DEFAULT)!).compiler_build == CompilerBuild.DEFAULT
-        si
-
-        @Test()
-        an_unknown_compiler_build__is_a_problem() is
-            let problems = _problems(UNKNOWN_COMPILER_BUILD)
-
-            assert problems.count == 1
-            assert problems[0].contains("jit") else problems[0]
+            assert problems[0].contains("llvm.rtti") else problems[0]
         si
 
         @Test()
@@ -299,13 +269,14 @@ namespace Ghul.Cli.Tests is
 
             assert dependencies.count == 3;
 
-            if let core: DEPENDENCY.GIT = dependencies["tagged"] then
-                assert core.url =~ "https://github.com/ghul-lang/tagged";
-                assert core.tag =~ "v1.2.0";
+            if let core: DEPENDENCY.GIT = dependencies["versioned"] then
+                assert core.url =~ "https://github.com/ghul-lang/versioned";
+                assert core.version!.to_string() =~ "1.2.0";
+                assert !core.tag?;
                 assert !core.branch?;
                 assert !core.directory?;
             else
-                Assert.fail("tagged is not a git dependency");
+                Assert.fail("versioned is not a git dependency");
             fi
 
             if let parsing: DEPENDENCY.GIT = dependencies["parsing"] then
@@ -404,11 +375,11 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        an_unknown_key_in_options__is_a_problem_naming_it() is
+        an_unknown_key_in_language__is_a_problem_naming_it() is
             let problems = _problems(UNKNOWN_OPTION)
 
             assert problems.count == 1;
-            assert problems[0].contains("under-score-access");
+            assert problems[0].contains("language.under-score-access") else problems[0];
         si
 
         @Test()
@@ -505,23 +476,23 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        a_git_dependency_with_neither_tag_nor_branch__is_a_problem() is
-            let problems = _problems(GIT_NO_TAG_NO_BRANCH)
+        a_git_dependency_with_neither_version_nor_branch__is_a_problem() is
+            let problems = _problems(GIT_NO_VERSION_NO_BRANCH)
 
             assert problems.count == 1;
             assert problems[0].contains("dependencies.lib");
         si
 
         @Test()
-        a_git_dependency_with_a_tag_and_a_branch__is_read() is
-            assert (_read(GIT_TAG_AND_BRANCH)!).dependencies.count == 1;
+        a_git_dependency_with_a_version_and_a_branch__is_read() is
+            assert (_read(GIT_VERSION_AND_BRANCH)!).dependencies.count == 1;
         si
 
         @Test()
         a_member_of_the_wrong_type__is_a_problem_naming_it() is
             assert _problems(WRONG_VERSION)[0].contains("version");
             assert _problems(WRONG_SOURCES)[0].contains("sources");
-            assert _problems(WRONG_OPTIONS)[0].contains("options");
+            assert _problems(WRONG_LANGUAGE)[0].contains("language");
             assert _problems(WRONG_DEPENDENCIES)[0].contains("dependencies");
             assert _problems(WRONG_TARGETS)[0].contains("targets");
         si

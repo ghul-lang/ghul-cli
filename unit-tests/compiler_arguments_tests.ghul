@@ -37,6 +37,8 @@ namespace Ghul.Cli.Tests is
                 LIST[string](define),
                 LIST[string](suppress),
                 LIST[string](warn_as_error),
+                LIST[string](),
+                LIST[string](),
                 null)
 
         _plain_options() -> MANIFEST_OPTIONS => _options(null, false, [], [], [], [])
@@ -50,7 +52,7 @@ namespace Ghul.Cli.Tests is
                 LIST[string](["src/**/*.ghul"]),
                 options,
                 MAP[string, DEPENDENCY](),
-                CompilerBuild.DEFAULT, LIST[BuildTarget](), null, MAP[string, VERSION_RANGE]())
+                null, MAP[string, VERSION_RANGE]())
 
         _no_libraries() -> Collections.List[SOURCE_LIBRARY] => LIST[SOURCE_LIBRARY]()
 

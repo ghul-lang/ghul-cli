@@ -119,6 +119,14 @@ namespace Ghul.Project is
                 add(["--warn-as-error", string.join(",", options.warn_as_error)])
             fi
 
+            if options.warn.count > 0 then
+                add(["--warn", string.join(",", options.warn)])
+            fi
+
+            if options.warn_as_hint.count > 0 then
+                add(["--warn-as-hint", string.join(",", options.warn_as_hint)])
+            fi
+
             if manifest.kind == ManifestKind.LIBRARY then
                 add(["--library"])
 

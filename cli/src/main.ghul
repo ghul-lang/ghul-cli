@@ -356,7 +356,7 @@ namespace Ghul.Cli is
         if let installed = compiler then
             compiler_version = installed.version
         else
-            let newest = Host.COMPILER_DOWNLOAD.of(COMPILER_PLAN.store(COMPILER_PLAN.order(machine, null, false)![0])).latest_release()
+            let newest = Host.COMPILER_DOWNLOAD.of(COMPILER_PLAN.store(COMPILER_PLAN.order(machine, null)![0])).latest_release()
 
             if newest? then
                 compiler_version = newest!
@@ -472,7 +472,7 @@ namespace Ghul.Cli is
     si
 
     cmd_new(rest: Collections.List[string]) -> int is
-        let parsed = Ghul.Project.PROJECT_SCAFFOLD.parse(rest, Ghul.Project.TARGET_CHOICE.ORDER)
+        let parsed = Ghul.Project.PROJECT_SCAFFOLD.parse(rest, [Ghul.Project.BuildTarget.WASM])
 
         if let (problem): ERROR = parsed then
             LOG.say("{problem}")
@@ -632,6 +632,7 @@ namespace Ghul.Cli is
         let llvm_built mut = false
         let i mut = 0
 
+
         while i < rest.count do
             let argument = rest[i]
 
@@ -657,14 +658,18 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        let (forced, problem) = Ghul.Project.COMPILER_HOST.from_environment()
+        let (configured, problem) = Ghul.Project.COMPILER_HOST.configured()
 
         if let message: string = problem then
             LOG.say(message)
             return 1
         fi
 
-        let component = COMPONENTS.named(MACHINE.this_machine(), positional[0], forced, llvm_built)
+        // `--llvm` asks for the llvm-built compiler, as a compiler host of
+        // llvm does.
+        let forced = if llvm_built then Ghul.Project.CompilerHost.LLVM else configured fi
+
+        let component = COMPONENTS.named(MACHINE.this_machine(), positional[0], forced)
 
         if let (error): ERROR = component then
             LOG.say(error)
@@ -884,7 +889,7 @@ namespace Ghul.Cli is
     cmd_version() -> int is
         Std.out.write_line("ghul {cli_version()}")
 
-        let planned = planned_stores(false)
+        let planned = planned_stores()
 
         if let (problem): ERROR = planned then
             LOG.say(problem)
@@ -1017,7 +1022,7 @@ namespace Ghul.Cli is
         force: bool
     ) -> (exit_code: int, project: Ghul.Project.LOADED_PROJECT?, output: string) is
         let say = (message: string) -> void => LOG.say(message)
-        let planned = planned_stores(false)
+        let planned = planned_stores()
 
         if let (problem): ERROR = planned then
             say(problem)
@@ -1050,9 +1055,8 @@ namespace Ghul.Cli is
             Ghul.Project.MANIFEST(
                 "script", null, Ghul.Project.ManifestKind.PROGRAM,
                 Collections.LIST[Ghul.Project.BuildTarget]([target]), Collections.LIST[string](["script.ghul"]),
-                Ghul.Project.MANIFEST_OPTIONS(null, false, Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), null),
-                script_dependencies(), Ghul.Project.CompilerBuild.DEFAULT,
-                Collections.LIST[Ghul.Project.BuildTarget](), null, Collections.MAP[string, Ghul.Project.VERSION_RANGE]())
+                Ghul.Project.MANIFEST_OPTIONS(null, false, Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), null),
+                script_dependencies(), null, Collections.MAP[string, Ghul.Project.VERSION_RANGE]())
 
         let libraries = Ghul.Project.PROJECT_BUILD.libraries(
             Ghul.Project.LOADED_PROJECT(manifest, cache_root(), target), cache, say)
@@ -1332,7 +1336,7 @@ namespace Ghul.Cli is
             // The compiler a build uses: the managed one where there is .NET,
             // otherwise the llvm-built one where it is published, or the
             // wasm-built one under Node.
-            let planned = planned_stores(false)
+            let planned = planned_stores()
 
             if let (problem): ERROR = planned then
                 say(problem)
@@ -1385,9 +1389,8 @@ namespace Ghul.Cli is
             Ghul.Project.MANIFEST(
                 "repl", null, Ghul.Project.ManifestKind.PROGRAM,
                 Collections.LIST[Ghul.Project.BuildTarget]([Ghul.Project.BuildTarget.LLVM]), Collections.LIST[string](["repl.ghul"]),
-                Ghul.Project.MANIFEST_OPTIONS(null, false, Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), null),
-                script_dependencies(), Ghul.Project.CompilerBuild.DEFAULT,
-                Collections.LIST[Ghul.Project.BuildTarget](), null, Collections.MAP[string, Ghul.Project.VERSION_RANGE]())
+                Ghul.Project.MANIFEST_OPTIONS(null, false, Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), null),
+                script_dependencies(), null, Collections.MAP[string, Ghul.Project.VERSION_RANGE]())
 
         let libraries = Ghul.Project.PROJECT_BUILD.libraries(
             Ghul.Project.LOADED_PROJECT(manifest, cache_root(), Ghul.Project.BuildTarget.LLVM), cache, say)
@@ -1576,10 +1579,6 @@ namespace Ghul.Cli is
         mode: Ghul.Project.BUILD_MODE,
         say: (string) -> void
     ) -> (compiler: Ghul.Project.COMPILER_PROCESS, version: string, runtime_assembly: string?)? is
-        // A project that names the llvm-built compiler is compiled with it,
-        // from its own store; it compiles for wasm and llvm only.
-        let wants_llvm = project.manifest.compiler_build == Ghul.Project.CompilerBuild.LLVM
-
         let request = Ghul.Project.COMPILER_REQUEST.from_environment(overrides.compiler_command)
 
         if let problem: Ghul.Project.CompilerRequest.PROBLEM = request then
@@ -1600,7 +1599,7 @@ namespace Ghul.Cli is
         fi
 
         // The compiler plan says which stores to try, most wanted first.
-        let planned = planned_stores(wants_llvm)
+        let planned = planned_stores()
 
         if let (problem): ERROR = planned then
             say(problem)
@@ -1672,22 +1671,22 @@ namespace Ghul.Cli is
 
     // The compiler stores this machine's compiler can come from for the
     // request, most wanted first: the one place the choice is made. The
-    // environment's compiler host and a manifest's llvm-built compiler are
-    // honoured, or the reason they cannot be.
-    planned_stores(llvm_built: bool) -> Result[Collections.List[Host.COMPILER_STORE], string] is
-        let (forced, problem) = Ghul.Project.COMPILER_HOST.from_environment()
+    // compiler host the user's configuration names is honoured, or the
+    // reason it cannot be.
+    planned_stores() -> Result[Collections.List[Host.COMPILER_STORE], string] is
+        let (configured, problem) = Ghul.Project.COMPILER_HOST.configured()
 
         if let message: string = problem then
             return ERROR(message)
         fi
 
-        return planned_stores(llvm_built, forced)
+        return planned_stores(configured)
     si
 
-    // The same, with the host given rather than read from the environment:
-    // null leaves the choice to the plan.
-    planned_stores(llvm_built: bool, forced: Ghul.Project.CompilerHost?) -> Result[Collections.List[Host.COMPILER_STORE], string] is
-        let order = COMPILER_PLAN.order(MACHINE.this_machine(), forced, llvm_built)
+    // The same, with the host given rather than read from the
+    // configuration: null leaves the choice to the plan.
+    planned_stores(forced: Ghul.Project.CompilerHost?) -> Result[Collections.List[Host.COMPILER_STORE], string] is
+        let order = COMPILER_PLAN.order(MACHINE.this_machine(), forced)
 
         if let (error): ERROR = order then
             return ERROR(error)
@@ -1734,11 +1733,10 @@ namespace Ghul.Cli is
             return command_compiler(named.command)
         fi
 
-        // `--compiler-host` takes the place of GHUL_COMPILER_HOST where it is
-        // given, so an editor's setting is not overridden by the environment
-        // the editor happened to start in.
-        let llvm_built = manifest.compiler_build == Ghul.Project.CompilerBuild.LLVM
-        let planned = if options.host_named then planned_stores(llvm_built, options.host) else planned_stores(llvm_built) fi
+        // A host `--compiler-host` names takes the place of the
+        // configuration's compiler-host; `auto` names none, leaving the
+        // choice to the configuration and then to the plan.
+        let planned = if let host = options.host then planned_stores(host) else planned_stores() fi
 
         if let (problem): ERROR = planned then
             LOG.say(problem)
@@ -1972,7 +1970,7 @@ namespace Ghul.Cli is
 
         // Reported before anything runs, so a misspelt host is not hidden by
         // a build that is already up to date and never asks for a compiler.
-        if let problem: string = Ghul.Project.COMPILER_HOST.from_environment().problem then
+        if let problem: string = Ghul.Project.COMPILER_HOST.configured().problem then
             LOG.say("{problem}")
             return 1
         fi
