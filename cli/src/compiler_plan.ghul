@@ -22,12 +22,13 @@ namespace Ghul.Cli is
         ///
         /// A compiler host the user names, by `--compiler-host` or the
         /// configuration's `defaults.compiler-host`, gets only that host.
-        /// Otherwise a machine with .NET uses the managed compiler. One
-        /// without uses the llvm-built compiler where one is published for
-        /// it, with the wasm-built compiler as its fallback. Elsewhere it uses
-        /// the wasm-built compiler, with a Native AOT compiler that is already
+        /// Otherwise the choice is the same whether or not the machine has
+        /// .NET: the llvm-built compiler where one is published for it, with
+        /// the wasm-built compiler as its fallback, and elsewhere the
+        /// wasm-built compiler, with a Native AOT compiler that is already
         /// installed as its fallback, or first where there is no Node to run
-        /// the wasm one. A Native AOT compiler is never newly chosen.
+        /// the wasm one. The managed compiler is used only where it is named,
+        /// and a Native AOT compiler is never newly chosen.
         ///
         /// - machine: the machine
         /// - forced: the host the user names, or null
@@ -58,12 +59,6 @@ namespace Ghul.Cli is
 
                     kinds.add(CompilerKind.LLVM_BUILT)
                 esac
-
-                return OK(kinds)
-            fi
-
-            if machine.has_dotnet then
-                kinds.add(CompilerKind.MANAGED)
 
                 return OK(kinds)
             fi

@@ -44,7 +44,7 @@ namespace Ghul.Repl.Host is
             start_info.redirect_standard_output = true
             start_info.redirect_standard_error = true
 
-            let process = System.Diagnostics.Process.start(start_info)
+            let process = Ghul.Project.PROCESS_START.start(start_info)
 
             if !process? then
                 return ERROR("could not start dotnet to restore {package}")

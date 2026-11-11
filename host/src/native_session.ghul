@@ -499,7 +499,7 @@ namespace Ghul.Repl.Host is
                 start_info.argument_list.add(argument)
             od
 
-            if let process = System.Diagnostics.Process.start(start_info) then
+            if let process = Ghul.Project.PROCESS_START.start(start_info) then
                 let out_task = process.standard_output.read_to_end_async()
                 let err_task = process.standard_error.read_to_end_async()
 
@@ -533,7 +533,7 @@ namespace Ghul.Repl.Host is
             made.use_shell_execute = false
             made.argument_list.add(commands)
 
-            let maker = System.Diagnostics.Process.start(made)
+            let maker = Ghul.Project.PROCESS_START.start(made)
 
             if !maker? then
                 return ERROR("ghul: cannot start mkfifo")
@@ -549,7 +549,7 @@ namespace Ghul.Repl.Host is
             start_info.argument_list.add("--serve")
             start_info.argument_list.add(commands)
 
-            let host = System.Diagnostics.Process.start(start_info)
+            let host = Ghul.Project.PROCESS_START.start(start_info)
 
             if !host? then
                 return ERROR("ghul: cannot start {_host_path}")

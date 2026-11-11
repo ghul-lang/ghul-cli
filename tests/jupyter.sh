@@ -46,11 +46,9 @@ mkdir -p "$HOME"
 
 echo "jupyter: installing a compiler under the scratch HOME..." >&2
 
-cat > "$scratch/warm.ghul" <<'GHUL'
-IO.Std.write_line("warm")
-GHUL
-
-dotnet "$scratch/cli/ghul-cli.dll" run "$scratch/warm.ghul" >/dev/null
+# The kernel runs each cell in this process, so it needs the managed
+# compiler, which ghul installs only where it is named.
+dotnet "$scratch/cli/ghul-cli.dll" install compiler --compiler-host dotnet >/dev/null
 
 echo "jupyter: driving the kernel..." >&2
 

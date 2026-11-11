@@ -268,13 +268,14 @@ fi
 [[ "$err" == *"GHUL_COMPILER_VERSION is not supported"* ]] || fail "unexpected message for GHUL_COMPILER_VERSION: $err"
 
 echo "project: ghul new creates a project that builds and runs on wasm..." >&2
-(cd "$scratch" && dotnet "$cli" new scaffolded --target wasm,llvm 2>/dev/null) || fail "ghul new failed"
+(cd "$scratch" && dotnet "$cli" new scaffolded 2>/dev/null) || fail "ghul new failed"
+grep -q '"targets": \["wasm", "llvm"\]' "$scratch/scaffolded/ghul-project.json" || fail "ghul new did not list wasm then llvm: $(cat "$scratch/scaffolded/ghul-project.json")"
 [[ -f "$scratch/scaffolded/.gitignore" ]] || fail "ghul new wrote no .gitignore"
 grep -q '"compiler": ">=' "$scratch/scaffolded/ghul-project.json" || fail "ghul new wrote no compiler floor"
 ! grep -q '"ghul-core"' "$scratch/scaffolded/ghul-project.json" || fail "ghul new wrote a ghul-core declaration"
 grep -q '"ghul-runtime": { "version": ">=' "$scratch/scaffolded/ghul-project.json" || fail "ghul new wrote no ghul-runtime floor"
 grep -q '"ghul-llvm": ">=' "$scratch/scaffolded/ghul-project.json" || fail "ghul new wrote no ghul-llvm floor for a project with an llvm target"
-out="$(cd "$scratch/scaffolded" && dotnet "$cli" run --target wasm 2>/dev/null)" || fail "ghul run of a new project failed on wasm"
+out="$(cd "$scratch/scaffolded" && dotnet "$cli" run 2>/dev/null)" || fail "ghul run of a new project failed on wasm"
 check "$out" "hello" "new project output on wasm"
 
 echo "project: ghul new refuses a directory that is not empty..." >&2

@@ -1,0 +1,19 @@
+namespace Ghul.Project is
+    /// Starting a program that may not be there to start.
+    class PROCESS_START is
+        /// The process `start_info` describes, started, or null where it
+        /// cannot be: the program is missing, is not executable, or is a
+        /// link to nothing.
+        ///
+        /// - start_info: what to start
+        start(start_info: System.Diagnostics.ProcessStartInfo) -> System.Diagnostics.Process? static is
+            try
+                return System.Diagnostics.Process.start(start_info)
+            catch e: System.ComponentModel.Win32Exception
+                return null
+            catch e: System.InvalidOperationException
+                return null
+            yrt
+        si
+    si
+si

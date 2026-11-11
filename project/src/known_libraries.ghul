@@ -1,0 +1,25 @@
+namespace Ghul.Project is
+    /// The libraries published from ghul-lang that `ghul add` takes by name
+    /// alone.
+    class KNOWN_LIBRARIES is
+        /// The names `repository` knows, in the order a usage message
+        /// lists them.
+        NAMES: ARRAY[string] static => [RUNTIME_LIBRARY.NAME, "ghul-raster"]
+
+        /// Where the library called `name` is fetched from, or null where
+        /// `name` is not one of `NAMES`.
+        ///
+        /// - name: the library's name, as a manifest declares it
+        repository(name: string) -> string? static is
+            if name =~ RUNTIME_LIBRARY.NAME then
+                return RUNTIME_LIBRARY.repository()
+            fi
+
+            if name =~ "ghul-raster" then
+                return "https://github.com/ghul-lang/ghul-raster"
+            fi
+
+            return null
+        si
+    si
+si

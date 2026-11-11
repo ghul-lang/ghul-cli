@@ -29,8 +29,9 @@ You do not type that command yourself.
 The kernel compiles cells with a `ghul-compiler` that is already on the
 machine. It looks first for the compiler that `GHUL_COMPILER` names, then for
 the copy that `ghul.cli` installs in its compiler store, and then for a
-`ghul-compiler` on the path. The simplest way to get one is to install
-`ghul.cli` and run any script once.
+`ghul-compiler` on the path. It runs each cell in its own process, so it needs
+the managed compiler, which `ghul` does not choose by itself. Install
+`ghul.cli` and run `ghul install compiler --compiler-host dotnet`.
 
 ## using it from VS Code
 
