@@ -168,8 +168,9 @@ Compiler messages go to standard error.
 store, so that the first script does not wait for the install. It installs the
 compiler this machine uses, whether or not it has .NET: the compiler built for
 llvm on Linux for x64 and arm64, and the wasm-built compiler, run by Node.js,
-everywhere else, with a Node.js fetched first where there is none. The managed
-compiler is installed only where it is named, by `--compiler-host dotnet` or by
+on the other platforms but Windows, with a Node.js fetched first where there is none, and the managed
+compiler on Windows. Elsewhere the managed compiler is installed only where it
+is named, by `--compiler-host dotnet` or by
 the configuration file's `defaults.compiler-host` (see "compiler hosts"
 below), which names the one to use instead of the built-in choice. A store
 that already holds a managed or a Native AOT compiler is kept up to date while
@@ -445,7 +446,9 @@ Named by neither, `ghul` chooses the same way on every machine, with .NET or
 without: the compiler built for llvm where one is published, for Linux on x64
 and arm64, with the wasm-built one as its fallback, and otherwise the
 wasm-built one under Node. The managed compiler is used only where it is
-named. A machine that used the managed compiler before this choice changed
+named, with one exception: on Windows, where `ghul` runs on .NET, the built-in
+choice is the managed compiler, because the wasm-built compiler cannot yet
+open files by absolute Windows paths. A machine that used the managed compiler before this choice changed
 fetches the compiler built for llvm on its next build, and says so.
 
 - `wasm`: the wasm-built compiler, run by Node; `ghul` fetches a Node where

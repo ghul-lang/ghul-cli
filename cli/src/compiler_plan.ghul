@@ -28,7 +28,8 @@ namespace Ghul.Cli is
         /// wasm-built compiler, with a Native AOT compiler that is already
         /// installed as its fallback, or first where there is no Node to run
         /// the wasm one. The managed compiler is used only where it is named,
-        /// and a Native AOT compiler is never newly chosen.
+        /// or on Windows (`keeps_managed`), and a Native AOT compiler is never
+        /// newly chosen.
         ///
         /// - machine: the machine
         /// - forced: the host the user names, or null
@@ -63,6 +64,12 @@ namespace Ghul.Cli is
                 return OK(kinds)
             fi
 
+            if keeps_managed(machine) then
+                kinds.add(CompilerKind.MANAGED)
+
+                return OK(kinds)
+            fi
+
             if machine.llvm_compiler_is_built then
                 kinds.add(CompilerKind.LLVM_BUILT)
                 kinds.add(CompilerKind.WASM)
@@ -88,6 +95,16 @@ namespace Ghul.Cli is
 
             return OK(kinds)
         si
+
+        /// Whether the built-in choice on `machine` is the managed compiler:
+        /// on Windows, where the wasm-built compiler cannot yet open a file
+        /// by an absolute Windows path, and where the tool runs on .NET, so
+        /// there is one. This is the one exception to choosing the same way
+        /// with .NET or without.
+        ///
+        /// - machine: the machine
+        keeps_managed(machine: MACHINE) -> bool static =>
+            machine.has_dotnet /\ (machine.rid?.starts_with("win-") ?? false)
 
         /// The store that holds compilers of `kind`.
         ///
