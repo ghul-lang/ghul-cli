@@ -70,8 +70,9 @@ This installs `ghul` as a native executable, built with .NET Native AOT, which
 needs nothing installed but the C library: no .NET runtime and no SDK. It is
 built for Linux on x64 and on arm64, a Raspberry Pi 4 or 5 among them. The
 archive holds the tool alone, so the compiler is never out of date with it:
-the first build fetches one into the compiler cache above, the wasm-built
-compiler under Node by default. The tool goes into `~/.local/opt/ghul`, linked
+the first build fetches one into the compiler cache above: the compiler
+built for llvm by default on Linux, and the wasm-built compiler under Node
+elsewhere. The tool goes into `~/.local/opt/ghul`, linked
 from `~/.local/bin/ghul`. `sh install.sh --help` lists the options, and
 `--dry-run` reports what it would do.
 
@@ -85,12 +86,11 @@ none, `ghul` says so and that `ghul install node` brings one in, and on Linux
 x64 that the llvm target builds a native executable without it. Both fetch
 ghul-runtime with `git`.
 
-Without .NET, the compiler itself is the wasm-built one, run by Node: a
-single archive every release publishes for every platform, fetched the first
-time it is needed. The Node it runs under is the one on `PATH`, or the one
-`ghul install node` brought in. On a machine with no Node, `ghul` fetches the
-Native AOT compiler instead, which is published for Linux x64 only; on arm64
-there is none, so the machine needs Node, and `ghul install node` brings one in.
+Without .NET, the compiler itself is the one built for llvm, a native
+executable, on Linux x64 and arm64, fetched the first time it is needed; it
+needs no Node to run. Elsewhere it is the wasm-built one, run by Node: a
+single archive every release publishes for every platform. The Node it runs
+under is the one on `PATH`, or the one `ghul install node` brought in.
 
 Which machines that covers follows from the builds that exist. `ghul` is a
 .NET tool except as its Linux x64 native archive, so a machine with no .NET at
@@ -167,11 +167,12 @@ Compiler messages go to standard error.
 `ghul install compiler` installs `ghul.compiler` into `ghul`'s own compiler
 store, so that the first script does not wait for the install. It installs the
 compiler this machine uses: the managed compiler where there is a .NET host to
-run it, and the wasm-built compiler, run by Node.js, everywhere else, with a
+run it, the compiler built for llvm where there is none on Linux for x64 or
+arm64, and the wasm-built compiler, run by Node.js, everywhere else, with a
 Node.js fetched first where there is none. A Native AOT compiler is installed
 only by an earlier release's install, and kept up to date while it is there.
-`GHUL_COMPILER_HOST` (`wasm`, `dotnet` or `native`) names the one to use
-instead. `install compiler` installs the latest release, and nothing if it is
+`GHUL_COMPILER_HOST` (`wasm`, `dotnet`, `native` or `llvm`) names the one to
+use instead. `install compiler` installs the latest release, and nothing if it is
 already installed. A version cannot be chosen: the compiler, ghul-llvm,
 Node.js, wasmtime and the compiler's library ghul-runtime are tools, and
 always the newest release. What a project depends on is pinned in its
@@ -422,13 +423,16 @@ overrides it. `GHUL_COMPILER_VERSION` is refused.
 
 `GHUL_COMPILER_HOST` picks how the compiler is run, for every build and for
 `ghul project compiler`, so an editor follows it too. Unset, `ghul` chooses:
-the managed compiler where there is .NET, and otherwise the wasm-built one
-under Node.
+the managed compiler where there is .NET; otherwise the compiler built for
+llvm where one is published, for Linux on x64 and arm64, with the wasm-built
+one as its fallback; and otherwise the wasm-built one under Node.
 
 - `wasm`: the wasm-built compiler, run by Node; `ghul` fetches a Node where
   there is none it can run.
 - `dotnet`: the managed compiler, run by the .NET host.
 - `native`: the Native AOT compiler, built for Linux x64 only.
+- `llvm`: the compiler built for llvm, a native executable, for Linux on x64
+  and arm64. It builds for wasm and llvm, and serves an editor's analysis.
 
 Each is installed as it is needed into a directory of its own under the
 compiler cache, `compilers/<host>`. Any other value, or a host this machine
@@ -535,8 +539,9 @@ Node.js, since an editor analyses the project rather than running it.
 project builds with, installing it first if need be, as the only line on
 standard output. That is the newest
 installed, so it can change after a compiler is installed. On a machine with
-no .NET it is the wasm-built compiler run by Node.js, which serves analysis
-from 66.1.0. The program is named by its full path where `PATH` finds it, so
+no .NET it is the compiler built for llvm on Linux x64 and arm64, which serves
+analysis from 71.11.5, and elsewhere the wasm-built compiler run by Node.js,
+which serves analysis from 66.1.0. The program is named by its full path where `PATH` finds it, so
 a client started with a different `PATH` runs the same one. `--json` prints
 the command as a JSON array of strings, the program first, for a client to
 start as it stands rather than splitting a command line.

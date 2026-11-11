@@ -105,7 +105,8 @@ namespace Ghul.Cli is
 
     // The installed version the caller asked for: the one named, where
     // that is installed, and otherwise nothing. With no version named,
-    // the highest installed is the one to use.
+    // the highest installed is the one to use, unless it is an llvm-built
+    // compiler older than COMPILER_PLAN.LLVM_BUILT_FLOOR.
     usable_installed_version(store: Host.COMPILER_STORE, version: string?) -> string? is
         if let wanted: string = version then
             if store.is_installed(wanted) then
@@ -115,7 +116,13 @@ namespace Ghul.Cli is
             return null
         fi
 
-        return store.highest_version()
+        let highest = store.highest_version()
+
+        if let held: string = highest /\ store.is_llvm /\ Ghul.Project.COMPILER_CHOICE.is_older_than(held, COMPILER_PLAN.LLVM_BUILT_FLOOR) then
+            return null
+        fi
+
+        return highest
     si
 
     // How long a concurrent installer's choice of the newest version binds
@@ -1320,7 +1327,8 @@ namespace Ghul.Cli is
             compiler = Host.COMPILER_COMMAND("dotnet", named)
         else
             // The compiler a build uses: the managed one where there is .NET,
-            // otherwise the wasm-built one under Node.
+            // otherwise the llvm-built one where it is published, or the
+            // wasm-built one under Node.
             let planned = planned_stores(false)
 
             if let (problem): ERROR = planned then
@@ -1697,8 +1705,9 @@ namespace Ghul.Cli is
 
     // The compiler an editor analyses a project with: the command
     // `--compiler` gave, or the one the environment or the manifest names,
-    // installed if need be - the wasm-built one under node where this
-    // machine has no .NET to run the managed one.
+    // installed if need be - where this machine has no .NET to run the
+    // managed one, the llvm-built one where it is published, or the
+    // wasm-built one under node.
     tool_compiler(
         manifest: Ghul.Project.MANIFEST,
         overrides: Ghul.Project.BUILD_OVERRIDES

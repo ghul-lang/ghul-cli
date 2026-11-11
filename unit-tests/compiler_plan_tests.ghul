@@ -35,23 +35,31 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        a_machine_without_dotnet__uses_the_wasm_built_compiler_wherever_it_is() is
-            assert _order("linux-arm64", false, true, false, null, false) =~ "WASM"
+        a_machine_without_dotnet__uses_the_llvm_built_compiler_where_it_is_published__with_wasm_as_its_fallback() is
+            assert _order("linux-x64", false, true, false, null, false) =~ "LLVM_BUILT WASM"
+            assert _order("linux-arm64", false, true, false, null, false) =~ "LLVM_BUILT WASM"
+            assert _order("linux-x64", false, false, false, null, false) =~ "LLVM_BUILT WASM"
+            assert _order("linux-arm64", false, false, false, null, false) =~ "LLVM_BUILT WASM"
+        si
+
+        @Test()
+        a_machine_without_dotnet__uses_the_wasm_built_compiler_where_no_llvm_built_one_is_published() is
             assert _order("osx-arm64", false, true, false, null, false) =~ "WASM"
+            assert _order("osx-x64", false, true, false, null, false) =~ "WASM"
             assert _order("win-x64", false, true, false, null, false) =~ "WASM"
-            assert _order("linux-x64", false, true, false, null, false) =~ "WASM"
+            assert _order("win-arm64", false, false, false, null, false) =~ "WASM"
         si
 
         @Test()
-        a_native_compiler_is_never_newly_chosen__and_is_not_offered_where_none_is_built() is
-            assert _order("linux-x64", false, false, false, null, false) =~ "WASM"
-            assert _order("linux-arm64", false, false, true, null, false) =~ "WASM"
+        an_installed_native_compiler__is_passed_over_for_the_llvm_built_one() is
+            assert _order("linux-x64", false, true, true, null, false) =~ "LLVM_BUILT WASM"
+            assert _order("linux-x64", false, false, true, null, false) =~ "LLVM_BUILT WASM"
         si
 
         @Test()
-        an_installed_native_compiler__stays_as_the_fallback_or_the_first_choice_without_node() is
-            assert _order("linux-x64", false, true, true, null, false) =~ "WASM NATIVE"
-            assert _order("linux-x64", false, false, true, null, false) =~ "NATIVE WASM"
+        a_machine_with_dotnet__keeps_the_managed_compiler_where_an_llvm_built_one_is_published() is
+            assert _order("linux-x64", true, true, true, null, false) =~ "MANAGED"
+            assert _order("linux-arm64", true, false, false, null, false) =~ "MANAGED"
         si
 
         @Test()
@@ -59,12 +67,15 @@ namespace Ghul.Cli.Tests is
             assert _order("linux-x64", true, true, false, CompilerHost.WASM, false) =~ "WASM"
             assert _order("linux-x64", true, true, false, CompilerHost.DOTNET, false) =~ "MANAGED"
             assert _order("linux-x64", false, true, false, CompilerHost.NATIVE, false) =~ "NATIVE"
+            assert _order("linux-x64", true, true, false, CompilerHost.LLVM, false) =~ "LLVM_BUILT"
+            assert _order("linux-arm64", false, false, false, CompilerHost.LLVM, false) =~ "LLVM_BUILT"
         si
 
         @Test()
         a_host_the_machine_cannot_run__is_reported() is
             assert _order("linux-arm64", false, true, false, CompilerHost.DOTNET, false) =~ "problem: GHUL_COMPILER_HOST is dotnet, but no .NET host was found"
             assert _order("linux-arm64", false, true, false, CompilerHost.NATIVE, false) =~ "problem: GHUL_COMPILER_HOST is native, but there is no Native AOT compiler for linux-arm64"
+            assert _order("osx-arm64", false, true, false, CompilerHost.LLVM, false) =~ "problem: GHUL_COMPILER_HOST is llvm, but there is no llvm-built compiler for osx-arm64"
         si
 
         @Test()

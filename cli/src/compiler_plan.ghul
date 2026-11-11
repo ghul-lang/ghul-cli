@@ -22,7 +22,9 @@ namespace Ghul.Cli is
         ///
         /// A manifest that names the llvm-built compiler gets only that, and
         /// so does a host the environment names. Otherwise a machine with
-        /// .NET uses the managed compiler; one without uses the wasm-built
+        /// .NET uses the managed compiler. One without uses the llvm-built
+        /// compiler where one is published for it, with the wasm-built
+        /// compiler as its fallback. Elsewhere it uses the wasm-built
         /// compiler, with a Native AOT compiler that is already installed
         /// as its fallback, or first where there is no Node to run the wasm
         /// one. A Native AOT compiler is never newly chosen.
@@ -61,6 +63,12 @@ namespace Ghul.Cli is
                     fi
 
                     kinds.add(CompilerKind.NATIVE)
+                when Ghul.Project.CompilerHost.LLVM then
+                    if !machine.llvm_compiler_is_built then
+                        return ERROR("{variable} is llvm, but there is no llvm-built compiler for {platform}")
+                    fi
+
+                    kinds.add(CompilerKind.LLVM_BUILT)
                 esac
 
                 return OK(kinds)
@@ -68,6 +76,13 @@ namespace Ghul.Cli is
 
             if machine.has_dotnet then
                 kinds.add(CompilerKind.MANAGED)
+
+                return OK(kinds)
+            fi
+
+            if machine.llvm_compiler_is_built then
+                kinds.add(CompilerKind.LLVM_BUILT)
+                kinds.add(CompilerKind.WASM)
 
                 return OK(kinds)
             fi
@@ -112,6 +127,12 @@ namespace Ghul.Cli is
             when CompilerKind.WASM then "ghul.compiler (wasm)"
             when CompilerKind.LLVM_BUILT then "ghul.compiler (llvm-built)"
             esac
+
+        /// The first release whose llvm-built compiler serves analysis mode
+        /// and the compile server, which read their requests by reflection.
+        /// An older one held in the store is passed over for the newest
+        /// where no version is asked for.
+        LLVM_BUILT_FLOOR: string static => "71.11.5"
 
         /// Every kind of compiler, in the order they are refreshed.
         all_kinds() -> ARRAY[CompilerKind] static =>

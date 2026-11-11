@@ -8,7 +8,10 @@ namespace Ghul.Project is
         DOTNET,
 
         /// The Native AOT compiler, run as an executable of its own.
-        NATIVE
+        NATIVE,
+
+        /// The compiler built for llvm, run as an executable of its own.
+        LLVM
     si
 
     /// Reads `GHUL_COMPILER_HOST`, which picks how the compiler is run. Unset
@@ -35,9 +38,11 @@ namespace Ghul.Project is
                 return (host = CompilerHost.DOTNET, problem = null)
             elif name =~ "native" then
                 return (host = CompilerHost.NATIVE, problem = null)
+            elif name =~ "llvm" then
+                return (host = CompilerHost.LLVM, problem = null)
             fi
 
-            return (host = null, problem = "{VARIABLE} is '{value}', which is none of wasm, dotnet and native")
+            return (host = null, problem = "{VARIABLE} is '{value}', which is none of wasm, dotnet, native and llvm")
         si
 
         /// The host the environment picks, null where it picks none, or the
