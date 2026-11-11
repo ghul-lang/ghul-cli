@@ -24,23 +24,23 @@ namespace Ghul.Project is
     ///
     /// A target named on the command line or in `GHUL_TARGET` is taken as
     /// it is, and a project that lists one target builds that one. Otherwise
-    /// the first target in order that the machine can build is chosen: those
-    /// the project's `prefer` lists, then wasm. llvm is built only where
-    /// `prefer`, the command line or `GHUL_TARGET` names it.
+    /// the first target the manifest lists that the machine can build is
+    /// chosen: the order the targets are listed in is the project's
+    /// preference.
     class TARGET_CHOICE is
-        /// The order targets are tried in where a project prefers none.
-        ORDER: ARRAY[BuildTarget] static => [BuildTarget.WASM]
+        /// The targets a script is tried for where `GHUL_TARGET` names none:
+        /// wasm alone, so a script builds for llvm only where it is named.
+        SCRIPT_ORDER: ARRAY[BuildTarget] static => [BuildTarget.WASM]
 
         /// The target for a build of a project listing `listed`.
         ///
-        /// - listed: the targets the project may be built for
-        /// - prefer: the targets the project prefers, in order
+        /// - listed: the targets the project may be built for, most preferred
+        ///   first
         /// - named: the target the command line or the environment names, or
         ///   null
         /// - availability: what this machine can build
         choose(
             listed: Collections.List[BuildTarget],
-            prefer: Collections.List[BuildTarget],
             named: string?,
             availability: TargetAvailability
         ) -> CHOSEN_TARGET static is
@@ -62,7 +62,7 @@ namespace Ghul.Project is
                 return CHOSEN_TARGET(listed[0], null, null)
             fi
 
-            return _first_buildable(_order(listed, prefer), availability, "the targets the manifest lists")
+            return _first_buildable(listed, availability, "the targets the manifest lists")
         si
 
         // The first of `order` the machine can build, with why where those
@@ -100,7 +100,6 @@ namespace Ghul.Project is
         /// - named: the target the environment names, or null
         /// - availability: what this machine can build
         for_script(named: string?, availability: TargetAvailability) -> CHOSEN_TARGET static is
-            let all = LIST[BuildTarget]([BuildTarget.WASM, BuildTarget.LLVM])
 
             if let name: string = named then
                 if BUILD_TARGETS.is_dotnet(name) then
@@ -114,26 +113,7 @@ namespace Ghul.Project is
                 return CHOSEN_TARGET(null, null, "GHUL_TARGET is '{name}', which is not a target ghul builds: {BUILD_TARGETS.names}")
             fi
 
-            return _first_buildable(_order(all, LIST[BuildTarget]()), availability, "the targets a script can be built for")
-        si
-
-        // The targets `listed` names, in the order they are tried.
-        _order(listed: Collections.List[BuildTarget], prefer: Collections.List[BuildTarget]) -> LIST[BuildTarget] static is
-            let order = LIST[BuildTarget]()
-
-            for target in prefer do
-                if _lists(listed, target) /\ !order.contains(target) then
-                    order.add(target)
-                fi
-            od
-
-            for target in ORDER do
-                if _lists(listed, target) /\ !order.contains(target) then
-                    order.add(target)
-                fi
-            od
-
-            return order
+            return _first_buildable(LIST[BuildTarget](SCRIPT_ORDER), availability, "the targets a script can be built for")
         si
 
         _lists(targets: Collections.List[BuildTarget], target: BuildTarget) -> bool static =>

@@ -25,35 +25,33 @@ namespace Ghul.Cli.Tests is
 
         _all: LIST[BuildTarget] => LIST[BuildTarget]([BuildTarget.WASM, BuildTarget.LLVM])
 
-        _none: LIST[BuildTarget] => LIST[BuildTarget]()
-
         _name(chosen: CHOSEN_TARGET) -> string =>
             if let target = chosen.target then BUILD_TARGETS.name(target) else "none" fi
 
-        // wasm is the normal case, and is chosen without a word.
+        // The first target the manifest lists is chosen without a word.
         @Test()
-        wasm_comes_first_where_it_can_be_built_and_is_not_reported() is
-            let chosen = TARGET_CHOICE.choose(_all, _none, null, _MACHINE([BuildTarget.LLVM, BuildTarget.WASM]))
+        the_first_listed_target_comes_first_where_it_can_be_built_and_is_not_reported() is
+            let chosen = TARGET_CHOICE.choose(_all, null, _MACHINE([BuildTarget.LLVM, BuildTarget.WASM]))
 
             assert _name(chosen) =~ "wasm"
             assert !chosen.reason?
         si
 
         @Test()
-        a_preference_is_tried_first() is
-            let prefer = LIST[BuildTarget]([BuildTarget.LLVM])
-            let chosen = TARGET_CHOICE.choose(_all, prefer, null, _MACHINE([BuildTarget.WASM, BuildTarget.LLVM]))
+        listing_llvm_first_builds_llvm() is
+            let listed = LIST[BuildTarget]([BuildTarget.LLVM, BuildTarget.WASM])
+            let chosen = TARGET_CHOICE.choose(listed, null, _MACHINE([BuildTarget.WASM, BuildTarget.LLVM]))
 
             assert _name(chosen) =~ "llvm"
             assert !chosen.reason?
         si
 
-        // A preferred target the machine cannot build is passed over, and
-        // the target taken instead is reported.
+        // A listed target the machine cannot build is passed over, and the
+        // target taken instead is reported.
         @Test()
-        falling_back_within_the_preference_is_reported() is
-            let prefer = LIST[BuildTarget]([BuildTarget.LLVM, BuildTarget.WASM])
-            let chosen = TARGET_CHOICE.choose(_all, prefer, null, _MACHINE([BuildTarget.WASM]))
+        falling_back_down_the_list_is_reported() is
+            let listed = LIST[BuildTarget]([BuildTarget.LLVM, BuildTarget.WASM])
+            let chosen = TARGET_CHOICE.choose(listed, null, _MACHINE([BuildTarget.WASM]))
 
             assert _name(chosen) =~ "wasm"
             assert chosen.reason =~ "building for wasm" else chosen.reason ?? "null"
@@ -61,7 +59,7 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         a_named_target_is_taken_without_asking_the_machine() is
-            let chosen = TARGET_CHOICE.choose(_all, _none, "wasm", _MACHINE([BuildTarget.LLVM]))
+            let chosen = TARGET_CHOICE.choose(_all, "wasm", _MACHINE([BuildTarget.LLVM]))
 
             assert _name(chosen) =~ "wasm"
             assert !chosen.reason?
@@ -69,7 +67,7 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         a_named_dotnet_target_is_a_problem() is
-            let chosen = TARGET_CHOICE.choose(_all, _none, "dotnet", _MACHINE([BuildTarget.WASM]))
+            let chosen = TARGET_CHOICE.choose(_all, "dotnet", _MACHINE([BuildTarget.WASM]))
 
             assert !chosen.target?
             assert (chosen.problem ?? "").contains("ghul does not build for dotnet") else chosen.problem ?? "null"
@@ -79,13 +77,13 @@ namespace Ghul.Cli.Tests is
         a_named_target_the_manifest_does_not_list_is_a_problem() is
             let listed = LIST[BuildTarget]([BuildTarget.WASM])
 
-            assert (TARGET_CHOICE.choose(listed, _none, "llvm", _MACHINE([BuildTarget.LLVM])).problem ?? "").contains("does not list the target llvm")
+            assert (TARGET_CHOICE.choose(listed, "llvm", _MACHINE([BuildTarget.LLVM])).problem ?? "").contains("does not list the target llvm")
         si
 
         @Test()
         a_single_listed_target_is_taken_without_a_reason() is
             let listed = LIST[BuildTarget]([BuildTarget.LLVM])
-            let chosen = TARGET_CHOICE.choose(listed, _none, null, _MACHINE([BuildTarget.WASM]))
+            let chosen = TARGET_CHOICE.choose(listed, null, _MACHINE([BuildTarget.WASM]))
 
             assert _name(chosen) =~ "llvm"
             assert !chosen.reason?
@@ -93,8 +91,8 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         nothing_buildable_says_why_for_each_target() is
-            let prefer = LIST[BuildTarget]([BuildTarget.LLVM, BuildTarget.WASM])
-            let chosen = TARGET_CHOICE.choose(_all, prefer, null, _MACHINE([]))
+            let listed = LIST[BuildTarget]([BuildTarget.LLVM, BuildTarget.WASM])
+            let chosen = TARGET_CHOICE.choose(listed, null, _MACHINE([]))
 
             assert !chosen.target?
             assert chosen.problem =~ "none of the targets the manifest lists can be built here: llvm: no llvm; wasm: no wasm" else chosen.problem ?? "null"

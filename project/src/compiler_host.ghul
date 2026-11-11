@@ -14,22 +14,37 @@ namespace Ghul.Project is
         LLVM
     si
 
-    /// Reads `GHUL_COMPILER_HOST`, which picks how the compiler is run. Unset
-    /// or empty leaves the choice to ghul; a compiler given as a command, by
-    /// `--compiler` or `GHUL_COMPILER`, is run as it stands whatever this says.
+    /// Which host the compiler runs under, as the user names it: by
+    /// `--compiler-host`, or by `defaults.compiler-host` in the configuration
+    /// file. Naming none leaves the choice to ghul; a compiler given as a
+    /// command, by `--compiler` or `GHUL_COMPILER`, is run as it stands
+    /// whatever this says.
     class COMPILER_HOST is
-        /// The variable that picks the host.
-        VARIABLE: string static => "GHUL_COMPILER_HOST"
+        /// The configuration file's key for the host, under `defaults`.
+        CONFIG_KEY: string static => "compiler-host"
 
-        /// The host `value` names, null where it names none, or the problem
-        /// with it.
+        /// The environment variable that once named the host, which is now
+        /// refused.
+        RETIRED_VARIABLE: string static => "GHUL_COMPILER_HOST"
+
+        /// The host `value` names, null where it names none or says `auto`,
+        /// or the problem with it, for `--compiler-host`.
         ///
-        /// - value: the variable's value, or null where it is not set
+        /// - value: the option's value, or null where it is not given
         read(value: string?) -> (host: CompilerHost?, problem: string?) static is
-            if !value? \/ value.trim().length == 0 then
+            if !value? \/ value.trim().length == 0 \/ value.trim().to_lower_invariant() =~ "auto" then
                 return (host = null, problem = null)
             fi
 
+            return named(value, "--compiler-host")
+        si
+
+        /// The host `value` names, or the problem with it, naming `what`
+        /// gave it.
+        ///
+        /// - value: the name: wasm, dotnet, native or llvm
+        /// - what: the option or key the name came from
+        named(value: string, what: string) -> (host: CompilerHost?, problem: string?) static is
             let name = value.trim().to_lower_invariant()
 
             if name =~ "wasm" then
@@ -42,12 +57,25 @@ namespace Ghul.Project is
                 return (host = CompilerHost.LLVM, problem = null)
             fi
 
-            return (host = null, problem = "{VARIABLE} is '{value}', which is none of wasm, dotnet, native and llvm")
+            return (host = null, problem = "{what} is '{value}', which is none of wasm, dotnet, native and llvm")
         si
 
-        /// The host the environment picks, null where it picks none, or the
-        /// problem with what it says.
-        from_environment() -> (host: CompilerHost?, problem: string?) static =>
-            read(System.Environment.get_environment_variable(VARIABLE))
+        /// The host the user's configuration names, null where it names
+        /// none, or the problem: with the configuration file, or that the
+        /// retired `GHUL_COMPILER_HOST` is set.
+        configured() -> (host: CompilerHost?, problem: string?) static is
+            if let value = System.Environment.get_environment_variable(RETIRED_VARIABLE) /\ value.length > 0 then
+                return (host = null, problem = "{RETIRED_VARIABLE} is no longer read: pass --compiler-host <host>, or set \"defaults\": {{ \"{CONFIG_KEY}\": \"<host>\" }} in {GLOBAL_DEFAULTS.path()}")
+            fi
+
+            let problem: string? mut = null
+            let defaults = GLOBAL_DEFAULTS.read(GLOBAL_DEFAULTS.path(), problem ref)
+
+            if problem? then
+                return (host = null, problem = problem)
+            fi
+
+            return (host = defaults.compiler_host, problem = null)
+        si
     si
 si

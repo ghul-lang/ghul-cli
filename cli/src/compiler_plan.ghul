@@ -20,32 +20,20 @@ namespace Ghul.Cli is
     class COMPILER_PLAN is
         /// The kinds of compiler this machine uses, most wanted first.
         ///
-        /// A manifest that names the llvm-built compiler gets only that, and
-        /// so does a host the environment names. Otherwise a machine with
-        /// .NET uses the managed compiler. One without uses the llvm-built
-        /// compiler where one is published for it, with the wasm-built
-        /// compiler as its fallback. Elsewhere it uses the wasm-built
-        /// compiler, with a Native AOT compiler that is already installed
-        /// as its fallback, or first where there is no Node to run the wasm
-        /// one. A Native AOT compiler is never newly chosen.
+        /// A compiler host the user names, by `--compiler-host` or the
+        /// configuration's `defaults.compiler-host`, gets only that host.
+        /// Otherwise a machine with .NET uses the managed compiler. One
+        /// without uses the llvm-built compiler where one is published for
+        /// it, with the wasm-built compiler as its fallback. Elsewhere it uses
+        /// the wasm-built compiler, with a Native AOT compiler that is already
+        /// installed as its fallback, or first where there is no Node to run
+        /// the wasm one. A Native AOT compiler is never newly chosen.
         ///
         /// - machine: the machine
-        /// - forced: the host `GHUL_COMPILER_HOST` names, or null
-        /// - llvm_built_wanted: whether the manifest names the llvm-built compiler
-        order(machine: MACHINE, forced: Ghul.Project.CompilerHost?, llvm_built_wanted: bool) -> Result[Collections.List[CompilerKind], string] static is
+        /// - forced: the host the user names, or null
+        order(machine: MACHINE, forced: Ghul.Project.CompilerHost?) -> Result[Collections.List[CompilerKind], string] static is
             let kinds = LIST[CompilerKind]()
-            let variable = Ghul.Project.COMPILER_HOST.VARIABLE
             let platform = machine.rid ?? "this platform"
-
-            if llvm_built_wanted then
-                if !machine.llvm_compiler_is_built then
-                    return ERROR("there is no llvm-built compiler for {platform}")
-                fi
-
-                kinds.add(CompilerKind.LLVM_BUILT)
-
-                return OK(kinds)
-            fi
 
             if let host = forced then
                 case host
@@ -53,19 +41,19 @@ namespace Ghul.Cli is
                     kinds.add(CompilerKind.WASM)
                 when Ghul.Project.CompilerHost.DOTNET then
                     if !machine.has_dotnet then
-                        return ERROR("{variable} is dotnet, but no .NET host was found")
+                        return ERROR("the compiler host is dotnet, but no .NET host was found")
                     fi
 
                     kinds.add(CompilerKind.MANAGED)
                 when Ghul.Project.CompilerHost.NATIVE then
                     if !machine.native_is_built then
-                        return ERROR("{variable} is native, but there is no Native AOT compiler for {platform}")
+                        return ERROR("the compiler host is native, but there is no Native AOT compiler for {platform}")
                     fi
 
                     kinds.add(CompilerKind.NATIVE)
                 when Ghul.Project.CompilerHost.LLVM then
                     if !machine.llvm_compiler_is_built then
-                        return ERROR("{variable} is llvm, but there is no llvm-built compiler for {platform}")
+                        return ERROR("the compiler host is llvm, but there is no llvm-built compiler for {platform}")
                     fi
 
                     kinds.add(CompilerKind.LLVM_BUILT)

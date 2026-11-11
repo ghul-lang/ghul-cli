@@ -158,7 +158,7 @@ namespace Ghul.Cli.Tests is
                 assert false else "the manifest does not read: {problems.problems[0].describe()}\n{text}"
             fi
 
-            assert text.contains("\"tag\": \"v0.13.0\"") else text
+            assert text.contains("\"version\": \"0.13.0\"") else text
             assert text.contains("\"ghul-runtime\": {{ \"version\": \">=3.4.0\" }}") else text
         si
 
@@ -180,7 +180,7 @@ namespace Ghul.Cli.Tests is
 
             assert !text.contains("ghul-raster") else text
             assert text.contains("\"ghul-runtime\": {{ \"version\": \">=3.4.0\" }}") else text
-            assert text.contains("\"targets\": [\"llvm\", \"wasm\"]") else text
+            assert text.contains("\"targets\": [\"wasm\", \"llvm\"]") else text
         si
 
         @Test()
@@ -195,7 +195,7 @@ namespace Ghul.Cli.Tests is
                 assert false else "the manifest does not read: {problems.problems[0].describe()}\n{text}"
             fi
 
-            assert text.contains("\"tools\": {{ \"compiler\": \">=67.4.10\" }}") else text
+            assert text.contains("\"requires\": {{ \"compiler\": \">=67.4.10\" }}") else text
             assert !TOOL_FLOOR.problem((cast ReadOutcome.OK(read)).manifest.tools, PROJECT_TOOLS.COMPILER, "68.0.0")? else text
             assert TOOL_FLOOR.problem((cast ReadOutcome.OK(read)).manifest.tools, PROJECT_TOOLS.COMPILER, "66.24.2")? else text
         si

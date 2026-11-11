@@ -164,10 +164,13 @@ namespace Ghul.Project is
         /// - libraries: the oldest release of ghul-runtime the project is written with, as `ghul new` writes them
         manifest_text(name: string, part: ROSETTA_PART, targets: Collections.List[BuildTarget], raster_version: string?, floors: Collections.List[(tool: string, version: string)], libraries: Collections.List[(tool: string, version: string)]) -> string static is
             let raster = raster_release(raster_version, targets)
-            let quoted = string.join(", ", targets |> map(t => "\"{BUILD_TARGETS.name(t)}\""))
+            // The first target listed is the one built where the machine can
+            // build it, and a solution is built for wasm unless llvm is asked
+            // for, so wasm comes first.
+            let ordered = (targets |> filter(t => t == BuildTarget.WASM) |> list()) ++ (targets |> filter(t => t != BuildTarget.WASM) |> list())
+            let quoted = string.join(", ", ordered |> map(t => "\"{BUILD_TARGETS.name(t)}\""))
 
-            let tools = string.join(", ", floors |> map(f => "\"{f.tool}\": \">={f.version}\""))
-            let tools_text = if floors.count > 0 then ",\n    \"tools\": {{ {tools} }}" else "" fi
+            let tools_text = MANIFEST_TEXT.requirements(floors, targets)
 
             let entries = LIST[string]()
 
@@ -176,7 +179,7 @@ namespace Ghul.Project is
             od
 
             if part.raster then
-                entries.add("\"ghul-raster\": {{ \"git\": \"https://github.com/ghul-lang/ghul-raster\", \"tag\": \"v{raster}\" }}")
+                entries.add("\"ghul-raster\": {{ \"git\": \"https://github.com/ghul-lang/ghul-raster\", \"version\": \"{raster}\" }}")
             fi
 
             let dependencies =

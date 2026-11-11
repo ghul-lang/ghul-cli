@@ -90,7 +90,7 @@ namespace Ghul.Project is
         si
 
         /// The manifest `text` with the `version` of the dependency `name` set,
-        /// or null where the entry names a tag or a branch as well, which a
+        /// or null where the entry names a branch as well, which a
         /// version cannot sit beside.
         ///
         /// - text: the manifest
@@ -113,7 +113,7 @@ namespace Ghul.Project is
 
             let entry = _scan(text, found.value_start)
 
-            if !entry? \/ entry.find("tag")? \/ entry.find("branch")? then
+            if !entry? \/ entry.find("branch")? then
                 return null
             fi
 
@@ -123,8 +123,8 @@ namespace Ghul.Project is
         /// The manifest `text` with the git dependency `name` at `url` and
         /// the range `version`, or why it cannot be. A dependency of that
         /// name already at that url has only its version changed, so adding
-        /// again is how a pin is moved; one at another url, or on a tag, a
-        /// branch or a path, is replaced.
+        /// again is how a pin is moved; one at another url, on a branch or at
+        /// a path is replaced.
         ///
         /// - text: the manifest
         /// - name: the dependency's name

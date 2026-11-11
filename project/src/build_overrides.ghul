@@ -81,8 +81,6 @@ namespace Ghul.Project is
                 manifest.sources,
                 manifest.options,
                 dependencies,
-                manifest.compiler_build,
-                manifest.prefer,
                 manifest.host_wasm,
                 manifest.tools)
         si
