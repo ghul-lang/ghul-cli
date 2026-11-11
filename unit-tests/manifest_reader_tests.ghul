@@ -195,7 +195,7 @@ namespace Ghul.Cli.Tests is
             let problems = _problems("{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], \"dependencies\": {{ \"parsing\": {{ \"git\": \"https://example.com/p\", \"tag\": \"v1.0.0\", \"version\": \"1.0.0\" }} }} }}")
 
             assert problems.count == 1;
-            assert problems[0].contains("tag") /\ problems[0].contains("unknown key") else problems[0];
+            assert problems[0].contains("dependencies.parsing.tag") /\ problems[0].contains("a tag is now a version") else problems[0];
         si
         // What reading a manifest that should not have read produced, as
         // the messages a caller would report.

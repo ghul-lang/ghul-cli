@@ -437,6 +437,13 @@ namespace Ghul.Project is
 
             let git_value: JsonElement mut
             let path_value: JsonElement mut
+            let tag_value: JsonElement mut
+
+            // Refused with its replacement, and so left out of the unknown
+            // keys reported below.
+            if value.try_get_property("tag", tag_value ref) then
+                _report("dependencies.{name}.tag", "a tag is now a version: write \"version\": \"1.2.0\" for exactly that release, or a range such as \"^1.2.0\"")
+            fi
 
             let has_git = value.try_get_property("git", git_value ref)
             let has_path = value.try_get_property("path", path_value ref)
@@ -482,6 +489,7 @@ namespace Ghul.Project is
             let keys = LIST[string]()
 
             keys.add("path")
+            keys.add("tag")
 
             return keys
         si
@@ -492,6 +500,7 @@ namespace Ghul.Project is
             keys.add("branch")
             keys.add("directory")
             keys.add("git")
+            keys.add("tag")
             keys.add("version")
 
             return keys
