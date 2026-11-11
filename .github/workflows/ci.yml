@@ -351,8 +351,26 @@ jobs:
       with:
         node-version: '24'
 
+    # A mirror that cannot be reached for a few minutes would otherwise cost
+    # the release, so each attempt gives up quickly and the step tries three
+    # times, waiting longer before each.
     - name: Install the native build tools
-      run: sudo apt-get update -qq && sudo apt-get install -y -qq clang zlib1g-dev
+      shell: bash
+      run: |
+        set -uo pipefail
+        apt_options=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30)
+        for attempt in 1 2 3; do
+          if sudo apt-get "${apt_options[@]}" update -qq && \
+             sudo apt-get "${apt_options[@]}" install -y -qq clang zlib1g-dev; then
+            exit 0
+          fi
+          if [ "$attempt" -lt 3 ]; then
+            echo "::warning::installing the native build tools failed (attempt $attempt of 3); retrying"
+            sleep $(( attempt * 30 ))
+          fi
+        done
+        echo "::error::installing the native build tools failed three times"
+        exit 1
 
     - name: Restore local tools
       run: dotnet tool restore
