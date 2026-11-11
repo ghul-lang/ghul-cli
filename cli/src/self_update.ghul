@@ -153,6 +153,15 @@ namespace Ghul.Cli is
             return ERROR("{url} named no release")
         si
 
+        /// Whether the release `tag` carries the archive built for `rid`.
+        /// A release can come without the arm64 one, where its arm64 build
+        /// did not succeed.
+        ///
+        /// - tag: the release
+        /// - rid: the runtime identifier the archive is named by
+        has_archive(tag: string, rid: string) -> bool =>
+            fetch("{releases}/{tag}/ghul-cli-{rid}.tar.gz.sha256")?
+
         /// The install script published with `tag`, checked against its
         /// published SHA-256, or the reason it could not be had. A script
         /// with no checksum is refused, since it is what gets run.

@@ -762,6 +762,11 @@ namespace Ghul.Cli is
             return 0
         fi
 
+        if let rid: string = Host.HOST.rid() /\ !update.has_archive(tag, rid) then
+            LOG.say("the latest release, {LOG.version(tag)}, has no build for {rid}; ghul {LOG.version(running)} stays installed")
+            return 0
+        fi
+
         if check_only then
             LOG.say("ghul {LOG.version(tag)} available, {LOG.version(running)} installed; run ghul update")
             return 0

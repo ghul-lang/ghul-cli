@@ -328,11 +328,16 @@ jobs:
   # The same tool for Linux on arm64, a Raspberry Pi among them, built on a
   # native arm64 runner so that the build and the smoke test below both run
   # on the architecture they are for. The archive holds the tool alone: ghul
-  # runs the wasm-built compiler under Node on arm64, and fetches it.
+  # fetches the compiler. The job may fail without failing the run, so an
+  # arm64 runner that cannot be had does not hold up a release: the release
+  # then goes out without this archive, install.sh installs the newest
+  # release that has one, and `ghul update` stays on the installed one.
   aot_release_archive_arm64:
     name: Build the Native AOT archive for arm64
     needs: [version]
     runs-on: ubuntu-24.04-arm
+
+    continue-on-error: true
 
     timeout-minutes: 30
 
@@ -352,16 +357,16 @@ jobs:
         node-version: '24'
 
     # A mirror that cannot be reached for a few minutes would otherwise cost
-    # the release, so each attempt gives up quickly and the step tries three
-    # times, waiting longer before each.
+    # the arm64 archive, so each attempt gives up within 75 seconds and the
+    # step tries three times, waiting longer before each.
     - name: Install the native build tools
+      timeout-minutes: 6
       shell: bash
       run: |
         set -uo pipefail
         apt_options=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30)
         for attempt in 1 2 3; do
-          if sudo apt-get "${apt_options[@]}" update -qq && \
-             sudo apt-get "${apt_options[@]}" install -y -qq clang zlib1g-dev; then
+          if timeout 75 bash -c 'sudo apt-get "$@" update -qq && sudo apt-get "$@" install -y -qq clang zlib1g-dev' _ "${apt_options[@]}"; then
             exit 0
           fi
           if [ "$attempt" -lt 3 ]; then
@@ -463,13 +468,15 @@ jobs:
           ghul-cli-linux-arm64.tar.gz
           ghul-cli-linux-arm64.tar.gz.sha256
 
+  # Waits for the arm64 archive but does not need it: a release goes out with
+  # whatever the arm64 job produced.
   create_release:
     needs: [version, publish_package, aot_release_archive, aot_release_archive_arm64]
     name: Create release
     runs-on: ubuntu-latest
 
     timeout-minutes: 5
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.version.result == 'success' && needs.publish_package.result == 'success' && needs.aot_release_archive.result == 'success' }}
 
     permissions:
       contents: write
@@ -491,19 +498,30 @@ jobs:
         name: aot-archive
         path: aot
 
+    # Absent where the arm64 job did not succeed.
     - name: Download the Native AOT archive for arm64
+      continue-on-error: true
       uses: actions/download-artifact@v8
       with:
         name: aot-archive-arm64
         path: aot
 
     - name: Create changelog
-      run: git log -1 --format="%s%n%n%b%n%n" >changelog.txt
+      run: |
+        git log -1 --format="%s%n%n%b%n%n" >changelog.txt
+        if [ ! -f aot/ghul-cli-linux-arm64.tar.gz ]; then
+          echo "::warning::this release has no Native AOT archive for linux-arm64"
+          printf '%s\n\n' "This release has no ghul-cli archive for linux-arm64: its arm64 build did not succeed. install.sh installs the newest release that has one." >>changelog.txt
+        fi
 
     - name: Create a release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        arm64=()
+        if [ -f aot/ghul-cli-linux-arm64.tar.gz ]; then
+          arm64=(./aot/ghul-cli-linux-arm64.tar.gz ./aot/ghul-cli-linux-arm64.tar.gz.sha256)
+        fi
         gh release create "${{ needs.version.outputs.tag }}" \
           ./nupkg/ghul.cli.${{ needs.version.outputs.package }}.nupkg \
           ./nupkg/ghul.repl.${{ needs.version.outputs.package }}.nupkg \
@@ -512,8 +530,7 @@ jobs:
           ./nupkg/ghul.project.${{ needs.version.outputs.package }}.nupkg \
           ./aot/ghul-cli-linux-x64.tar.gz \
           ./aot/ghul-cli-linux-x64.tar.gz.sha256 \
-          ./aot/ghul-cli-linux-arm64.tar.gz \
-          ./aot/ghul-cli-linux-arm64.tar.gz.sha256 \
+          "${arm64[@]}" \
           ./aot/ghul-cli-install.sh \
           ./aot/ghul-cli-install.sh.sha256 \
           --title "${{ needs.version.outputs.tag }}" \

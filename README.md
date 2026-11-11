@@ -208,9 +208,13 @@ instead, which `ghul update` prints. It then brings every component that is
 installed up to date: each compiler, ghul-llvm, Node.js and the wasmtime host.
 A component that is not installed is left alone and not mentioned, and what
 is said is what is being done or what went wrong. `--check` reports what has
-a newer release and changes nothing. `GHUL_CLI_API` and `GHUL_CLI_RELEASES`
-name a mirror, as they do for `install.sh`. Everything `ghul` says about its
-own work begins `ghul: `.
+a newer release and changes nothing. A release can come without the arm64
+archive, where its arm64 build did not succeed: there `ghul update` says so and
+keeps the installed `ghul`, and `install.sh` installs the newest release that
+has one. `GHUL_CLI_API` and `GHUL_CLI_RELEASES` name a mirror, as they do for
+`install.sh`, and `GHUL_CLI_RELEASES_INDEX` names the list of recent releases
+`install.sh` looks through. Everything `ghul` says about its own work begins
+`ghul: `.
 
 A `-` in place of the script reads the source from standard input. This
 works for running and for compiling:
