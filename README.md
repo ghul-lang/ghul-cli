@@ -166,11 +166,12 @@ Compiler messages go to standard error.
 
 `ghul install compiler` installs `ghul.compiler` into `ghul`'s own compiler
 store, so that the first script does not wait for the install. It installs the
-compiler this machine uses, whether or not it has .NET: the compiler built for
-llvm on Linux for x64 and arm64, and the wasm-built compiler, run by Node.js,
-on the other platforms but Windows, with a Node.js fetched first where there is none, and the managed
-compiler on Windows. Elsewhere the managed compiler is installed only where it
-is named, by `--compiler-host dotnet` or by
+compiler this machine uses: the compiler built for llvm on Linux for x64 and
+arm64, and the wasm-built compiler, run by Node.js, everywhere else, with a
+Node.js fetched first where there is none. The one exception is Windows with
+.NET, which `ghul` there runs on, where it is the managed compiler (see
+"compiler hosts" below). Elsewhere the managed compiler is installed only where
+it is named, by `--compiler-host dotnet` or by
 the configuration file's `defaults.compiler-host` (see "compiler hosts"
 below), which names the one to use instead of the built-in choice. A store
 that already holds a managed or a Native AOT compiler is kept up to date while
