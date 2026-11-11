@@ -29,7 +29,7 @@ namespace Ghul.Cli.Tests is
                 ManifestKind.PROGRAM,
                 LIST[BuildTarget]([BuildTarget.WASM]),
                 LIST[string](["src/**/*.ghul"]),
-                MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](), null, LIST[string](), LIST[string]()),
+                MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](), null),
                 dependencies,
                 CompilerBuild.DEFAULT, LIST[BuildTarget](), null, MAP[string, VERSION_RANGE]())
 

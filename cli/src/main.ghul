@@ -1050,7 +1050,7 @@ namespace Ghul.Cli is
             Ghul.Project.MANIFEST(
                 "script", null, Ghul.Project.ManifestKind.PROGRAM,
                 Collections.LIST[Ghul.Project.BuildTarget]([target]), Collections.LIST[string](["script.ghul"]),
-                Ghul.Project.MANIFEST_OPTIONS(null, false, Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), null, Collections.LIST[string](), Collections.LIST[string]()),
+                Ghul.Project.MANIFEST_OPTIONS(null, false, Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), null),
                 script_dependencies(), Ghul.Project.CompilerBuild.DEFAULT,
                 Collections.LIST[Ghul.Project.BuildTarget](), null, Collections.MAP[string, Ghul.Project.VERSION_RANGE]())
 
@@ -1385,7 +1385,7 @@ namespace Ghul.Cli is
             Ghul.Project.MANIFEST(
                 "repl", null, Ghul.Project.ManifestKind.PROGRAM,
                 Collections.LIST[Ghul.Project.BuildTarget]([Ghul.Project.BuildTarget.LLVM]), Collections.LIST[string](["repl.ghul"]),
-                Ghul.Project.MANIFEST_OPTIONS(null, false, Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), null, Collections.LIST[string](), Collections.LIST[string]()),
+                Ghul.Project.MANIFEST_OPTIONS(null, false, Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), null),
                 script_dependencies(), Ghul.Project.CompilerBuild.DEFAULT,
                 Collections.LIST[Ghul.Project.BuildTarget](), null, Collections.MAP[string, Ghul.Project.VERSION_RANGE]())
 

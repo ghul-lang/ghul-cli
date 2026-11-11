@@ -37,9 +37,7 @@ namespace Ghul.Cli.Tests is
                 LIST[string](define),
                 LIST[string](suppress),
                 LIST[string](warn_as_error),
-                null,
-                LIST[string](),
-                LIST[string]())
+                null)
 
         _plain_options() -> MANIFEST_OPTIONS => _options(null, false, [], [], [], [])
 
@@ -123,18 +121,6 @@ namespace Ghul.Cli.Tests is
                         _manifest(ManifestKind.PROGRAM, _options(null, true, [], [], [], [])),
                         BuildTarget.WASM,
                         _no_libraries())))
-        si
-
-        @Test()
-        warning_options__are_one_comma_separated_flag_each_before_warn_as_error() is
-            let options =
-                MANIFEST_OPTIONS(
-                    null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](["c"]), null,
-                    LIST[string](["redundant-semicolon"]), LIST[string](["shadowed-non-callable", "impure-function-argument"]))
-
-            _same(
-                "--warn redundant-semicolon --warn-as-hint shadowed-non-callable,impure-function-argument --warn-as-error c --target wasm",
-                _joined(COMPILER_ARGUMENTS.options(_manifest(ManifestKind.PROGRAM, options), BuildTarget.WASM, _no_libraries())))
         si
 
         @Test()

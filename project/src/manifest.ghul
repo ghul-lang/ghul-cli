@@ -71,9 +71,7 @@ namespace Ghul.Project is
         define: Collections.List[string],
         suppress: Collections.List[string],
         warn_as_error: Collections.List[string],
-        optimise: int?,
-        warn: Collections.List[string],
-        warn_as_hint: Collections.List[string]
+        optimise: int?
     ) is si
 
     // Where a library comes from: a git repository at a tag or a branch,
