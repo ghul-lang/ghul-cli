@@ -122,6 +122,26 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
+        project_commands__read_the_compiler_host_auto_as_named_with_none() is
+            let llvm = RESPONSE_FILE_COMMAND_LINE.parse(LIST[string](["--compiler-host", "LLVM", "--json"]), false)
+
+            assert !llvm.problem? /\ llvm.host_named /\ llvm.host =~ Ghul.Project.CompilerHost.LLVM
+            assert llvm.json
+
+            let auto = RESPONSE_FILE_COMMAND_LINE.parse(LIST[string](["--compiler-host", "auto"]), false)
+
+            assert !auto.problem? /\ auto.host_named /\ !auto.host?
+
+            let none = RESPONSE_FILE_COMMAND_LINE.parse(LIST[string](), false)
+
+            assert !none.host_named /\ !none.host?
+
+            let bad = RESPONSE_FILE_COMMAND_LINE.parse(LIST[string](["--compiler-host", "jvm"]), false)
+
+            assert bad.problem =~ "--compiler-host is 'jvm', which is none of auto, wasm, dotnet, native and llvm" else bad.problem ?? "null"
+        si
+
+        @Test()
         the_compiler_command_as_json_is_one_string_per_argument() is
             let compiler = Ghul.Project.COMPILER_PROCESS("/opt/node bin/node", LIST[string](["C:\\ghul\\ghul.mjs", "a \"quoted\" word"]))
 
