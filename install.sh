@@ -39,9 +39,10 @@ usage: install.sh [--version <tag>] [--dir <path>] [--no-node] [--dry-run] [--he
   --dry-run         report what would happen and install nothing
   --help            this text
 
-ghul runs its compiler and wasm programs with Node.js 22.19 or later on the
-22 line, 24.15 or later on the 24 line, or 25 or later. A node on PATH that
-is one of those is used. Otherwise the script says so and fetches the newest
+ghul runs wasm programs with Node.js; its compiler on Linux is a native
+program and needs no Node. Node.js 22.19 or later on the 22 line, 24.15 or
+later on the 24 line, or 25 or later will do, and a node on PATH that is one
+of those is used. Otherwise the script says so and fetches the newest
 Node.js 24 from nodejs.org into ~/.local/share/ghul/node (or XDG_DATA_HOME),
 checked against the release's SHASUMS256.txt; it does not touch PATH.
 
@@ -134,7 +135,8 @@ esac
 rid="${os_name}-${arch_name}"
 
 # An archive is published for Linux on x64 and on arm64. The arm64 one carries
-# the tool alone: ghul runs its compiler under Node there, and fetches it.
+# the tool alone: ghul fetches its compiler, the llvm-built one, when it first
+# builds.
 case "${rid}" in
     linux-x64 | linux-arm64) ;;
     *) fail "ghul-cli is not built for ${rid}; install the .NET SDK and run 'dotnet tool install -g ghul.cli' instead" ;;
@@ -263,7 +265,7 @@ fi
 if [ -n "${node_on_path}" ]; then
     node_reason="the node on PATH is ${node_on_path}, too old for ghul, which needs 22.19 or later on the 22 line, 24.15 or later on 24, or 25 or later"
 else
-    node_reason="ghul runs its compiler and wasm programs with Node.js, and none was found"
+    node_reason="ghul runs wasm programs with Node.js, and none was found"
 fi
 
 # --- what we will do ---------------------------------------------------------

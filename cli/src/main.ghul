@@ -328,7 +328,7 @@ namespace Ghul.Cli is
         out.write_line("       ghul run [--no-cache] <script> [args...]")
         out.write_line("       ghul compile [--no-cache] <script.ghul>")
         out.write_line("       ghul new <name> [--target <target>[,<target>...]]")
-        out.write_line("       ghul add <name> <git-url>")
+        out.write_line("       ghul add <name> [<git-url>]")
         out.write_line("       ghul rosetta <task>[/<part>] [<directory>]")
         out.write_line("       ghul build [--target <name>] [--debug] [--optimise <0-3>]")
         out.write_line("       ghul run [--target <name>] [--debug] [--optimise <0-3>] [-- args...]")
@@ -409,18 +409,27 @@ namespace Ghul.Cli is
     si
 
     // Creates a project to build and run: `ghul new <name> [--target ...]`.
-    // `ghul add <name> <git-url>`: depend on the newest release of the
-    // library at `git-url`, written into the manifest as `^<newest>`. Adding a
-    // library already there moves its pin to the newest release.
+    // `ghul add <name> [<git-url>]`: depend on the newest release of the
+    // library at `git-url`, written into the manifest as `^<newest>`. The URL
+    // can be left out for a library KNOWN_LIBRARIES names. Adding a library
+    // already there moves its pin to the newest release.
     cmd_add(rest: Collections.List[string]) -> int is
-        if rest.count != 2 \/ rest[0].length == 0 \/ rest[1].length == 0 then
-            Std.error.write_line("usage: ghul add <name> <git-url>")
+        if rest.count < 1 \/ rest.count > 2 \/ rest |> Ghul.Pipes.any(a => a.length == 0) then
+            Std.error.write_line("usage: ghul add <name> [<git-url>]")
 
             return 1
         fi
 
         let name = rest[0]
-        let url = rest[1]
+        let known = Ghul.Project.KNOWN_LIBRARIES.repository(name)
+
+        if rest.count == 1 /\ !known? then
+            LOG.say("ghul knows only {Ghul.Project.KNOWN_LIBRARIES.NAMES |> string(" and ")} by name; give the git URL of {name}: ghul add {name} <git-url>")
+
+            return 1
+        fi
+
+        let url = if rest.count == 2 then rest[1] else known! fi
 
         let path = Ghul.Project.MANIFEST_LOCATION.find_in(Directory.get_current_directory())
 
@@ -481,7 +490,7 @@ namespace Ghul.Cli is
     si
 
     cmd_new(rest: Collections.List[string]) -> int is
-        let parsed = Ghul.Project.PROJECT_SCAFFOLD.parse(rest, [Ghul.Project.BuildTarget.WASM])
+        let parsed = Ghul.Project.PROJECT_SCAFFOLD.parse(rest, [Ghul.Project.BuildTarget.WASM, Ghul.Project.BuildTarget.LLVM])
 
         if let (problem): ERROR = parsed then
             LOG.say("{problem}")
@@ -499,12 +508,13 @@ namespace Ghul.Cli is
 
         LOG.say("created {command_line.directory}")
 
-        // A project for wasm alone builds wherever the compiler does; running
-        // it needs a host, and saying so here is the difference between a
-        // project that will not run and one whose host was never installed.
-        // Only a machine whose chosen host is node, named or the built-in
-        // default, and which holds no node that runs the target is warned.
-        if command_line.targets.count == 1 /\ command_line.targets[0] == Ghul.Project.BuildTarget.WASM then
+        // A project that builds for wasm first builds wherever the compiler
+        // does; running it needs a host, and saying so here is the difference
+        // between a project that will not run and one whose host was never
+        // installed. Only a machine whose chosen host is node, named or the
+        // built-in default, and which holds no node that runs the target is
+        // warned.
+        if command_line.targets[0] == Ghul.Project.BuildTarget.WASM then
             let host_problem: string? mut = null
             let global_host = Ghul.Project.GLOBAL_DEFAULTS.read(Ghul.Project.GLOBAL_DEFAULTS.path(), host_problem ref).host_wasm
 

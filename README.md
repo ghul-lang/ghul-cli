@@ -134,7 +134,7 @@ ghul [--no-cache] [--] <script> [args...]   # run a script (see below)
 ghul run [--no-cache] <script> [args...]    # run any file as a script
 ghul compile [--no-cache] <script.ghul>     # compile, and print the path to the result
 ghul new <name> [--target <names>]           # create a project to build and run
-ghul add <name> <git-url>                    # depend on the newest release of a library (writes ^newest)
+ghul add <name> [<git-url>]                  # depend on the newest release of a library (writes ^newest)
 ghul rosetta <task>[/<part>] [<directory>]  # fetch a Rosetta Code solution as a project
 ghul build [--target <name>] [--debug] [--optimise <0-3>] [overrides]  # build the project in this directory
 ghul run [--target <name>] [--debug] [--optimise <0-3>] [overrides] [-- args...]  # build, then run it
@@ -252,8 +252,9 @@ builds for and where its sources are:
 
 Only `name` is required. The keys are:
 - `targets`: the targets the project may be built for, `wasm` and `llvm`, most
-  preferred first. `ghul new` writes `["wasm"]` unless `--target` names
-  others. A manifest that lists `dotnet` is refused, with a message pointing at
+  preferred first. `ghul new` writes `["wasm", "llvm"]` unless `--target`
+  names others. A build takes the first target listed that the machine can
+  build, so that project builds for wasm unless llvm is named. A manifest that lists `dotnet` is refused, with a message pointing at
   the .NET SDK.
 - `requires`: the oldest compiler release the project was written with, as a
   range. `ghul new` writes a floor (`>=`) for the release in use when it ran.
@@ -469,7 +470,8 @@ ghul run      # builds into out/wasm/ and runs it under Node.js
 ```
 
 `ghul new`'s `--target` takes `wasm` or `llvm`, or both separated by a comma,
-and defaults to `wasm`.
+and defaults to `wasm,llvm`: a build is for wasm, and `ghul run --target llvm`
+builds the same project natively where the machine can.
 The new directory holds the manifest, `ghul-project.json`; `src/main.ghul`,
 whose entry writes `hello`; and a `.gitignore` for `out/`. A directory that
 already exists and is not empty is refused. The program is:

@@ -763,4 +763,20 @@ dotnet "$cli" new "$add_project" > /dev/null 2>&1
     }
 )
 
+echo "smoke: 'ghul add' takes a ghul-lang library by name, and asks for the URL of any other..." >&2
+(
+    cd "$add_project"
+    GHUL_RUNTIME_REPOSITORY="file://$add_repo" dotnet "$cli" add ghul-runtime > "$scratch/add.out" 2>&1 || { cat "$scratch/add.out" >&2; exit 1; }
+    grep -q '"ghul-runtime": { "git": "file://'"$add_repo"'", "version": "\^1.3.0" }' ghul-project.json || {
+        echo "smoke: 'ghul add ghul-runtime' did not use the runtime's repository:" >&2
+        cat ghul-project.json >&2
+        exit 1
+    }
+    if dotnet "$cli" add unknown-lib > "$scratch/add.out" 2>&1; then
+        echo "smoke: 'ghul add' took a name it does not know without a URL" >&2
+        exit 1
+    fi
+    grep -q "give the git URL of unknown-lib" "$scratch/add.out" || { cat "$scratch/add.out" >&2; exit 1; }
+)
+
 echo "smoke: all checks passed" >&2
