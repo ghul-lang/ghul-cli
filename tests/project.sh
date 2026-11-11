@@ -159,25 +159,26 @@ mkdir -p "$editor_build"
 
 # The llvm-built compiler is published for Linux on x64 and arm64.
 if [[ "$(uname -s)" == Linux && "$(uname -m)" =~ ^(x86_64|aarch64)$ ]]; then
-    echo "project: an editor gets the llvm-built compiler a manifest's compiler-build names, as a build does..." >&2
-    llvm_built="$scratch/llvm-built-greeter"
-    cp -r "$program" "$llvm_built"
-    sed -i 's/"name": "greeter",/"name": "greeter",\n    "compiler-build": "llvm",/' "$llvm_built/ghul-project.json"
-    grep -q '"compiler-build": "llvm"' "$llvm_built/ghul-project.json" || fail "the test could not write compiler-build into the manifest"
-    named="$(cd "$llvm_built" && dotnet "$cli" project compiler --json 2>/dev/null)" || fail "ghul project compiler failed for compiler-build llvm"
+    echo "project: an editor gets the llvm-built compiler the configuration's compiler-host names, as a build does..." >&2
+    config_home="$scratch/config-home"
+    mkdir -p "$config_home/ghul"
+    echo '{ "defaults": { "compiler-host": "llvm" } }' > "$config_home/ghul/config.json"
+    named="$(cd "$program" && XDG_CONFIG_HOME="$config_home" dotnet "$cli" project compiler --json 2>/dev/null)" || fail "ghul project compiler failed for compiler-host llvm"
     [[ "$named" == *"/compilers/llvm/"*"ghul-compiler"* ]] || fail "expected ghul project compiler to name the llvm-built compiler, got: $named"
-    llvm_compiler="$(cd "$llvm_built" && dotnet "$cli" project compiler 2>/dev/null)"
-    (cd "$llvm_built" && dotnet "$cli" project response-file --output "$scratch/llvm-built.rsp" --source-globs "$scratch/llvm-built.globs") >&2 \
-        || fail "ghul project response-file failed for compiler-build llvm"
-    (cd "$llvm_built" && eval "$llvm_compiler" "@$scratch/llvm-built.rsp" src/main.ghul src/greeting.ghul -o "$editor_build/llvm-built.wasm") >&2 \
+    llvm_compiler="$(cd "$program" && XDG_CONFIG_HOME="$config_home" dotnet "$cli" project compiler 2>/dev/null)"
+    (cd "$program" && XDG_CONFIG_HOME="$config_home" dotnet "$cli" project response-file --output "$scratch/llvm-built.rsp" --source-globs "$scratch/llvm-built.globs") >&2 \
+        || fail "ghul project response-file failed for compiler-host llvm"
+    (cd "$program" && eval "$llvm_compiler" "@$scratch/llvm-built.rsp" src/main.ghul src/greeting.ghul -o "$editor_build/llvm-built.wasm") >&2 \
         || fail "the llvm-built compiler ghul named did not compile the project's sources with the response file"
     [[ -f "$editor_build/llvm-built.wasm" ]] || fail "expected the llvm-built editor round trip to produce llvm-built.wasm"
 
-    echo "project: --compiler-host chooses an editor's compiler, in place of GHUL_COMPILER_HOST..." >&2
+    echo "project: --compiler-host chooses an editor's compiler, over the configuration..." >&2
     named="$(cd "$program" && dotnet "$cli" project compiler --json --compiler-host llvm 2>/dev/null)" || fail "ghul project compiler --compiler-host llvm failed"
     [[ "$named" == *"/compilers/llvm/"* ]] || fail "expected --compiler-host llvm to name the llvm-built compiler, got: $named"
-    named="$(cd "$program" && GHUL_COMPILER_HOST=wasm dotnet "$cli" project compiler --json --compiler-host auto 2>/dev/null)" || fail "ghul project compiler --compiler-host auto failed"
-    [[ "$named" != *"/compilers/wasm/"* ]] || fail "expected --compiler-host auto to leave GHUL_COMPILER_HOST aside, got: $named"
+    named="$(cd "$program" && XDG_CONFIG_HOME="$config_home" dotnet "$cli" project compiler --json --compiler-host auto 2>/dev/null)" || fail "ghul project compiler --compiler-host auto failed"
+    [[ "$named" == *"/compilers/llvm/"* ]] || fail "expected --compiler-host auto to leave the choice to the configuration's compiler-host, got: $named"
+    named="$(cd "$program" && XDG_CONFIG_HOME="$config_home" dotnet "$cli" project compiler --json --compiler-host wasm 2>/dev/null)" || fail "ghul project compiler --compiler-host wasm failed"
+    [[ "$named" == *"/compilers/wasm/"* ]] || fail "expected --compiler-host wasm to win over the configuration's compiler-host, got: $named"
     (cd "$program" && dotnet "$cli" project response-file --compiler-host llvm --output "$scratch/host.rsp") >&2 \
         || fail "ghul project response-file --compiler-host llvm failed"
     if err="$(cd "$program" && dotnet "$cli" project compiler --compiler-host jvm 2>&1)"; then
@@ -185,6 +186,27 @@ if [[ "$(uname -s)" == Linux && "$(uname -m)" =~ ^(x86_64|aarch64)$ ]]; then
     fi
     [[ "$err" == *"--compiler-host is 'jvm'"* ]] || fail "unexpected message for --compiler-host jvm: $err"
 fi
+
+echo "project: GHUL_COMPILER_HOST, a retired configuration key and a version 1 manifest key are refused..." >&2
+if err="$(cd "$program" && GHUL_COMPILER_HOST=wasm dotnet "$cli" project compiler 2>&1)"; then
+    fail "expected GHUL_COMPILER_HOST to be refused"
+fi
+[[ "$err" == *"GHUL_COMPILER_HOST is no longer read"*"--compiler-host"*"compiler-host"* ]] || fail "unexpected message for GHUL_COMPILER_HOST: $err"
+retired_home="$scratch/retired-config-home"
+mkdir -p "$retired_home/ghul"
+echo '{ "defaults": { "prefer": ["wasm"] } }' > "$retired_home/ghul/config.json"
+if err="$(cd "$program" && XDG_CONFIG_HOME="$retired_home" dotnet "$cli" project compiler 2>&1)"; then
+    fail "expected defaults.prefer to be refused"
+fi
+[[ "$err" == *"defaults.prefer"* ]] || fail "unexpected message for defaults.prefer: $err"
+old_key="$scratch/old-key-greeter"
+cp -r "$program" "$old_key"
+sed -i 's/"name": "greeter",/"name": "greeter",\n    "compiler-build": "llvm",/' "$old_key/ghul-project.json"
+grep -q '"compiler-build": "llvm"' "$old_key/ghul-project.json" || fail "the test could not write compiler-build into the manifest"
+if err="$(cd "$old_key" && dotnet "$cli" project compiler 2>&1)"; then
+    fail "expected compiler-build to be refused"
+fi
+[[ "$err" == *"compiler-build"*"--compiler-host"* ]] || fail "unexpected message for compiler-build: $err"
 
 echo "project: the editor files report a manifest's problems..." >&2
 if err="$(cd "$broken" && dotnet "$cli" project response-file --output "$scratch/x.rsp" 2>&1)"; then

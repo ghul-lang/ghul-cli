@@ -52,7 +52,7 @@ once installed, `ghul` runs on the .NET runtime alone.
 The first time it runs, `ghul` downloads its own copy of `ghul.compiler` into
 `~/.cache/ghul-cli/compilers/dotnet` (under `$XDG_CACHE_HOME/ghul-cli` where that
 is set), straight from the NuGet feed. Each way of running the compiler has a
-directory of its own under `compilers`, named as `GHUL_COMPILER_HOST` names it:
+directory of its own under `compilers`, named as `--compiler-host` names it:
 `dotnet`, `native` and `wasm`, with `llvm` for the compiler built for llvm.
 There is nothing else to set up.
 Several compiler versions can be installed at once; where none is named, the
@@ -171,8 +171,8 @@ run it, the compiler built for llvm where there is none on Linux for x64 or
 arm64, and the wasm-built compiler, run by Node.js, everywhere else, with a
 Node.js fetched first where there is none. A Native AOT compiler is installed
 only by an earlier release's install, and kept up to date while it is there.
-`GHUL_COMPILER_HOST` (`wasm`, `dotnet`, `native` or `llvm`) names the one to
-use instead. `install compiler` installs the latest release, and nothing if it is
+The configuration file's `defaults.compiler-host` (see "compiler hosts" below)
+names the one to use instead. `install compiler` installs the latest release, and nothing if it is
 already installed. A version cannot be chosen: the compiler, ghul-llvm,
 Node.js, wasmtime and the compiler's library ghul-runtime are tools, and
 always the newest release. What a project depends on is pinned in its
@@ -192,9 +192,8 @@ without installing Node system-wide.
 
 `ghul install compiler --llvm` installs the compiler built with the llvm
 target instead, a native executable that builds for the `wasm` and `llvm`
-targets only, into a store of its own. A project chooses it with
-`"compiler-build": "llvm"` in its manifest; `"default"`, or no entry, keeps
-the ordinary compiler. It is published for Linux on x64 only.
+targets only, into a store of its own, as `defaults.compiler-host` set to
+`llvm` does. It is published for Linux on x64 and arm64.
 
 `ghul install-compiler` and `ghul install-compiler --llvm` still work, with a
 note pointing at the new spellings: `ghul install compiler` and `ghul install
@@ -239,36 +238,44 @@ builds for and where its sources are:
 {
     "name": "greeter",
     "kind": "program",
-    "targets": ["llvm", "wasm"],
-    "sources": ["src/**/*.ghul"]
-}
-```
-
-`targets` lists the targets the project may be built for: `wasm` and `llvm`.
-`ghul new` writes `["wasm"]` unless `--target` names others. A manifest that
-lists `dotnet` is refused, with a message pointing at the .NET SDK.
-
-A manifest's `tools` names the oldest release of a tool the project was written
-with, as the same ranges a dependency takes:
-
-```json
-{
-    "name": "greeter",
-    "kind": "program",
-    "targets": ["llvm", "wasm"],
+    "version": "0.1.0",
+    "targets": ["wasm", "llvm"],
     "sources": ["src/**/*.ghul"],
-    "tools": { "compiler": ">=66.7.0", "ghul-llvm": ">=1.0.0" }
+    "requires": { "compiler": ">=71.12.0" },
+    "dependencies": { "ghul-runtime": { "version": ">=38.12.0" } },
+    "language": { "underscore-access": "private", "default-use": ["Collections"] },
+    "diagnostics": { "suppress": ["redundant-semicolon"], "warn-as-error": ["cast-may-throw"] },
+    "wasm": { "engine": "node" },
+    "llvm": { "optimise": 3, "requires": { "ghul-llvm": ">=1.9.0" } }
 }
 ```
 
-The tools a project can name are `compiler` and, for an llvm build,
-`ghul-llvm`. `ghul new` writes a floor (`>=`) for each tool its targets need,
-the release in use when it ran. Tools are always the newest release, so a
-floor never holds a newer one back: it makes a machine whose compiler is older
-update it, and a range that does not admit the newest release is reported. A
-compiler named with `--compiler` or `GHUL_COMPILER` below the floor is used,
-with a warning. A tool a manifest does not name is the newest release, and no
-tool is ever an error for lacking a floor.
+Only `name` is required. The keys are:
+- `targets`: the targets the project may be built for, `wasm` and `llvm`, most
+  preferred first. `ghul new` writes `["wasm"]` unless `--target` names
+  others. A manifest that lists `dotnet` is refused, with a message pointing at
+  the .NET SDK.
+- `requires`: the oldest compiler release the project was written with, as a
+  range. `ghul new` writes a floor (`>=`) for the release in use when it ran.
+  Tools are always the newest release, so a floor never holds a newer one
+  back: it makes a machine whose compiler is older update it, and a range that
+  does not admit the newest release is reported. A compiler named with
+  `--compiler` or `GHUL_COMPILER` below the floor is used, with a warning.
+  Without `requires`, any release will do.
+- `dependencies`: the libraries the project compiles in, as described below.
+- `language`: the options that change what the program means:
+  `underscore-access`, `global-namespace`, `default-use` and `define`.
+- `diagnostics`: the options that change only what is reported: `suppress`,
+  `warn-as-error`, `warn` and `warn-as-hint`, each a list of diagnostic names.
+- `wasm` and `llvm`: what only that target reads. `wasm.engine` chooses what
+  runs the module (see "engines and global defaults"). `llvm.optimise` is the
+  default optimisation level, and `llvm.requires` names the oldest `ghul-llvm`
+  release, as `requires` does the compiler's; `ghul new` writes it for a
+  project that builds for llvm.
+
+A key the manifest does not know is an error, never ignored. The keys of the
+first version of the manifest, `tools`, `options`, `prefer`, `engine`, `host`
+and `compiler-build`, are refused with a message naming what replaced them.
 
 `ghul build` builds the project in the current directory into
 `out/<target>/`. `ghul run` builds it and then runs it, passing the arguments
@@ -277,16 +284,14 @@ or not.
 
 A project that lists one target builds that one. Where it lists several,
 `--target` names the one to build, or failing that `GHUL_TARGET` in the
-environment. Otherwise `ghul` takes the first target in order that the
-machine can build:
-- wasm, which needs nothing at build time; the run finds something to run
-  the module under, as the engines section below describes
-
-A manifest's `prefer`, such as `"prefer": ["wasm"]`, puts the targets it
-names first, and every one it names has to be among `targets`. When `ghul`
-passes over a target it cannot build, it says what it built for instead in one
-line; choosing the first in order, it says nothing. Where no listed target
-can be built, it says why for each and builds nothing.
+environment. Otherwise `ghul` builds the first target `targets` lists that the
+machine can build: wasm needs nothing at build time, since the run finds
+something to run the module under, and llvm needs ghul-llvm, released for
+Linux on x64 and arm64. When `ghul` passes over a target it cannot build, it
+says what it built for instead in one line; building the first listed, it says
+nothing. Where no listed target can be built, it says why for each and builds
+nothing. A script, which has no manifest, builds for wasm unless `GHUL_TARGET`
+names llvm.
 
 ### workspaces and collections
 
@@ -325,9 +330,8 @@ through the loader the compiler writes. (The host is the machine `ghul` runs
 on.) Which engine is chosen in three steps, each filling only what the one
 before leaves unset.
 
-1. The project manifest names it: `"engine": { "wasm": "wasmtime" }` or
-   `"engine": { "wasm": "node" }`. The key was once `host`, which is refused
-   with a message.
+1. The project manifest's wasm section names it: `"wasm": { "engine":
+   "wasmtime" }` or `"wasm": { "engine": "node" }`.
 2. The machine's global configuration file,
    `~/.config/ghul/config.json`, names a default for every project that
    does not choose:
@@ -344,8 +348,10 @@ before leaves unset.
    global file is honoured rather than swapped.
 
 A project that names an engine itself is never overridden by the global file.
-The built-in order a build follows is wasm; llvm is never chosen
-automatically.
+The file holds `defaults` alone, and `defaults` holds `engine` and
+`compiler-host`; any other key is an error naming it. `defaults.prefer` and
+`defaults.host` are refused: a project builds the first target it lists, and
+the engine is `defaults.engine`.
 
 When a run chooses the wasmtime host and finds it missing, it downloads the
 newest release first, as the compiler is downloaded on first use.
@@ -362,8 +368,8 @@ the ordinary build rather than over it, and `ghul run --debug` runs that build.
 `--optimise <0-3>` sets the llvm target's optimisation level, which is
 otherwise 2, or 0 for a debug build; a level other than that default adds
 `-O<n>` to the directory, as in `out/llvm-O3/` or `out/llvm-debug-O2/`. The
-manifest's `options` may name a default level, `"optimise": 3`, which the
-command line overrides. A chosen level needs ghul.compiler 65.16.0 or newer.
+manifest's llvm section may name a default level, `"llvm": { "optimise": 3 }`,
+which the command line overrides. A chosen level needs ghul.compiler 65.16.0 or newer.
 
 The `wasm` target writes
 a WebAssembly module and the JavaScript loader the compiler puts beside it,
@@ -386,10 +392,7 @@ any dependency, and a build uses the newest release it admits: `>=` is a floor
 and admits a newer major version, where `^` stops at the next one. `>=0.0.0`
 says the project accepts any release. A `path` uses a checkout instead. A
 project for wasm or llvm that leaves it out is refused, and the message names
-the line to add with the newest release as the floor. The core was once a
-library of its own, ghul-core; a declaration of it, in a project or in a
-library it depends on, is ignored, and a project's own draws a warning to
-remove it. The releases are
+the line to add with the newest release as the floor. The releases are
 listed on every build; where GitHub cannot be reached, the release used last
 is used again. A library that needs a newer compiler than the installed one
 fails to compile with the compiler's own error, and `ghul update` brings the
@@ -405,7 +408,8 @@ in after ghul-runtime: a directory holding a `ghul-project.json` that lists
 (exactly that one), `^1.2.3` (at least that, below the next major), `~1.2.3`
 (at least that, below the next minor) or `>=1.2.3`, and resolves to the newest
 matching release, listed on every build, with the one used last where GitHub
-cannot be reached. A `tag` is the older spelling of an exact version. A library's own dependencies are
+cannot be reached. A `branch` in place of the `version` reads the repository
+at the head of that branch. A library's own dependencies are
 compiled in too, each before the libraries that use it, and a `path` in a
 library's manifest is relative to that library.
 
@@ -425,11 +429,20 @@ how a test harness that drives `ghul` chooses the compiler for all of them.
 `GHUL_COMPILER` is a compiler command, as `--compiler` takes one, which
 overrides it. `GHUL_COMPILER_VERSION` is refused.
 
-`GHUL_COMPILER_HOST` picks how the compiler is run, for every build and for
-`ghul project compiler`, so an editor follows it too. Unset, `ghul` chooses:
-the managed compiler where there is .NET; otherwise the compiler built for
-llvm where one is published, for Linux on x64 and arm64, with the wasm-built
-one as its fallback; and otherwise the wasm-built one under Node.
+### compiler hosts
+
+How the compiler is run is chosen by `--compiler-host` on `ghul project
+compiler` and `ghul project response-file`, then by `defaults.compiler-host`
+in the configuration file, for every build and every editor:
+
+```json
+{ "defaults": { "compiler-host": "llvm" } }
+```
+
+Named by neither, `ghul` chooses: the managed compiler where there is .NET;
+otherwise the compiler built for llvm where one is published, for Linux on x64
+and arm64, with the wasm-built one as its fallback; and otherwise the
+wasm-built one under Node.
 
 - `wasm`: the wasm-built compiler, run by Node; `ghul` fetches a Node where
   there is none it can run.
@@ -440,9 +453,10 @@ one as its fallback; and otherwise the wasm-built one under Node.
 
 Each is installed as it is needed into a directory of its own under the
 compiler cache, `compilers/<host>`. Any other value, or a host this machine
-cannot have, is an error naming the value. A compiler given as a command, by `--compiler` or
-`GHUL_COMPILER`, runs as given whatever the variable says, and a manifest
-naming the llvm-built compiler with `compiler-build` keeps it.
+cannot have, is an error naming the value. A compiler given as a command, by
+`--compiler` or `GHUL_COMPILER`, runs as given whatever the host says. A
+manifest does not choose the host. `GHUL_COMPILER_HOST` is refused, with a
+message naming the option and the key that replaced it.
 
 ### hello world on WebAssembly
 
@@ -536,7 +550,7 @@ files. `--source-globs` also writes the manifest's source globs, one a line
 and relative to the manifest, for the client to expand and watch.
 Where the manifest lists more than one target, `--target` names the one,
 or failing that `GHUL_TARGET`, and otherwise the target is chosen as a build
-chooses it, `prefer` included, except that wasm counts as buildable without
+chooses it, the first listed that can be built, except that wasm counts as buildable without
 Node.js, since an editor analyses the project rather than running it.
 
 `ghul project compiler` prints the command that runs the compiler the
@@ -548,15 +562,12 @@ analysis from 71.11.5, and elsewhere the wasm-built compiler run by Node.js,
 which serves analysis from 66.1.0. The program is named by its full path where `PATH` finds it, so
 a client started with a different `PATH` runs the same one. `--json` prints
 the command as a JSON array of strings, the program first, for a client to
-start as it stands rather than splitting a command line. A manifest's
-`"compiler-build": "llvm"` names the llvm-built compiler, as it does for a
-build.
+start as it stands rather than splitting a command line.
 
 `--compiler-host` (`auto`, `dotnet`, `llvm`, `wasm` or `native`) chooses how
-the compiler is run, for both commands, in place of `GHUL_COMPILER_HOST`:
-an editor passes its own setting, and `auto` leaves the choice to `ghul`
-whatever the environment says. A manifest's `compiler-build` is still the
-project's own choice.
+the compiler is run, for both commands, over `defaults.compiler-host`: an
+editor passes its own setting, and `auto` leaves the choice to the
+configuration and then to `ghul`.
 
 Both report a manifest's problems on standard error and exit non-zero.
 
