@@ -94,25 +94,31 @@ namespace Ghul.Project is
 si
 
 namespace Ghul.Project is
-    /// The names a manifest's `tools` uses.
+    /// The tools a manifest names the oldest release of: the compiler under
+    /// `requires`, and ghul-llvm under the llvm section's `requires`.
     class PROJECT_TOOLS is
         /// The compiler.
         COMPILER: string static => "compiler"
 
         /// The assembler, optimiser and linker the llvm target links with.
         LLVM: string static => "ghul-llvm"
+
+        /// The manifest key that names `tool`'s floor.
+        ///
+        /// - tool: COMPILER or LLVM
+        key(tool: string) -> string static => if tool =~ LLVM then "llvm.requires" else "requires" fi
     si
 si
 
 namespace Ghul.Project is
-    /// Checks the version of a tool in use against what a manifest's `tools`
+    /// Checks the version of a tool in use against what a manifest's `requires`
     /// accepts for it.
     class TOOL_FLOOR is
         /// Why `version` of `tool` is not one the project accepts, or null
         /// where it is, where the project says nothing about the tool, or
         /// where the version is a build of the tool rather than a release.
         ///
-        /// - tools: the manifest's `tools`
+        /// - tools: the floors the manifest's `requires` and `llvm.requires` name
         /// - tool: the tool's name there
         /// - version: the version in use
         problem(tools: Collections.Map[string, VERSION_RANGE], tool: string, version: string) -> string? static is
@@ -127,7 +133,7 @@ namespace Ghul.Project is
                 return null
             fi
 
-            return "{tool} {version} is outside {range} that the project names in tools"
+            return "{tool} {version} is outside {range} that the project's {PROJECT_TOOLS.key(tool)} names"
         si
     si
 si

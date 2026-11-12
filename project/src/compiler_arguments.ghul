@@ -137,6 +137,11 @@ namespace Ghul.Project is
                 add(["--llvm-parallel-gc"])
             fi
 
+            // What the program reads as the version it was built as.
+            if let version = manifest.version then
+                add(["--version", version])
+            fi
+
             if manifest.kind == ManifestKind.LIBRARY then
                 add(["--library"])
 

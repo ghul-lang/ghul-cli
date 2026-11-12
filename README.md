@@ -254,6 +254,9 @@ builds for and where its sources are:
 ```
 
 Only `name` is required. The keys are:
+- `version`: the version the program is built as, which it reads as
+  `Ghul.ENVIRONMENT.program_version`; a build passes it to the compiler as
+  `--version`, and `--version <version>` on the command line overrides it.
 - `targets`: the targets the project may be built for, `wasm` and `llvm`, most
   preferred first. `ghul new` writes `["wasm", "llvm"]` unless `--target`
   names others. A build takes the first target listed that the machine can
@@ -427,12 +430,13 @@ library's manifest is relative to that library.
 A wasm build needs `ghul.compiler` 64.15.0 or newer. Where the newest
 installed is older, the build installs the newest release and uses that.
 
-Two options override the manifest for one build, which is how a repository
-tests its own checkout. `--compiler <command>` builds with the command given,
+Three options override the manifest for one build, which is how a repository
+tests its own checkout and how a release is stamped. `--version <version>`
+builds the program as that version in place of the manifest's `version`. `--compiler <command>` builds with the command given,
 such as `dotnet /path/to/publish/ghul.dll`, in place of an installed compiler;
 the libraries are the newest releases, as for any build. `--library <name>=<path>`, which can be given more than once,
 compiles the source library `name` (such as `ghul-runtime`) from the
-directory at `path`. Both work with `build`, `run` and `ghul project
+directory at `path`. All three work with `build`, `run` and `ghul project
 response-file`, and `--compiler` with `ghul project compiler`.
 
 Two environment variables override the manifest for every build, which is

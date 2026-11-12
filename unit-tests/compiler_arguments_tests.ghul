@@ -265,5 +265,16 @@ namespace Ghul.Cli.Tests is
             assert !wasm.contains("--llvm-parallel-gc") else wasm
             assert !wasm.contains("--rtti") else wasm
         si
+
+        @Test()
+        the_manifests_version_is_passed_as_the_programs_version() is
+            let versioned =
+                MANIFEST(
+                    "app", "1.4.0", ManifestKind.PROGRAM, LIST[BuildTarget]([BuildTarget.WASM]), LIST[string](["src/**/*.ghul"]),
+                    _plain_options(), MAP[string, DEPENDENCY](), null, MAP[string, VERSION_RANGE]())
+
+            assert _joined(COMPILER_ARGUMENTS.options(versioned, BuildTarget.LLVM, _no_libraries())).contains("--version 1.4.0")
+            assert !_joined(COMPILER_ARGUMENTS.options(_manifest(ManifestKind.PROGRAM, _plain_options()), BuildTarget.LLVM, _no_libraries())).contains("--version")
+        si
     si
 si
