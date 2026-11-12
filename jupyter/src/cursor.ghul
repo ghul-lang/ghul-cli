@@ -48,7 +48,7 @@ namespace Ghul.Jupyter is
         si
 
         _is_name_character(c: char) -> bool static =>
-            char.is_letter_or_digit(c) \/ c == '_'
+            c.is_letter_or_digit \/ c == '_'
 
         _clamp(text: string, offset: int) -> int static =>
             if offset < 0 then

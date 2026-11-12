@@ -144,7 +144,7 @@ namespace Ghul.Repl.Host is
             let length = text.length
             let c = text[i]
 
-            if char.is_white_space(c) then
+            if c.is_white_space then
                 return i + 1
             fi
 
@@ -193,7 +193,7 @@ namespace Ghul.Repl.Host is
                 return i + 1
             fi
 
-            if char.is_letter(c) \/ c == '_' then
+            if c.is_letter \/ c == '_' then
                 let end = _word_end(text, i)
 
                 result.add(TOKEN_SPAN(i, end - i, _classify(text.substring(i, end - i))))
@@ -204,7 +204,7 @@ namespace Ghul.Repl.Host is
             if c == '`' then
                 let end mut = i + 1
 
-                if end < length /\ (char.is_letter_or_digit(text[end]) \/ text[end] == '_') then
+                if end < length /\ (text[end].is_letter_or_digit \/ text[end] == '_') then
                     end = _word_end(text, end)
                 else
                     while end < length /\ _is_operator(text[end]) do
@@ -217,7 +217,7 @@ namespace Ghul.Repl.Host is
                 return end
             fi
 
-            if char.is_digit(c) then
+            if c.is_digit then
                 let end = _number_end(text, i)
 
                 result.add(TOKEN_SPAN(i, end - i, TokenKind.NUMBER))
@@ -271,7 +271,7 @@ namespace Ghul.Repl.Host is
             fi
 
             for c in word do
-                if !((c >= 'A' /\ c <= 'Z') \/ char.is_digit(c) \/ c == '_') then
+                if !((c >= 'A' /\ c <= 'Z') \/ c.is_digit \/ c == '_') then
                     return false
                 fi
             od
@@ -292,7 +292,7 @@ namespace Ghul.Repl.Host is
         _word_end(text: string, i: int) -> int static is
             let end mut = i
 
-            while end < text.length /\ (char.is_letter_or_digit(text[end]) \/ text[end] == '_') do
+            while end < text.length /\ (text[end].is_letter_or_digit \/ text[end] == '_') do
                 end = end + 1
             od
 
@@ -308,28 +308,28 @@ namespace Ghul.Repl.Host is
             if _is_at(text, i, '0') /\ (_is_at(text, i + 1, 'x') \/ _is_at(text, i + 1, 'X')) then
                 end = i + 2
 
-                while end < length /\ (char.is_ascii_hex_digit(text[end]) \/ text[end] == '_') do
+                while end < length /\ (text[end].is_ascii_hex_digit \/ text[end] == '_') do
                     end = end + 1
                 od
             else
-                while end < length /\ (char.is_digit(text[end]) \/ text[end] == '_') do
+                while end < length /\ (text[end].is_digit \/ text[end] == '_') do
                     end = end + 1
                 od
 
-                if _is_at(text, end, '.') /\ end + 1 < length /\ char.is_digit(text[end + 1]) then
+                if _is_at(text, end, '.') /\ end + 1 < length /\ text[end + 1].is_digit then
                     end = end + 1
 
-                    while end < length /\ (char.is_digit(text[end]) \/ text[end] == '_') do
+                    while end < length /\ (text[end].is_digit \/ text[end] == '_') do
                         end = end + 1
                     od
 
                     if end < length /\ (text[end] == 'e' \/ text[end] == 'E') then
                         let after_sign = if _is_at(text, end + 1, '-') \/ _is_at(text, end + 1, '+') then end + 2 else end + 1 fi
 
-                        if after_sign < length /\ char.is_digit(text[after_sign]) then
+                        if after_sign < length /\ text[after_sign].is_digit then
                             end = after_sign
 
-                            while end < length /\ char.is_digit(text[end]) do
+                            while end < length /\ text[end].is_digit do
                                 end = end + 1
                             od
                         fi
@@ -341,7 +341,7 @@ namespace Ghul.Repl.Host is
                 end = end + 1
             fi
 
-            while end < length /\ char.is_letter(text[end]) do
+            while end < length /\ text[end].is_letter do
                 end = end + 1
             od
 
@@ -349,7 +349,7 @@ namespace Ghul.Repl.Host is
         si
 
         _is_operator(c: char) -> bool static =>
-            _operator_characters.index_of(c) >= 0 \/ (cast int(c) > 127 /\ char.is_symbol(c))
+            _operator_characters.index_of(c) >= 0 \/ (cast int(c) > 127 /\ c.is_symbol)
 
         _opens_comment(text: string, i: int) -> bool static =>
             text[i] == '/' /\ (_is_at(text, i + 1, '/') \/ _is_at(text, i + 1, '*'))

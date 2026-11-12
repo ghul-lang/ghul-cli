@@ -636,7 +636,7 @@ namespace Ghul.Cli is
     // An argument as a shell reads it back: as it is, or in single quotes
     // where it holds anything a shell would split or expand.
     _quoted(argument: string) -> string =>
-        if argument.length > 0 /\ argument |> Ghul.Pipes.all(c => char.is_letter_or_digit(c) \/ "-_./=:,+".contains(c)) then
+        if argument.length > 0 /\ argument |> Ghul.Pipes.all(c => c.is_letter_or_digit \/ "-_./=:,+".contains(c)) then
             argument
         else
             "'{argument.replace("'", "'\\''")}'"

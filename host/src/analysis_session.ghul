@@ -249,7 +249,7 @@ namespace Ghul.Repl.Host is
             let end = System.Math.min(System.Math.max(column - 1, 0), row.length)
             let start mut = end
 
-            while start > 0 /\ (char.is_letter_or_digit(row[start - 1]) \/ row[start - 1] == '_') do
+            while start > 0 /\ (row[start - 1].is_letter_or_digit \/ row[start - 1] == '_') do
                 start = start - 1
             od
 

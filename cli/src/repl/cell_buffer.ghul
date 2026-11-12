@@ -340,7 +340,7 @@ namespace Ghul.Cli.Repl is
             return 0
         si
 
-        _is_word(c: char) -> bool static => char.is_letter_or_digit(c) \/ c == '_'
+        _is_word(c: char) -> bool static => c.is_letter_or_digit \/ c == '_'
 
         end() is
             column = line.length
@@ -387,7 +387,7 @@ namespace Ghul.Cli.Repl is
             let start mut = column
             let text = line
 
-            while start > 0 /\ (char.is_letter_or_digit(text[start - 1]) \/ text[start - 1] == '_') do
+            while start > 0 /\ (text[start - 1].is_letter_or_digit \/ text[start - 1] == '_') do
                 start = start - 1
             od
 

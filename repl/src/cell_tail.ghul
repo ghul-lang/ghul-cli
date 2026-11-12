@@ -90,7 +90,7 @@ namespace Ghul.Repl is
             let first = token.text[0]
 
             return
-                char.is_letter_or_digit(first) \/ first == '_' \/ first == '"' \/ first == '\'' \/
+                first.is_letter_or_digit \/ first == '_' \/ first == '"' \/ first == '\'' \/
                 token.text =~ ")" \/ token.text =~ "]" \/ token.text =~ "}}"
         si
 

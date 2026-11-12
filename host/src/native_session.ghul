@@ -93,7 +93,7 @@ namespace Ghul.Repl.Host is
             let text = Text.STRING_BUILDER()
 
             for argument in arguments do
-                if argument.length == 0 \/ (argument |> Ghul.Pipes.any(c => char.is_white_space(c))) then
+                if argument.length == 0 \/ (argument |> Ghul.Pipes.any(c => c.is_white_space)) then
                     text.append("\"{argument}\"")
                 else
                     text.append(argument)

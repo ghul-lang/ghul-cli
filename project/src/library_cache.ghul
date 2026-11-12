@@ -127,7 +127,7 @@ namespace Ghul.Project is
             let safe = System.Text.StringBuilder()
 
             for c in url do
-                if char.is_letter_or_digit(c) \/ c == '-' \/ c == '.' then
+                if c.is_letter_or_digit \/ c == '-' \/ c == '.' then
                     safe.append(c)
                 else
                     safe.append('_')

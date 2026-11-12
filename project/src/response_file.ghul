@@ -21,7 +21,7 @@ namespace Ghul.Project is
 
         /// One argument as the compiler reads it back from a response file.
         quoted(argument: string) -> string static is
-            let needs_quotes = argument.length == 0 \/ (argument |> Ghul.Pipes.any(c => char.is_white_space(c) \/ c == '"' \/ c == '\''))
+            let needs_quotes = argument.length == 0 \/ (argument |> Ghul.Pipes.any(c => c.is_white_space \/ c == '"' \/ c == '\''))
 
             if !needs_quotes then
                 return argument
