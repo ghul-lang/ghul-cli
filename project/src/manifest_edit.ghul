@@ -273,7 +273,7 @@ namespace Ghul.Project is
             let i mut = at
 
             while i < text.length do
-                if char.is_white_space(text[i]) then
+                if text[i].is_white_space then
                     i = i + 1
                 elif text[i] == '/' /\ i + 1 < text.length /\ text[i + 1] == '/' then
                     while i < text.length /\ text[i] != '\n' do
@@ -354,7 +354,7 @@ namespace Ghul.Project is
                 return -1
             fi
 
-            while i < text.length /\ text[i] != ',' /\ text[i] != '}' /\ text[i] != ']' /\ !char.is_white_space(text[i]) do
+            while i < text.length /\ text[i] != ',' /\ text[i] != '}' /\ text[i] != ']' /\ !text[i].is_white_space do
                 i = i + 1
             od
 

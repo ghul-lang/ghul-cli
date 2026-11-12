@@ -15,7 +15,7 @@ namespace Ghul.Cli.Repl is
             let end = System.Math.clamp(column, 0, line.length)
             let start mut = end
 
-            while start > 0 /\ (char.is_letter_or_digit(line[start - 1]) \/ line[start - 1] == '_') do
+            while start > 0 /\ (line[start - 1].is_letter_or_digit \/ line[start - 1] == '_') do
                 start = start - 1
             od
 

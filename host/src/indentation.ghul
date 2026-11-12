@@ -134,7 +134,7 @@ namespace Ghul.Repl.Host is
             let start = leading_spaces(line)
             let end mut = start
 
-            while end < line.length /\ (char.is_letter_or_digit(line[end]) \/ line[end] == '_') do
+            while end < line.length /\ (line[end].is_letter_or_digit \/ line[end] == '_') do
                 end = end + 1
             od
 
@@ -155,7 +155,7 @@ namespace Ghul.Repl.Host is
             let c = code[before - 1]
 
             // An operator word such as `=>` needs no boundary; a name does.
-            return !char.is_letter(word[0]) \/ !(char.is_letter_or_digit(c) \/ c == '_' \/ c == '`')
+            return !word[0].is_letter \/ !(c.is_letter_or_digit \/ c == '_' \/ c == '`')
         si
 
         // A line without any `//` comment on its end, ignoring one inside a

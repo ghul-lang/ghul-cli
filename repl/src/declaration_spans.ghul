@@ -160,7 +160,7 @@ namespace Ghul.Repl is
                 elif _is_word_char(c) then
                     let end = _word_end(source, i)
 
-                    result.add(SOURCE_TOKEN(source.substring(i, end - i), i, end, !char.is_digit(c), false))
+                    result.add(SOURCE_TOKEN(source.substring(i, end - i), i, end, !c.is_digit, false))
                     i = end
                 elif c == '(' \/ c == ')' \/ c == '[' \/ c == ']' \/ c == ';' \/ c == '@' \/ c == ',' then
                     result.add(SOURCE_TOKEN("{c}", i, i + 1, false, false))
@@ -261,10 +261,10 @@ namespace Ghul.Repl is
             return i
         si
 
-        _is_word_char(c: char) -> bool static => char.is_letter_or_digit(c) \/ c == '_'
+        _is_word_char(c: char) -> bool static => c.is_letter_or_digit \/ c == '_'
 
         _is_operator_char(c: char) -> bool static =>
-            "!$%^&*-+=|:~#\\<>.?/".index_of(c) >= 0 \/ (c > '\u007F' /\ char.is_symbol(c))
+            "!$%^&*-+=|:~#\\<>.?/".index_of(c) >= 0 \/ (c > '\u007F' /\ c.is_symbol)
 
         _at(source: string, i: int, c: char) -> bool static => i < source.length /\ source[i] == c
     si

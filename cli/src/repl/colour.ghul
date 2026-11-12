@@ -225,7 +225,7 @@ namespace Ghul.Cli.Repl is
             while i <= reply.length /\ components.count < 3 do
                 let c = if i < reply.length then reply[i] else '/' fi
 
-                if char.is_ascii_hex_digit(c) then
+                if c.is_ascii_hex_digit then
                     digits.append(c)
                 elif digits.length > 0 /\ digits.length <= 4 then
                     let value = int.parse(digits.to_string(), System.Globalization.NumberStyles.HEX_NUMBER)
