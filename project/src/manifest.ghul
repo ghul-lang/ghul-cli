@@ -55,7 +55,9 @@ namespace Ghul.Project is
     si
 
     // The compiler options a manifest sets, one member per option. A
-    // member the manifest leaves out reads as the compiler's own default:
+    // member the manifest leaves out reads as the compiler's own default
+    // (`reflection` null for none, `parallel_gc` false for the default
+    // collector):
     // null for `underscore-access` and `optimise`, false for
     // `global-namespace` and an empty list for each of the others.
     class MANIFEST_OPTIONS(
@@ -67,7 +69,9 @@ namespace Ghul.Project is
         warn_as_error: Collections.List[string],
         warn: Collections.List[string],
         warn_as_hint: Collections.List[string],
-        optimise: int?
+        optimise: int?,
+        reflection: string?,
+        parallel_gc: bool
     ) is si
 
     // Where a library comes from: a git repository at a tag or a branch,

@@ -47,7 +47,7 @@ namespace Ghul.Cli.Tests is
                     kind,
                     LIST[BuildTarget]([target]),
                     LIST[string](["src/**/*.ghul"]),
-                    MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](), LIST[string](), LIST[string](), null),
+                    MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](), LIST[string](), LIST[string](), null, null, false),
                     MAP[string, DEPENDENCY](),
                     host_wasm, MAP[string, VERSION_RANGE]()),
                 IO.Path.combine("/", "project"),

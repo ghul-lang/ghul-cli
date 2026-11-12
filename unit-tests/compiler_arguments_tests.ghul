@@ -39,7 +39,9 @@ namespace Ghul.Cli.Tests is
                 LIST[string](warn_as_error),
                 LIST[string](),
                 LIST[string](),
-                null)
+                null,
+                null,
+                false)
 
         _plain_options() -> MANIFEST_OPTIONS => _options(null, false, [], [], [], [])
 
@@ -236,6 +238,32 @@ namespace Ghul.Cli.Tests is
             let build = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.LLVM, _no_libraries(), BUILD_MODE(true, null), "out/app", LIST[string](["main.ghul"]))
 
             _same("--target llvm --debug -o out/app main.ghul", _joined(build))
+        si
+
+        // The options a manifest's reflection and collector give: the
+        // others left at their defaults.
+        _built_options(reflection: string?, parallel_gc: bool) -> MANIFEST_OPTIONS =>
+            MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](), LIST[string](), LIST[string](), null, reflection, parallel_gc)
+
+        @Test()
+        reflection_roots_and_all_are_passed_to_both_targets() is
+            for target in [BuildTarget.WASM, BuildTarget.LLVM] do
+                let roots = _joined(COMPILER_ARGUMENTS.options(_manifest(ManifestKind.PROGRAM, _built_options("roots", false)), target, _no_libraries()))
+                let all = _joined(COMPILER_ARGUMENTS.options(_manifest(ManifestKind.PROGRAM, _built_options("all", false)), target, _no_libraries()))
+
+                assert roots.contains("--rtti-roots") else roots
+                assert all.contains("--rtti") /\ !all.contains("--rtti-roots") else all
+            od
+        si
+
+        @Test()
+        the_parallel_collector_is_passed_to_an_llvm_build_only() is
+            let llvm = _joined(COMPILER_ARGUMENTS.options(_manifest(ManifestKind.PROGRAM, _built_options(null, true)), BuildTarget.LLVM, _no_libraries()))
+            let wasm = _joined(COMPILER_ARGUMENTS.options(_manifest(ManifestKind.PROGRAM, _built_options(null, true)), BuildTarget.WASM, _no_libraries()))
+
+            assert llvm.contains("--llvm-parallel-gc") else llvm
+            assert !wasm.contains("--llvm-parallel-gc") else wasm
+            assert !wasm.contains("--rtti") else wasm
         si
     si
 si
