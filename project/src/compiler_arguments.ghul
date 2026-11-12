@@ -127,6 +127,16 @@ namespace Ghul.Project is
                 add(["--warn-as-hint", string.join(",", options.warn_as_hint)])
             fi
 
+            // wasm and llvm describe types for reflection themselves, so each
+            // build is told which to describe.
+            if let reflection = options.reflection then
+                add([if reflection =~ "all" then "--rtti" else "--rtti-roots" fi])
+            fi
+
+            if options.parallel_gc /\ target == BuildTarget.LLVM then
+                add(["--llvm-parallel-gc"])
+            fi
+
             if manifest.kind == ManifestKind.LIBRARY then
                 add(["--library"])
 

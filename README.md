@@ -268,14 +268,21 @@ Only `name` is required. The keys are:
   Without `requires`, any release will do.
 - `dependencies`: the libraries the project compiles in, as described below.
 - `language`: the options that change what the program means:
-  `underscore-access`, `global-namespace`, `default-use` and `define`.
+  `underscore-access`, `global-namespace`, `default-use`, `define` and
+  `reflection`. `reflection` says which types a wasm or llvm build describes
+  for reflection: `none`, the default; `roots`, the types marked
+  `@reflected()` and those their descriptions reach; or `all`. It has no
+  effect on a dotnet build, where the .NET runtime describes every type.
 - `diagnostics`: the options that change only what is reported: `suppress`,
   `warn-as-error`, `warn` and `warn-as-hint`, each a list of diagnostic names.
 - `wasm` and `llvm`: what only that target reads. `wasm.engine` chooses what
   runs the module (see "engines and global defaults"). `llvm.optimise` is the
   default optimisation level, and `llvm.requires` names the oldest `ghul-llvm`
   release, as `requires` does the compiler's; `ghul new` writes it for a
-  project that builds for llvm.
+  project that builds for llvm. `llvm.collector` is `default` or `parallel`,
+  the collector that marks with several threads, for a program that keeps a
+  large heap; it costs a small program memory and speed, so it is not the
+  default.
 
 A key the manifest does not know is an error, never ignored. The keys of the
 first version of the manifest, `tools`, `options`, `prefer`, `engine`, `host`

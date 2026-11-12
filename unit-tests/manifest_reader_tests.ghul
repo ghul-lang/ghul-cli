@@ -574,5 +574,28 @@ namespace Ghul.Cli.Tests is
         a_trailing_comma__is_allowed() is
             assert (_read(TRAILING_COMMA)!).name =~ "app";
         si
+
+        @Test()
+        reflection__reads_none_roots_and_all_and_refuses_anything_else() is
+            assert !(_read("{{\"name\": \"app\"}}")!).options.reflection?
+            assert !(_read("{{\"name\": \"app\", \"language\": {{\"reflection\": \"none\"}}}}")!).options.reflection?
+            assert (_read("{{\"name\": \"app\", \"language\": {{\"reflection\": \"roots\"}}}}")!).options.reflection =~ "roots"
+            assert (_read("{{\"name\": \"app\", \"language\": {{\"reflection\": \"all\"}}}}")!).options.reflection =~ "all"
+
+            let problems = _problems("{{\"name\": \"app\", \"language\": {{\"reflection\": \"some\"}}}}")
+
+            assert problems.count == 1 /\ problems[0].contains("language.reflection") else problems |> join("; ")
+        si
+
+        @Test()
+        the_llvm_collector__reads_default_and_parallel_and_refuses_anything_else() is
+            assert !(_read("{{\"name\": \"app\"}}")!).options.parallel_gc
+            assert !(_read("{{\"name\": \"app\", \"llvm\": {{\"collector\": \"default\"}}}}")!).options.parallel_gc
+            assert (_read("{{\"name\": \"app\", \"llvm\": {{\"collector\": \"parallel\"}}}}")!).options.parallel_gc
+
+            let problems = _problems("{{\"name\": \"app\", \"llvm\": {{\"collector\": \"boehm\"}}}}")
+
+            assert problems.count == 1 /\ problems[0].contains("llvm.collector") else problems |> join("; ")
+        si
     si
 si

@@ -45,10 +45,11 @@ namespace Ghul.Project is
             let llvm = _target_section(root, "llvm", _llvm_keys())
             let host_wasm = _engine(wasm)
             let optimise = _optimise(llvm)
+            let parallel_gc = _collector(llvm)
             if let section = llvm then
                 _requires(section, "llvm.requires", PROJECT_TOOLS.LLVM, tools)
             fi
-            let options = _options(root, optimise)
+            let options = _options(root, optimise, parallel_gc)
             let dependencies = _dependencies(root)
 
             // A manifest with anything wrong with it is not a manifest,
@@ -94,7 +95,7 @@ namespace Ghul.Project is
                 kind,
                 LIST[BuildTarget](),
                 LIST[string](),
-                _options(root, null),
+                _options(root, null, false),
                 MAP[string, DEPENDENCY](),
                 null,
                 MAP[string, VERSION_RANGE]()
@@ -564,7 +565,7 @@ namespace Ghul.Project is
         // The compiler options: `language`, which change the program, and
         // `diagnostics`, which change only what is reported, with the llvm
         // section's optimisation level.
-        _options(root: JsonElement, optimise: int?) -> MANIFEST_OPTIONS is
+        _options(root: JsonElement, optimise: int?, parallel_gc: bool) -> MANIFEST_OPTIONS is
             let underscore_access: string? mut = null
             let global_namespace mut = false
             let default_use mut = LIST[string]()
@@ -573,8 +574,9 @@ namespace Ghul.Project is
             let warn_as_error mut = LIST[string]()
             let warn mut = LIST[string]()
             let warn_as_hint mut = LIST[string]()
+            let reflection: string? mut = null
 
-            if let language = _section(root, "language", ["underscore-access", "global-namespace", "default-use", "define"]) then
+            if let language = _section(root, "language", ["underscore-access", "global-namespace", "default-use", "define", "reflection"]) then
                 for member in language.enumerate_object() do
                     let key = "language.{member.name}"
 
@@ -586,6 +588,8 @@ namespace Ghul.Project is
                         default_use = _string_list_option(key, member.value)
                     elif member.name =~ "define" then
                         define = _string_list_option(key, member.value)
+                    elif member.name =~ "reflection" then
+                        reflection = _reflection(key, member.value)
                     fi
                 od
             fi
@@ -606,7 +610,7 @@ namespace Ghul.Project is
                 od
             fi
 
-            return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error, warn, warn_as_hint, optimise)
+            return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error, warn, warn_as_hint, optimise, reflection, parallel_gc)
         si
 
         // The object under `key`, with its keys checked against `known`, or
@@ -638,7 +642,44 @@ namespace Ghul.Project is
 
         _wasm_keys() -> ARRAY[string] static => ["engine"]
 
-        _llvm_keys() -> ARRAY[string] static => ["optimise", "requires"]
+        _llvm_keys() -> ARRAY[string] static => ["collector", "optimise", "requires"]
+
+        // Which types a wasm or llvm build describes for reflection: null for
+        // none, `roots` for the types marked `@reflected()` and those they
+        // reach, or `all`.
+        _reflection(key: string, value: JsonElement) -> string? is
+            let text = if value.value_kind == JsonValueKind.STRING then value.get_string() ?? "" else "" fi
+
+            if text =~ "none" then
+                return null
+            elif text =~ "roots" \/ text =~ "all" then
+                return text
+            fi
+
+            _report(key, "the value is none of none, roots and all")
+
+            return null
+        si
+
+        // Whether the llvm section asks for the collector that marks with
+        // several threads: `parallel`, against `default`.
+        _collector(llvm: JsonElement?) -> bool is
+            let value: JsonElement mut
+
+            if !llvm? \/ !llvm.try_get_property("collector", value ref) then
+                return false
+            fi
+
+            let text = if value.value_kind == JsonValueKind.STRING then value.get_string() ?? "" else "" fi
+
+            if text =~ "parallel" then
+                return true
+            elif text !~ "default" then
+                _report("llvm.collector", "the value is neither default nor parallel")
+            fi
+
+            return false
+        si
 
         // The llvm build's optimisation level, where its section sets one.
         _optimise(llvm: JsonElement?) -> int? is
