@@ -4,24 +4,25 @@ namespace Ghul.Project is
     use IO.Path
 
     /// What a command line overrides about how a project is built: the
-    /// compiler to run in place of the one the manifest names, and source
+    /// compiler to run in place of the one the manifest names, source
     /// libraries to compile from a directory in place of the manifest's
-    /// dependencies and the pinned releases.
-    class BUILD_OVERRIDES(compiler_command: string?, libraries: Collections.Map[string, string]) is
+    /// dependencies and the pinned releases, and the version the program is
+    /// built as in place of the manifest's `version`.
+    class BUILD_OVERRIDES(compiler_command: string?, libraries: Collections.Map[string, string], version: string?) is
         /// Nothing overridden.
-        none() -> BUILD_OVERRIDES static => BUILD_OVERRIDES(null, MAP[string, string]())
+        none() -> BUILD_OVERRIDES static => BUILD_OVERRIDES(null, MAP[string, string](), null)
 
-        /// Whether `option` is one of the overriding options, `--compiler`
-        /// and `--library`, each of which takes a value.
+        /// Whether `option` is one of the overriding options, `--compiler`,
+        /// `--library` and `--version`, each of which takes a value.
         ///
         /// - option: an argument from the command line
-        is_option(option: string) -> bool static => option =~ "--compiler" \/ option =~ "--library"
+        is_option(option: string) -> bool static => option =~ "--compiler" \/ option =~ "--library" \/ option =~ "--version"
 
         /// `overrides` with `option` and its `value` applied, or null with the
         /// reason in `problem` where the value is not one the option takes.
         ///
         /// - overrides: what earlier options set
-        /// - option: `--compiler` or `--library`
+        /// - option: `--compiler`, `--library` or `--version`
         /// - value: the argument after it
         /// - problem: set to why the value is refused, or null
         with(overrides: BUILD_OVERRIDES, option: string, value: string, problem: string? ref) -> BUILD_OVERRIDES? static is
@@ -33,7 +34,16 @@ namespace Ghul.Project is
                     return null
                 fi
 
-                return BUILD_OVERRIDES(value, overrides.libraries)
+                return BUILD_OVERRIDES(value, overrides.libraries, overrides.version)
+            fi
+
+            if option =~ "--version" then
+                if string.is_null_or_white_space(value) then
+                    problem! = "--version needs a version"
+                    return null
+                fi
+
+                return BUILD_OVERRIDES(overrides.compiler_command, overrides.libraries, value.trim())
             fi
 
             let separator = value.index_of('=')
@@ -51,15 +61,16 @@ namespace Ghul.Project is
 
             libraries[value.substring(0, separator)] = Path.get_full_path(value.substring(separator + 1))
 
-            return BUILD_OVERRIDES(overrides.compiler_command, libraries)
+            return BUILD_OVERRIDES(overrides.compiler_command, libraries, overrides.version)
         si
 
         /// `manifest` with each overridden library declared as a dependency
-        /// on the directory given for it.
+        /// on the directory given for it, and the version given in place of
+        /// its own.
         ///
         /// - manifest: the manifest as read
         apply(manifest: MANIFEST) -> MANIFEST is
-            if libraries.count == 0 then
+            if libraries.count == 0 /\ !version? then
                 return manifest
             fi
 
@@ -75,7 +86,7 @@ namespace Ghul.Project is
 
             return MANIFEST(
                 manifest.name,
-                manifest.version,
+                version ?? manifest.version,
                 manifest.kind,
                 manifest.targets,
                 manifest.sources,

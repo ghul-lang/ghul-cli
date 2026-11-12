@@ -84,6 +84,16 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
+        a_version_override__replaces_the_manifests_version() is
+            let problem: string? mut = null
+            let overrides = BUILD_OVERRIDES.with(BUILD_OVERRIDES.none(), "--version", "71.13.0", problem ref)!
+
+            assert overrides.apply(_manifest(MAP[string, DEPENDENCY]())).version =~ "71.13.0"
+            assert !BUILD_OVERRIDES.with(BUILD_OVERRIDES.none(), "--version", " ", problem ref)?
+            assert problem =~ "--version needs a version"
+        si
+
+        @Test()
         no_override_leaves_the_manifest_as_it_is() is
             let manifest = _manifest(MAP[string, DEPENDENCY]())
 

@@ -1838,7 +1838,7 @@ namespace Ghul.Cli is
         fi
 
         if Ghul.Project.TOOL_FLOOR.problem(tools, Ghul.Project.PROJECT_TOOLS.COMPILER, version!)? then
-            say("ghul.compiler {LOG.version(version!)} is outside what the project names in tools; installing the newest")
+            say("ghul.compiler {LOG.version(version!)} is outside what the project's requires names; installing the newest")
 
             let updated = update_compiler_to_latest(store)
 

@@ -85,6 +85,16 @@ namespace Ghul.Cli.Tests is
             assert !TOOL_FLOOR.problem(tools, PROJECT_TOOLS.COMPILER, "66.7.0")?
             assert !TOOL_FLOOR.problem(tools, PROJECT_TOOLS.COMPILER, "70.0.0")?
             assert (TOOL_FLOOR.problem(tools, PROJECT_TOOLS.COMPILER, "66.6.0") ?? "").contains(">=66.7.0")
+            assert (TOOL_FLOOR.problem(tools, PROJECT_TOOLS.COMPILER, "66.6.0") ?? "").contains("project's requires names")
+        si
+
+        @Test()
+        a_ghul_llvm_outside_its_floor__names_the_llvm_sections_requires() is
+            let tools = MAP[string, VERSION_RANGE]()
+
+            tools.add(PROJECT_TOOLS.LLVM, VERSION_RANGE.parse(">=1.9.0")!)
+
+            assert (TOOL_FLOOR.problem(tools, PROJECT_TOOLS.LLVM, "1.8.0") ?? "").contains("project's llvm.requires names")
         si
 
         @Test()

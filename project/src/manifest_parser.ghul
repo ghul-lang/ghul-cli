@@ -404,7 +404,7 @@ namespace Ghul.Project is
             fi
 
             if root.try_get_property("options", value ref) then
-                _report("options", "options are now language (underscore-access, global-namespace, default-use, define) and diagnostics (suppress, warn-as-error, warn, warn-as-hint), with optimise under llvm")
+                _report("options", "options are now language (underscore-access, global-namespace, default-use, define, reflection) and diagnostics (suppress, warn-as-error, warn, warn-as-hint), with optimise under llvm")
             fi
 
             if root.try_get_property("prefer", value ref) then
