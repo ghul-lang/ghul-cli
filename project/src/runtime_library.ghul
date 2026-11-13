@@ -98,13 +98,16 @@ namespace Ghul.Project is
 
             let manifest = cast ReadOutcome.OK(outcome).manifest
 
-            return
-                OK(
-                    SOURCE_LIBRARY(
-                        manifest.name,
-                        manifest.version ?? version,
-                        root,
-                        SOURCE_SET.expand(root, manifest.sources)))
+            let library =
+                SOURCE_LIBRARY(
+                    manifest.name,
+                    manifest.version ?? version,
+                    root,
+                    SOURCE_SET.expand(root, manifest.sources))
+
+            library.native = manifest.native.resolved(root)
+
+            return OK(library)
         si
     si
 si

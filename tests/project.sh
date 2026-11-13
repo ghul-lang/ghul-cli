@@ -332,6 +332,74 @@ if err="$(cd "$scratch/native" && GHUL_LLVM_RELEASES="file://$scratch/no-release
 fi
 [[ "$err" == *"cannot list the ghul-llvm releases: file://$scratch/no-releases does not exist"* ]] || fail "unexpected message for a missing ghul-llvm release: $err"
 
+# A program built for llvm links the native code its manifest names, and the
+# native code a library it depends on names. The object is a few lines of C
+# that call nothing, so the runner's own cc can build one the musl link takes.
+if [[ "$(uname -s)" == Linux ]] && command -v cc >/dev/null; then
+    echo "project: an llvm program links the native object its manifest names..." >&2
+    adder="$scratch/adder"
+    mkdir -p "$adder/src" "$adder/native"
+    cat > "$adder/native/add.c" <<'C'
+int ghul_test_add(int a, int b) { return a + b; }
+C
+    cc -c -O2 -fno-stack-protector "$adder/native/add.c" -o "$adder/native/add.o" >&2 || fail "cc could not build the native object"
+    cat > "$adder/ghul-project.json" <<'JSON'
+{
+    "name": "adder",
+    "targets": ["llvm"],
+    "dependencies": { "ghul-runtime": { "version": ">=0.0.0" } },
+    "llvm": { "link": ["native/add.o"] }
+}
+JSON
+    cat > "$adder/src/main.ghul" <<'GHUL'
+@extern("", "ghul_test_add")
+add(a: int, b: int) -> int
+
+IO.Std.write_line("1 + 2 is {add(1, 2)}")
+GHUL
+    out="$(cd "$adder" && dotnet "$cli" run 2>/dev/null)" || fail "the llvm program naming a native object failed to build or run"
+    check "$out" "1 + 2 is 3" "llvm program with a native object"
+
+    echo "project: an llvm program links the native object a library it depends on names..." >&2
+    native_library="$scratch/native-adder"
+    mkdir -p "$native_library/src" "$native_library/native"
+    cp "$adder/native/add.o" "$native_library/native/add.o"
+    cat > "$native_library/ghul-project.json" <<'JSON'
+{
+    "name": "native-adder",
+    "version": "1.0.0",
+    "kind": "library",
+    "targets": ["llvm"],
+    "llvm": { "link": ["native/add.o"] }
+}
+JSON
+    cat > "$native_library/src/adder.ghul" <<'GHUL'
+namespace NativeAdder is
+    @extern("", "ghul_test_add")
+    add(a: int, b: int) -> int
+si
+GHUL
+    consumer="$scratch/native-consumer"
+    mkdir -p "$consumer/src"
+    cat > "$consumer/ghul-project.json" <<JSON
+{
+    "name": "native-consumer",
+    "targets": ["llvm"],
+    "dependencies": {
+        "ghul-runtime": { "version": ">=0.0.0" },
+        "native-adder": { "path": "$native_library" }
+    }
+}
+JSON
+    cat > "$consumer/src/main.ghul" <<'GHUL'
+IO.Std.write_line("2 + 3 is {NativeAdder.add(2, 3)}")
+GHUL
+    out="$(cd "$consumer" && dotnet "$cli" run 2>/dev/null)" || fail "the llvm program depending on a library with a native object failed to build or run"
+    check "$out" "2 + 3 is 5" "llvm program with a library's native object"
+else
+    echo "project: skipping the native link tests: they need Linux and a cc on the PATH" >&2
+fi
+
 echo "project: the programs under tests/projects build and print what they should..." >&2
 # The runner takes its build from a configuration; this one names the CLI
 # just built, which only this script knows the path of.

@@ -1,0 +1,6 @@
+@extern("", "add_one")
+add_one(x: int) -> int
+
+entry() is
+    IO.Std.write_line("add_one(41) is {add_one(41)}")
+si

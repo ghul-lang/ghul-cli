@@ -1,0 +1,6 @@
+{
+    "name": "wasm-externs",
+    "targets": ["wasm"],
+    "dependencies": { "ghul-runtime": { "version": ">=0.0.0" } },
+    "wasm": { "engine": "node", "externs": "host/externs.mjs" }
+}

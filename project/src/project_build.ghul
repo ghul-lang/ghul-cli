@@ -137,12 +137,31 @@ namespace Ghul.Project is
                 fi
             od
 
+            // The project's own native code goes into the build too: an
+            // object file an llvm build links, or the module a wasm build
+            // copies beside its output.
+            let native = project.manifest.native.resolved(project.directory)
+
+            for path in native.link do
+                if File.exists(path) /\ File.get_last_write_time(path) > built then
+                    return false
+                fi
+            od
+
+            if let module = native.externs then
+                if !File.exists(module) \/ File.get_last_write_time(module) > built then
+                    return false
+                fi
+            fi
+
             return true
         si
 
         /// Compiles `project`, returning the compiler's exit status, or 1
-        /// where the build could not get as far as running it. The
-        /// compiler's messages go to standard error unchanged.
+        /// where the build could not get as far as running it or, for a
+        /// wasm program, could not put its extern modules beside the output
+        /// (see `WASM_EXTERNS`). The compiler's messages go to standard
+        /// error unchanged.
         ///
         /// - project: the project to build
         /// - compiler: how the compiler is started
@@ -206,7 +225,8 @@ namespace Ghul.Project is
 
             Directory.create_directory(Path.get_directory_name(output)!)
 
-            let arguments = LIST[string](COMPILER_ARGUMENTS.for_build(project.manifest, project.target, compiled_in, mode, output, sources))
+            let native = project.manifest.native.resolved(project.directory)
+            let arguments = LIST[string](COMPILER_ARGUMENTS.for_build(project.manifest, project.target, compiled_in, native, mode, output, sources))
 
             arguments.add_range(extra)
 
@@ -219,7 +239,20 @@ namespace Ghul.Project is
 
                 File.write_all_text(response_file, RESPONSE_FILE.text(arguments))
 
-                return _compile(compiler, response_file, project.directory, linker, say, quiet)
+                let status = _compile(compiler, response_file, project.directory, linker, say, quiet)
+
+                if status != 0 \/ project.target != BuildTarget.WASM \/ project.manifest.kind == ManifestKind.LIBRARY then
+                    return status
+                fi
+
+                let written = WASM_EXTERNS.write(output, WASM_EXTERNS.modules(project.manifest, native, compiled_in))
+
+                if let (problem): Result.ERROR = written then
+                    say(problem)
+                    return 1
+                fi
+
+                return status
             finally
                 Directory.delete(scratch, true)
             yrt
