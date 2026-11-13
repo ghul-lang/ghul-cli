@@ -20,7 +20,7 @@ namespace Ghul.Repl.Host is
     // Where the compilers ghul-cli has live: under
     // `$XDG_CACHE_HOME/ghul-cli/compilers` (`~/.cache/ghul-cli/compilers`
     // where that is unset), one directory for each way a compiler is run,
-    // named as `GHUL_COMPILER_HOST` names it, and one directory per version
+    // named as `--compiler-host` names it, and one directory per version
     // in each. `dotnet` holds what a `ghul.compiler` package carries in
     // `tools/net10.0/any` - the compiler's own dll with the runtime and its
     // dependencies beside it, run as `dotnet <dir>/ghul.dll`; `native` what

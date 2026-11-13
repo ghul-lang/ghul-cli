@@ -24,7 +24,7 @@ namespace Ghul.Project is
         CONFIG_KEY: string static => "compiler-host"
 
         /// The environment variable that once named the host, which is now
-        /// refused.
+        /// ignored with a warning.
         RETIRED_VARIABLE: string static => "GHUL_COMPILER_HOST"
 
         /// The host `value` names, null where it names none or says `auto`,
@@ -60,14 +60,19 @@ namespace Ghul.Project is
             return (host = null, problem = "{what} is '{value}', which is none of wasm, dotnet, native and llvm")
         si
 
-        /// The host the user's configuration names, null where it names
-        /// none, or the problem: with the configuration file, or that the
-        /// retired `GHUL_COMPILER_HOST` is set.
-        configured() -> (host: CompilerHost?, problem: string?) static is
+        /// The warning to give where the retired `GHUL_COMPILER_HOST` is set,
+        /// or null where it is not. The variable chooses nothing.
+        retired_variable_warning() -> string? static is
             if let value = System.Environment.get_environment_variable(RETIRED_VARIABLE) /\ value.length > 0 then
-                return (host = null, problem = "{RETIRED_VARIABLE} is no longer read: pass --compiler-host <host>, or set \"defaults\": {{ \"{CONFIG_KEY}\": \"<host>\" }} in {GLOBAL_DEFAULTS.path()}")
+                return "warning: {RETIRED_VARIABLE} is no longer read, so it is ignored: pass --compiler-host <host>, or set \"defaults\": {{ \"{CONFIG_KEY}\": \"<host>\" }} in {GLOBAL_DEFAULTS.path()}"
             fi
 
+            return null
+        si
+
+        /// The host the user's configuration names, null where it names
+        /// none, or the problem with the configuration file.
+        configured() -> (host: CompilerHost?, problem: string?) static is
             let problem: string? mut = null
             let defaults = GLOBAL_DEFAULTS.read(GLOBAL_DEFAULTS.path(), problem ref)
 
