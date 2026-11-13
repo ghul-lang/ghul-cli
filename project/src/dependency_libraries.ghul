@@ -141,12 +141,18 @@ namespace Ghul.Project is
 
             _roots[name] = root
 
-            ordered.add(
+            let library =
                 SOURCE_LIBRARY(
                     manifest.name,
                     manifest.version ?? place.version,
                     root,
-                    SOURCE_SET.expand(root, manifest.sources)))
+                    SOURCE_SET.expand(root, manifest.sources))
+
+            // A library's native code is carried into the program, its
+            // paths read relative to the library rather than the program.
+            library.native = manifest.native.resolved(root)
+
+            ordered.add(library)
 
             return OK(unit())
         si

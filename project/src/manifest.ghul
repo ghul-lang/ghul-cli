@@ -23,9 +23,49 @@ namespace Ghul.Project is
         /// relative to its directory; empty for every other kind.
         members: Collections.LIST[string] public
 
+        /// The native code the manifest's `llvm` and `wasm` sections bring
+        /// to a build, with paths as written: relative to the manifest's
+        /// directory.
+        native: NATIVE_INPUTS public
+
         init(..) is
             members = Collections.LIST[string]()
+            native = NATIVE_INPUTS.none
         si
+    si
+
+    /// The native code a project brings to a build: object files and
+    /// static archives an llvm build links in, the libraries it links by
+    /// name and the directories it searches for them, and the JavaScript
+    /// module supplying a wasm program's `@extern` functions.
+    ///
+    /// - link: object files and static archives, each passed as `--native-input`
+    /// - libraries: names linked as `lib<name>.a`, each passed as `--native-library`
+    /// - library_paths: directories searched for those, each passed as `--native-library-path`
+    /// - externs: the module whose exports supply the program's externs on wasm, or null
+    class NATIVE_INPUTS(
+        link: Collections.List[string],
+        libraries: Collections.List[string],
+        library_paths: Collections.List[string],
+        externs: string?
+    ) is
+        /// No native code at all.
+        none: NATIVE_INPUTS static =>
+            NATIVE_INPUTS(Collections.LIST[string](), Collections.LIST[string](), Collections.LIST[string](), null)
+
+        /// The same inputs with every path made absolute against `root`;
+        /// library names are not paths and are left as they are.
+        ///
+        /// - root: the directory the paths are relative to
+        resolved(root: string) -> NATIVE_INPUTS =>
+            NATIVE_INPUTS(
+                Collections.LIST[string](link |> Ghul.Pipes.map(path => _absolute(root, path))),
+                Collections.LIST[string](libraries),
+                Collections.LIST[string](library_paths |> Ghul.Pipes.map(path => _absolute(root, path))),
+                if let module = externs then _absolute(root, module) else null fi)
+
+        _absolute(root: string, path: string) -> string static =>
+            IO.Path.get_full_path(IO.Path.combine(root, path))
     si
 
     // Whether the project is something to run or something to depend on, or

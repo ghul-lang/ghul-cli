@@ -1,0 +1,203 @@
+namespace Ghul.Project is
+    use Collections.LIST
+    use Collections.MAP
+    use Collections.SET
+    use IO.File
+    use IO.Path
+    use System.Text.RegularExpressions.Regex
+
+    use Result.*
+
+    /// A JavaScript module supplying `@extern` functions to a wasm program,
+    /// and the project or library whose manifest names it.
+    ///
+    /// - owner: the name of the project or library that declares the module
+    /// - path: the module, as an absolute path
+    class EXTERNS_MODULE(owner: string, path: string) is si
+
+    /// The modules supplying a wasm program's `@extern` functions, put
+    /// where the program's loader finds them: each copied beside the
+    /// output, and `<program>.externs.mjs` written beside it re-exporting
+    /// every copy, which the loader imports when it exists.
+    class WASM_EXTERNS is
+        /// The modules a build of `manifest` draws its externs from: its
+        /// own, then each library's, in the order the libraries are compiled
+        /// in.
+        ///
+        /// - manifest: the program being built
+        /// - native: the program's own native code, with absolute paths
+        /// - libraries: the source libraries compiled into the build
+        modules(
+            manifest: MANIFEST,
+            native: NATIVE_INPUTS,
+            libraries: Collections.List[SOURCE_LIBRARY]
+        ) -> Collections.List[EXTERNS_MODULE] static is
+            let result = LIST[EXTERNS_MODULE]()
+
+            if let own = native.externs then
+                result.add(EXTERNS_MODULE(manifest.name, own))
+            fi
+
+            for library in libraries do
+                if let module = library.native.externs then
+                    result.add(EXTERNS_MODULE(library.name, module))
+                fi
+            od
+
+            return result
+        si
+
+        /// The file `<program>.externs.mjs` beside `output`.
+        ///
+        /// - output: the `.wasm` file the build writes
+        index_path(output: string) -> string static =>
+            Path.change_extension(output, ".externs.mjs") ?? "{output}.externs.mjs"
+
+        /// The name each module is copied to beside `output`: its own file
+        /// name, or, where that is taken by an earlier module or by one of
+        /// the program's own files, the name with `-2`, `-3` and so on
+        /// before its extension. A module named twice is copied once.
+        ///
+        /// - output: the `.wasm` file the build writes
+        /// - modules: the modules, in the order they are declared
+        copy_names(output: string, modules: Collections.List[EXTERNS_MODULE]) -> Collections.List[(module: EXTERNS_MODULE, name: string)] static is
+            let result = LIST[(module: EXTERNS_MODULE, name: string)]()
+            let taken = SET[string]()
+            let copied = SET[string]()
+
+            taken.add(Path.get_file_name(output) ?? "")
+            taken.add(Path.get_file_name(Path.change_extension(output, ".mjs") ?? output) ?? "")
+            taken.add(Path.get_file_name(index_path(output)) ?? "")
+
+            for module in modules do
+                if copied.add(module.path) then
+                    let file_name = Path.get_file_name(module.path) ?? ""
+                    let stem = Path.get_file_name_without_extension(module.path) ?? ""
+                    let extension = Path.get_extension(module.path) ?? ""
+
+                    let name mut = file_name
+                    let suffix mut = 2
+
+                    while taken.contains(name) do
+                        name = "{stem}-{suffix}{extension}"
+                        suffix = suffix + 1
+                    od
+
+                    taken.add(name)
+                    result.add((module = module, name = name))
+                fi
+            od
+
+            return result
+        si
+
+        /// The text of `<program>.externs.mjs`: one `export *` per copied
+        /// module.
+        ///
+        /// - names: the copied modules' file names
+        index_text(names: string{}) -> string static =>
+            names |> Ghul.Pipes.map(name => "export * from \"./{name}\";\n") |> Ghul.Pipes.join("")
+
+        /// The names a module's text exports, as far as a scan of it can
+        /// tell: functions, classes and variables declared with `export`, and
+        /// the names in an `export {{ ... }}` list. A module that re-exports
+        /// another with `export *` exports names this does not see.
+        ///
+        /// - text: the module's source
+        exported_names(text: string) -> Collections.List[string] static is
+            let result = LIST[string]()
+            let code = Regex.replace(Regex.replace(text, "/\\*[\\s\\S]*?\\*/", ""), "//[^\\n]*", "")
+
+            let declared = Regex.matches(code, "\\bexport\\s+(?:async\\s+)?(?:function\\s*\\*?|class|const|let|var)\\s*([A-Za-z_$][A-Za-z0-9_$]*)")
+
+            for found in declared do
+                result.add(found.groups[1].value)
+            od
+
+            let listed = Regex.matches(code, "\\bexport\\s*\\{{([^}}]*)\\}}")
+
+            for found in listed do
+                for entry in found.groups[1].value.split([',']) do
+                    let parts = Regex.split(entry.trim(), "\\s+as\\s+")
+                    let name = parts[parts.count - 1].trim()
+
+                    if name.length > 0 then
+                        result.add(name)
+                    fi
+                od
+            od
+
+            return result
+        si
+
+        /// The first name two modules both export, as a problem naming the
+        /// name and both modules, or null where no name is exported twice.
+        ///
+        /// - exports: each module with the names it exports
+        clash(exports: Collections.List[(module: EXTERNS_MODULE, names: Collections.List[string])]) -> string? static is
+            let first = MAP[string, EXTERNS_MODULE]()
+
+            for entry in exports do
+                for name in entry.names do
+                    let earlier: EXTERNS_MODULE mut
+
+                    if first.try_get_value(name, earlier ref) then
+                        if earlier.path !~ entry.module.path then
+                            return "the extern function {name} is exported both by {_describe(earlier)} and by {_describe(entry.module)}"
+                        fi
+                    else
+                        first[name] = entry.module
+                    fi
+                od
+            od
+
+            return null
+        si
+
+        _describe(module: EXTERNS_MODULE) -> string static => "{module.path} (wasm.externs of {module.owner})"
+
+        /// Puts the modules beside `output` for the loader to find, or, where
+        /// there are none, removes a `<program>.externs.mjs` an earlier
+        /// build wrote. Returns the problem where a module is missing or two
+        /// export the same name, having written nothing.
+        ///
+        /// - output: the `.wasm` file the build wrote
+        /// - modules: the modules, in the order they are declared
+        write(output: string, modules: Collections.List[EXTERNS_MODULE]) -> Result[unit, string] static is
+            let index = index_path(output)
+
+            if modules.count == 0 then
+                if File.exists(index) then
+                    File.delete(index)
+                fi
+
+                return OK(unit())
+            fi
+
+            let exports = LIST[(module: EXTERNS_MODULE, names: Collections.List[string])]()
+
+            for module in modules do
+                if !File.exists(module.path) then
+                    return ERROR("the wasm.externs module of {module.owner}, {module.path}, does not exist")
+                fi
+
+                exports.add((module = module, names = exported_names(File.read_all_text(module.path))))
+            od
+
+            if let problem = clash(exports) then
+                return ERROR(problem)
+            fi
+
+            let directory = Path.get_directory_name(output)!
+            let names = copy_names(output, modules)
+
+            for entry in names do
+                File.copy(entry.module.path, Path.join([directory, entry.name]), true)
+            od
+
+            File.write_all_text(index, index_text(names |> Ghul.Pipes.map(entry => entry.name)))
+
+            return OK(unit())
+        si
+    si
+si

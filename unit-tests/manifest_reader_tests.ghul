@@ -256,6 +256,62 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
+        the_llvm_and_wasm_sections_name_native_code() is
+            let manifest = _read("{{ \"name\": \"app\", \"targets\": [\"wasm\", \"llvm\"], \"llvm\": {{ \"link\": [\"native/libsqlite3.a\", \"native/ghul_sqlite.o\"], \"libraries\": [\"m\"], \"library-paths\": [\"native/lib\"] }}, \"wasm\": {{ \"externs\": \"host/sqlite-externs.mjs\" }} }}")!
+            let native = manifest.native
+
+            assert native.link.count == 2
+            assert native.link[0] =~ "native/libsqlite3.a"
+            assert native.link[1] =~ "native/ghul_sqlite.o"
+            assert native.libraries.count == 1 /\ native.libraries[0] =~ "m"
+            assert native.library_paths.count == 1 /\ native.library_paths[0] =~ "native/lib"
+            assert native.externs =~ "host/sqlite-externs.mjs"
+        si
+
+        @Test()
+        a_manifest_without_native_code_names_none() is
+            let native = (_read(DEFAULT)!).native
+
+            assert native.link.count == 0 /\ native.libraries.count == 0 /\ native.library_paths.count == 0
+            assert !native.externs?
+        si
+
+        @Test()
+        native_code_of_the_wrong_shape_is_a_problem_naming_the_key() is
+            for (section, value, key) in [
+                ("llvm", "{{ \"link\": \"a.o\" }}", "llvm.link"),
+                ("llvm", "{{ \"libraries\": [1] }}", "llvm.libraries"),
+                ("llvm", "{{ \"library-paths\": {{}} }}", "llvm.library-paths"),
+                ("wasm", "{{ \"externs\": [\"a.mjs\"] }}", "wasm.externs")
+            ] do
+                let problems = _problems("{{ \"name\": \"app\", \"{section}\": {value} }}")
+
+                assert problems.count == 1 else "{key}: {problems |> join("; ")}"
+                assert problems[0].contains(key) else "{key}: {problems[0]}"
+            od
+        si
+
+        @Test()
+        a_misspelt_native_key_is_unknown() is
+            let llvm = _problems("{{ \"name\": \"app\", \"llvm\": {{ \"links\": [\"a.o\"] }} }}")
+            let wasm = _problems("{{ \"name\": \"app\", \"wasm\": {{ \"extern\": \"a.mjs\" }} }}")
+
+            assert llvm.count == 1 /\ llvm[0].contains("llvm.links") /\ llvm[0].contains("unknown key") else llvm |> join("; ")
+            assert wasm.count == 1 /\ wasm[0].contains("wasm.extern") /\ wasm[0].contains("unknown key") else wasm |> join("; ")
+        si
+
+        @Test()
+        native_paths_resolve_against_a_root_and_library_names_do_not() is
+            let root = IO.Path.get_full_path(IO.Path.combine(IO.Path.get_temp_path(), "project"))
+            let native = (_read("{{ \"name\": \"app\", \"llvm\": {{ \"link\": [\"a.o\"], \"libraries\": [\"m\"], \"library-paths\": [\"lib\"] }}, \"wasm\": {{ \"externs\": \"host/x.mjs\" }} }}")!).native.resolved(root)
+
+            assert native.link[0] =~ IO.Path.combine(root, "a.o") else native.link[0]
+            assert native.libraries[0] =~ "m"
+            assert native.library_paths[0] =~ IO.Path.combine(root, "lib") else native.library_paths[0]
+            assert native.externs =~ IO.Path.get_full_path(IO.Path.combine(root, "host/x.mjs")) else native.externs ?? ""
+        si
+
+        @Test()
         an_optimisation_level_outside_0_to_3__is_a_problem() is
             let problems = _problems(BAD_OPTIMISE)
 

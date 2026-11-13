@@ -1,0 +1,133 @@
+namespace Ghul.Cli.Tests is
+    use Collections.LIST
+    use IO.Directory
+    use IO.File
+    use IO.Path
+
+    use Ghul.Project.EXTERNS_MODULE
+    use Ghul.Project.WASM_EXTERNS
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // Putting the modules that supply a wasm program's externs beside it.
+    @TestClass()
+    class WASM_EXTERNS_TESTS is
+        init() is si
+
+        _scratch() -> string =>
+            Path.combine(Path.get_temp_path(), "ghul-we-{System.Guid.new_guid().to_string("N").substring(0, 8)}")
+
+        _names(text: string) -> string => string.join(" ", WASM_EXTERNS.exported_names(text))
+
+        @Test()
+        exported_names_are_found_in_declarations_and_export_lists() is
+            let text =
+                "// export function commented(x) {{}}\n"
+                "/* export const hidden = 1; */\n"
+                "export function add_one(x) {{ return x + 1; }}\n"
+                "export async function fetch_it() {{}}\n"
+                "export const limit = 3;\n"
+                "function a() {{}}\nfunction b() {{}}\n"
+                "export {{ a, b as renamed }};\n"
+
+            let names = _names(text)
+
+            assert names =~ "add_one fetch_it limit a renamed" else names
+        si
+
+        @Test()
+        a_name_two_modules_export_is_a_problem_naming_both() is
+            let first = EXTERNS_MODULE("app", "/app/host/a.mjs")
+            let second = EXTERNS_MODULE("lib", "/lib/host/b.mjs")
+
+            let exports = LIST[(module: EXTERNS_MODULE, names: Collections.List[string])]()
+
+            exports.add((module = first, names = LIST[string](["add_one", "other"])))
+            exports.add((module = second, names = LIST[string](["add_one"])))
+
+            let problem = WASM_EXTERNS.clash(exports)
+
+            assert problem? else "no clash found"
+            assert problem.contains("add_one") /\ problem.contains("/app/host/a.mjs") /\ problem.contains("/lib/host/b.mjs") else problem
+
+            exports.remove_at(1)
+
+            assert !WASM_EXTERNS.clash(exports)?
+        si
+
+        @Test()
+        copies_with_the_same_file_name_are_renamed_in_order() is
+            let modules = LIST[EXTERNS_MODULE]([
+                EXTERNS_MODULE("app", "/app/host/externs.mjs"),
+                EXTERNS_MODULE("lib", "/lib/host/externs.mjs"),
+                EXTERNS_MODULE("other", "/other/app.mjs"),
+                EXTERNS_MODULE("again", "/app/host/externs.mjs")
+            ])
+
+            let names = WASM_EXTERNS.copy_names("/app/out/wasm/app.wasm", modules) |> Ghul.Pipes.map(entry => entry.name) |> Ghul.Pipes.join(" ")
+
+            assert names =~ "externs.mjs externs-2.mjs app-2.mjs" else names
+        si
+
+        @Test()
+        write_copies_each_module_and_re_exports_them_beside_the_output() is
+            let scratch = _scratch()
+
+            try
+                let output_directory = Path.combine(scratch, "out", "wasm")
+                let output = Path.combine(output_directory, "app.wasm")
+
+                Directory.create_directory(output_directory)
+                Directory.create_directory(Path.combine(scratch, "a"))
+                Directory.create_directory(Path.combine(scratch, "b"))
+
+                File.write_all_text(Path.combine(scratch, "a", "externs.mjs"), "export function one() {{ return 1; }}\n")
+                File.write_all_text(Path.combine(scratch, "b", "externs.mjs"), "export function two() {{ return 2; }}\n")
+
+                let modules = LIST[EXTERNS_MODULE]([
+                    EXTERNS_MODULE("app", Path.combine(scratch, "a", "externs.mjs")),
+                    EXTERNS_MODULE("lib", Path.combine(scratch, "b", "externs.mjs"))
+                ])
+
+                let written = WASM_EXTERNS.write(output, modules)
+
+                assert written? else (cast Result.ERROR(written)).error
+
+                let index = File.read_all_text(Path.combine(output_directory, "app.externs.mjs"))
+
+                assert index =~ "export * from \"./externs.mjs\";\nexport * from \"./externs-2.mjs\";\n" else index
+                assert File.read_all_text(Path.combine(output_directory, "externs-2.mjs")).contains("two")
+
+                // With none declared, an index an earlier build wrote goes.
+                let none = WASM_EXTERNS.write(output, LIST[EXTERNS_MODULE]())
+
+                assert none?
+                assert !File.exists(Path.combine(output_directory, "app.externs.mjs"))
+            finally
+                if Directory.exists(scratch) then
+                    Directory.delete(scratch, true)
+                fi
+            yrt
+        si
+
+        @Test()
+        write_refuses_a_module_that_does_not_exist() is
+            let scratch = _scratch()
+
+            try
+                Directory.create_directory(scratch)
+
+                let written = WASM_EXTERNS.write(Path.combine(scratch, "app.wasm"), LIST[EXTERNS_MODULE]([EXTERNS_MODULE("app", Path.combine(scratch, "missing.mjs"))]))
+
+                assert !written?
+                assert (cast Result.ERROR(written)).error.contains("missing.mjs")
+                assert !File.exists(Path.combine(scratch, "app.externs.mjs"))
+            finally
+                if Directory.exists(scratch) then
+                    Directory.delete(scratch, true)
+                fi
+            yrt
+        si
+    si
+si

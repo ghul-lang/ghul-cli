@@ -286,6 +286,21 @@ Only `name` is required. The keys are:
   the collector that marks with several threads, for a program that keeps a
   large heap; it costs a small program memory and speed, so it is not the
   default.
+- `llvm.link`, `llvm.libraries` and `llvm.library-paths`: native code an llvm
+  program links with. `link` lists object files and static archives, each
+  passed to the compiler as `--native-input`; `libraries` lists names linked as
+  `lib<name>.a`, each passed as `--native-library`; `library-paths` lists
+  directories searched for them, each passed as `--native-library-path`.
+- `wasm.externs`: a JavaScript module whose exported functions supply the
+  program's `@extern` functions on wasm. A build copies it beside the output
+  and writes `<program>.externs.mjs` there re-exporting it, which the loader
+  imports when it runs. A function exported by two modules is an error naming
+  both.
+
+Paths in `llvm` and `wasm` are relative to the manifest's directory. A
+dependency's own `llvm.link`, `llvm.libraries`, `llvm.library-paths` and
+`wasm.externs` are carried into every program that compiles it in, with its
+paths relative to the dependency's own root.
 
 A key the manifest does not know is an error, never ignored. The keys of the
 first version of the manifest, `tools`, `options`, `prefer`, `engine`, `host`

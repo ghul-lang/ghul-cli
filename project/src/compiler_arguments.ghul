@@ -8,7 +8,15 @@ namespace Ghul.Project is
         version: string,
         root: string,
         files: Collections.List[string]
-    ) is si
+    ) is
+        /// The native code the library's manifest brings to a program that
+        /// compiles it in, with paths resolved against `root`.
+        native: NATIVE_INPUTS public
+
+        init(..) is
+            native = NATIVE_INPUTS.none
+        si
+    si
 
     /// The compiler's command line for building a project. This is the
     /// only place it is put together, so a build and an editor reading
@@ -16,12 +24,13 @@ namespace Ghul.Project is
     class COMPILER_ARGUMENTS is
         /// The arguments that build `manifest` for `target` into `output`:
         /// the options, `--debug` for a debug build and `--optimise` for an
-        /// llvm build at a chosen level, then `-o` and the output, then
-        /// `sources`.
+        /// llvm build at a chosen level, the native code an llvm program
+        /// links with, then `-o` and the output, then `sources`.
         ///
         /// - manifest: the project being built
         /// - target: what the build produces
         /// - libraries: source libraries compiled into the build
+        /// - native: the project's own native code, with absolute paths
         /// - mode: how the build is made
         /// - output: the file the compiler writes
         /// - sources: the project's own source files
@@ -29,6 +38,7 @@ namespace Ghul.Project is
             manifest: MANIFEST,
             target: BuildTarget,
             libraries: Collections.List[SOURCE_LIBRARY],
+            native: NATIVE_INPUTS,
             mode: BUILD_MODE,
             output: string,
             sources: Collections.List[string]
@@ -43,6 +53,8 @@ namespace Ghul.Project is
                 result.add("--optimise")
                 result.add("{level}")
             fi
+
+            result.add_range(native_options(manifest, target, libraries, native))
 
             result.add("-o")
             result.add(output)
@@ -172,6 +184,62 @@ namespace Ghul.Project is
             od
 
             return result
+        si
+
+        /// What an llvm program links with: `--native-input` for each object
+        /// file and archive, `--native-library` for each library named and
+        /// `--native-library-path` for each directory searched, the
+        /// project's own first and then each library's, a library after
+        /// the libraries that use it so that a static archive follows what
+        /// refers to it. Each is passed once. Nothing for any other target,
+        /// or for a library, which is not linked.
+        ///
+        /// - manifest: the project being built
+        /// - target: what the build produces
+        /// - libraries: source libraries compiled into the build, each after
+        ///   the libraries it uses
+        /// - native: the project's own native code, with absolute paths
+        native_options(
+            manifest: MANIFEST,
+            target: BuildTarget,
+            libraries: Collections.List[SOURCE_LIBRARY],
+            native: NATIVE_INPUTS
+        ) -> Collections.List[string] static is
+            let result = LIST[string]()
+
+            if target != BuildTarget.LLVM \/ manifest.kind == ManifestKind.LIBRARY then
+                return result
+            fi
+
+            let all = LIST[NATIVE_INPUTS]()
+
+            all.add(native)
+
+            let i mut = libraries.count - 1
+
+            while i >= 0 do
+                all.add(libraries[i].native)
+                i = i - 1
+            od
+
+            _add_once(result, "--native-input", all |> Ghul.Pipes.flat_map(inputs => inputs.link))
+            _add_once(result, "--native-library", all |> Ghul.Pipes.flat_map(inputs => inputs.libraries))
+            _add_once(result, "--native-library-path", all |> Ghul.Pipes.flat_map(inputs => inputs.library_paths))
+
+            return result
+        si
+
+        // `flag` followed by each of `values`, leaving out a value already
+        // given.
+        _add_once(result: LIST[string], flag: string, values: string{}) static is
+            let seen = Collections.SET[string]()
+
+            for value in values do
+                if seen.add(value) then
+                    result.add(flag)
+                    result.add(value)
+                fi
+            od
         si
 
         /// A target as the compiler and a manifest spell it.

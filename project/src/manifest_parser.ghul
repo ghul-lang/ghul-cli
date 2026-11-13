@@ -46,6 +46,7 @@ namespace Ghul.Project is
             let host_wasm = _engine(wasm)
             let optimise = _optimise(llvm)
             let parallel_gc = _collector(llvm)
+            let native = _native(llvm, wasm)
             if let section = llvm then
                 _requires(section, "llvm.requires", PROJECT_TOOLS.LLVM, tools)
             fi
@@ -62,6 +63,7 @@ namespace Ghul.Project is
             let manifest = MANIFEST(name, version, kind, targets, sources, options, dependencies, host_wasm, tools)
 
             manifest.ignores_dotnet = _ignored_dotnet
+            manifest.native = native
 
             return manifest
         si
@@ -640,9 +642,43 @@ namespace Ghul.Project is
         _target_section(root: JsonElement, key: string, known: ARRAY[string]) -> JsonElement? =>
             _section(root, key, known)
 
-        _wasm_keys() -> ARRAY[string] static => ["engine"]
+        _wasm_keys() -> ARRAY[string] static => ["engine", "externs"]
 
-        _llvm_keys() -> ARRAY[string] static => ["collector", "optimise", "requires"]
+        _llvm_keys() -> ARRAY[string] static => ["collector", "library-paths", "libraries", "link", "optimise", "requires"]
+
+        // The native code the llvm and wasm sections bring: the object files,
+        // archives, libraries and library directories an llvm build links
+        // with, and the module supplying a wasm program's externs.
+        _native(llvm: JsonElement?, wasm: JsonElement?) -> NATIVE_INPUTS =>
+            NATIVE_INPUTS(
+                _section_list(llvm, "llvm", "link"),
+                _section_list(llvm, "llvm", "libraries"),
+                _section_list(llvm, "llvm", "library-paths"),
+                _section_string(wasm, "wasm", "externs"))
+
+        // A list of strings under `key` in a target's section, or an empty
+        // list where the section or the key is absent.
+        _section_list(section: JsonElement?, section_name: string, key: string) -> Collections.List[string] is
+            let value: JsonElement mut
+
+            if !section? \/ !section.try_get_property(key, value ref) then
+                return LIST[string]()
+            fi
+
+            return _string_list_option("{section_name}.{key}", value)
+        si
+
+        // A string under `key` in a target's section, or null where the
+        // section or the key is absent.
+        _section_string(section: JsonElement?, section_name: string, key: string) -> string? is
+            let value: JsonElement mut
+
+            if !section? \/ !section.try_get_property(key, value ref) then
+                return null
+            fi
+
+            return _string_option("{section_name}.{key}", value)
+        si
 
         // Which types a wasm or llvm build describes for reflection: null for
         // none, `roots` for the types marked `@reflected()` and those they

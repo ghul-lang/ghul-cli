@@ -10,6 +10,7 @@ namespace Ghul.Cli.Tests is
     use Ghul.Project.MANIFEST
     use Ghul.Project.VERSION_RANGE
     use Ghul.Project.MANIFEST_OPTIONS
+    use Ghul.Project.NATIVE_INPUTS
     use Ghul.Project.ManifestKind
     use Ghul.Project.SOURCE_LIBRARY
 
@@ -72,7 +73,7 @@ namespace Ghul.Cli.Tests is
                     COMPILER_ARGUMENTS.for_build(
                         _manifest(ManifestKind.PROGRAM, _plain_options()),
                         BuildTarget.WASM,
-                        _no_libraries(),
+                        _no_libraries(), NATIVE_INPUTS.none,
                         BUILD_MODE.release,
                         "out/app",
                         LIST[string](["a.ghul", "b.ghul"]))))
@@ -150,7 +151,7 @@ namespace Ghul.Cli.Tests is
                     COMPILER_ARGUMENTS.for_build(
                         _manifest(ManifestKind.PROGRAM, _plain_options()),
                         BuildTarget.WASM,
-                        LIST[SOURCE_LIBRARY]([library]),
+                        LIST[SOURCE_LIBRARY]([library]), NATIVE_INPUTS.none,
                         BUILD_MODE.release,
                         "out/app",
                         LIST[string](["main.ghul"]))))
@@ -166,7 +167,7 @@ namespace Ghul.Cli.Tests is
                     COMPILER_ARGUMENTS.for_build(
                         _manifest(ManifestKind.PROGRAM, _plain_options()),
                         BuildTarget.WASM,
-                        LIST[SOURCE_LIBRARY]([other]),
+                        LIST[SOURCE_LIBRARY]([other]), NATIVE_INPUTS.none,
                         BUILD_MODE.release,
                         "out/app",
                         LIST[string](["main.ghul"]))))
@@ -217,7 +218,7 @@ namespace Ghul.Cli.Tests is
         options_are_the_build_arguments_less_the_output_and_sources() is
             let manifest = _manifest(ManifestKind.LIBRARY, _options("private", true, [], ["X"], [], []))
             let options = COMPILER_ARGUMENTS.options(manifest, BuildTarget.WASM, _no_libraries())
-            let build = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.WASM, _no_libraries(), BUILD_MODE.release, "out/x", LIST[string](["s.ghul"]))
+            let build = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.WASM, _no_libraries(), NATIVE_INPUTS.none, BUILD_MODE.release, "out/x", LIST[string](["s.ghul"]))
 
             _same("{_joined(options)} -o out/x s.ghul", _joined(build))
         si
@@ -225,8 +226,8 @@ namespace Ghul.Cli.Tests is
         @Test()
         an_llvm_build_at_a_level_passes_optimise() is
             let manifest = _manifest(ManifestKind.PROGRAM, _plain_options())
-            let llvm = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.LLVM, _no_libraries(), BUILD_MODE(true, 3), "out/app", LIST[string](["main.ghul"]))
-            let wasm = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.WASM, _no_libraries(), BUILD_MODE(false, 3), "out/app", LIST[string](["main.ghul"]))
+            let llvm = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.LLVM, _no_libraries(), NATIVE_INPUTS.none, BUILD_MODE(true, 3), "out/app", LIST[string](["main.ghul"]))
+            let wasm = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.WASM, _no_libraries(), NATIVE_INPUTS.none, BUILD_MODE(false, 3), "out/app", LIST[string](["main.ghul"]))
 
             _same("--target llvm --debug --optimise 3 -o out/app main.ghul", _joined(llvm))
             _same("--target wasm -o out/app main.ghul", _joined(wasm))
@@ -235,7 +236,7 @@ namespace Ghul.Cli.Tests is
         @Test()
         a_debug_build_passes_debug_after_the_options() is
             let manifest = _manifest(ManifestKind.PROGRAM, _plain_options())
-            let build = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.LLVM, _no_libraries(), BUILD_MODE(true, null), "out/app", LIST[string](["main.ghul"]))
+            let build = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.LLVM, _no_libraries(), NATIVE_INPUTS.none, BUILD_MODE(true, null), "out/app", LIST[string](["main.ghul"]))
 
             _same("--target llvm --debug -o out/app main.ghul", _joined(build))
         si
@@ -275,6 +276,38 @@ namespace Ghul.Cli.Tests is
 
             assert _joined(COMPILER_ARGUMENTS.options(versioned, BuildTarget.LLVM, _no_libraries())).contains("--version 1.4.0")
             assert !_joined(COMPILER_ARGUMENTS.options(_manifest(ManifestKind.PROGRAM, _plain_options()), BuildTarget.LLVM, _no_libraries())).contains("--version")
+        si
+
+        _native(link: ARRAY[string], libraries: ARRAY[string], paths: ARRAY[string]) -> NATIVE_INPUTS =>
+            NATIVE_INPUTS(LIST[string](link), LIST[string](libraries), LIST[string](paths), null)
+
+        @Test()
+        an_llvm_program_links_its_own_native_code_then_each_librarys() is
+            let manifest = _manifest(ManifestKind.PROGRAM, _plain_options())
+            let own = _native(["/app/native/a.o"], ["m"], ["/app/native/lib"])
+
+            let used = SOURCE_LIBRARY("base", "1.0.0", "/base", LIST[string]())
+            used.native = _native(["/base/libbase.a", "/app/native/a.o"], ["m", "z"], [])
+
+            let user = SOURCE_LIBRARY("user", "1.0.0", "/user", LIST[string]())
+            user.native = _native(["/user/libuser.a"], [], ["/user/lib"])
+
+            let build = COMPILER_ARGUMENTS.for_build(manifest, BuildTarget.LLVM, LIST[SOURCE_LIBRARY]([used, user]), own, BUILD_MODE.release, "out/app", LIST[string](["main.ghul"]))
+
+            _same(
+                "--target llvm --library-source base@1.0.0=/base --library-source user@1.0.0=/user --native-input /app/native/a.o --native-input /user/libuser.a --native-input /base/libbase.a --native-library m --native-library z --native-library-path /app/native/lib --native-library-path /user/lib -o out/app main.ghul",
+                _joined(build))
+        si
+
+        @Test()
+        native_code_is_passed_to_neither_a_wasm_build_nor_a_library() is
+            let own = _native(["/app/a.o"], ["m"], ["/app/lib"])
+
+            let wasm = COMPILER_ARGUMENTS.for_build(_manifest(ManifestKind.PROGRAM, _plain_options()), BuildTarget.WASM, _no_libraries(), own, BUILD_MODE.release, "out/app", LIST[string](["main.ghul"]))
+            let library = COMPILER_ARGUMENTS.for_build(_manifest(ManifestKind.LIBRARY, _plain_options()), BuildTarget.LLVM, _no_libraries(), own, BUILD_MODE.release, "out/app.ll", LIST[string](["main.ghul"]))
+
+            assert !_joined(wasm).contains("--native") else _joined(wasm)
+            assert !_joined(library).contains("--native") else _joined(library)
         si
     si
 si
