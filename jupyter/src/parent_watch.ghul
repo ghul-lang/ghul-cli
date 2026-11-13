@@ -121,7 +121,7 @@ namespace Ghul.Jupyter is
                 fi
 
                 let fields = text[(after_name + 1)..text.length].split([' '])
-                let parents = fields |> Ghul.Pipes.filter(f => f.trim().length > 0) |> Ghul.Pipes.collect_mutable()
+                let parents = fields |> Ghul.Pipes.filter(f => f.trim().length > 0) |> Collections.LIST()
 
                 if parents.count < 2 then
                     return false

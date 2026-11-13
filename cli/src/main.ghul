@@ -1113,7 +1113,7 @@ namespace Ghul.Cli is
         fi
 
         let digest = Crypto.sha256(
-            [script, System.Text.Encoding.utf8.get_bytes(key.to_string())] |> Ghul.Pipes.flat_map(b => b) |> Ghul.Pipes.collect())
+            [script, System.Text.Encoding.utf8.get_bytes(key.to_string())] |> Ghul.Pipes.flat_map(b => b) |> ARRAY())
 
         let run_dir = Path.join([cache_root(), System.Convert.to_hex_string(digest).to_lower()])
         let project = Ghul.Project.LOADED_PROJECT(manifest, run_dir, target)

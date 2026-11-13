@@ -182,7 +182,7 @@ namespace Ghul.Cli.Tests is
             analysis.diagnostics("x");
             analysis.diagnostics("x");
 
-            let added = fake.sent |> Ghul.Pipes.filter(line => line.contains("add_references")) |> Ghul.Pipes.collect_mutable()
+            let added = fake.sent |> Ghul.Pipes.filter(line => line.contains("add_references")) |> LIST()
 
             assert added.count == 1;
             assert added[0].contains("/tmp/session/cell1.dll");

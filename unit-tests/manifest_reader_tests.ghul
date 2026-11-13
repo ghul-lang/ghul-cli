@@ -203,7 +203,7 @@ namespace Ghul.Cli.Tests is
             let outcome = MANIFEST_READER.read(text, "ghul-project.json")
 
             if let failed: ReadOutcome.PROBLEMS = outcome then
-                return failed.problems |> _descriptions() |> collect()
+                return failed.problems |> _descriptions() |> ARRAY()
             fi
 
             Assert.fail("expected problems, got a manifest")

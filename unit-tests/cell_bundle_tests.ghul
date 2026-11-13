@@ -131,7 +131,7 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         table__says_there_are_more_rows() is
-            let html = _table(cast object(Ghul.Pipes.from(0) |> Ghul.Pipes.take(25) |> Ghul.Pipes.map(i => (i, i)) |> Ghul.Pipes.collect_mutable()))
+            let html = _table(cast object(Ghul.Pipes.from(0) |> Ghul.Pipes.take(25) |> Ghul.Pipes.map(i => (i, i)) |> LIST()))
 
             assert html.contains("<tr><td colspan=\"2\">...</td></tr>");
         si
