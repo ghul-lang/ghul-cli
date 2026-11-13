@@ -455,7 +455,7 @@ namespace Ghul.Cli is
         /// - published: the text of the `.sha256` file
         matches_checksum(content: ARRAY[ubyte], published: string) -> bool static is
             let expected = published.trim().split([' ', '\t'])[0].to_lower_invariant()
-            let actual = System.Convert.to_hex_string(System.Security.Cryptography.SHA256.hash_data(content)).to_lower_invariant()
+            let actual = System.Convert.to_hex_string(Crypto.sha256(content)).to_lower_invariant()
 
             return expected.length > 0 /\ expected =~ actual
         si

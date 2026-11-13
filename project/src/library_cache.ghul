@@ -140,7 +140,7 @@ namespace Ghul.Project is
                 return name
             fi
 
-            let digest = System.Security.Cryptography.SHA256.hash_data(System.Text.Encoding.utf8.get_bytes(url))
+            let digest = Crypto.sha256(System.Text.Encoding.utf8.get_bytes(url))
             let hash = System.Convert.to_hex_string(digest).substring(0, 12).to_lower()
 
             return "{name.substring(0, 32)}-{hash}"

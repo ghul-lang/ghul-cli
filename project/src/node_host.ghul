@@ -430,7 +430,7 @@ namespace Ghul.Project is
                 fi
 
                 let actual = System.Convert.to_hex_string(
-                    System.Security.Cryptography.SHA256.hash_data(bytes)).to_lower_invariant()
+                    Crypto.sha256(bytes)).to_lower_invariant()
 
                 if actual !~ digest then
                     return ERROR("node {version} failed its checksum (expected {digest}, got {actual})")
