@@ -474,8 +474,8 @@ Each is installed as it is needed into a directory of its own under the
 compiler cache, `compilers/<host>`. Any other value, or a host this machine
 cannot have, is an error naming the value. A compiler given as a command, by
 `--compiler` or `GHUL_COMPILER`, runs as given whatever the host says. A
-manifest does not choose the host. `GHUL_COMPILER_HOST` is refused, with a
-message naming the option and the key that replaced it.
+manifest does not choose the host. `GHUL_COMPILER_HOST` is ignored, with a
+warning naming the option and the key that replaced it.
 
 ### hello world on WebAssembly
 

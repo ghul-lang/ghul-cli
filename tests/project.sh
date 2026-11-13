@@ -187,11 +187,12 @@ if [[ "$(uname -s)" == Linux && "$(uname -m)" =~ ^(x86_64|aarch64)$ ]]; then
     [[ "$err" == *"--compiler-host is 'jvm'"* ]] || fail "unexpected message for --compiler-host jvm: $err"
 fi
 
-echo "project: GHUL_COMPILER_HOST, a retired configuration key and a version 1 manifest key are refused..." >&2
-if err="$(cd "$program" && GHUL_COMPILER_HOST=wasm dotnet "$cli" project compiler 2>&1)"; then
-    fail "expected GHUL_COMPILER_HOST to be refused"
-fi
-[[ "$err" == *"GHUL_COMPILER_HOST is no longer read"*"--compiler-host"*"compiler-host"* ]] || fail "unexpected message for GHUL_COMPILER_HOST: $err"
+echo "project: GHUL_COMPILER_HOST is ignored with a warning..." >&2
+err="$(cd "$program" && GHUL_COMPILER_HOST=wasm dotnet "$cli" project compiler 2>&1)" || fail "expected GHUL_COMPILER_HOST to be ignored, not refused: $err"
+[[ "$err" == *"warning: GHUL_COMPILER_HOST is no longer read, so it is ignored"*"--compiler-host"*"compiler-host"* ]] || fail "unexpected message for GHUL_COMPILER_HOST: $err"
+[[ "$(grep -c "GHUL_COMPILER_HOST" <<< "$err")" == 1 ]] || fail "expected the GHUL_COMPILER_HOST warning once: $err"
+
+echo "project: a retired configuration key and a version 1 manifest key are refused..." >&2
 retired_home="$scratch/retired-config-home"
 mkdir -p "$retired_home/ghul"
 echo '{ "defaults": { "prefer": ["wasm"] } }' > "$retired_home/ghul/config.json"

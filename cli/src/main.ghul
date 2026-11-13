@@ -1972,6 +1972,10 @@ namespace Ghul.Cli is
             return 0
         fi
 
+        if let warning = Ghul.Project.COMPILER_HOST.retired_variable_warning() then
+            LOG.say(warning)
+        fi
+
         // Reported before anything runs, so a misspelt host is not hidden by
         // a build that is already up to date and never asks for a compiler.
         if let problem: string = Ghul.Project.COMPILER_HOST.configured().problem then
