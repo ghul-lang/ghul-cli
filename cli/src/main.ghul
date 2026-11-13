@@ -1112,7 +1112,7 @@ namespace Ghul.Cli is
             key.append(" {found!}")
         fi
 
-        let digest = System.Security.Cryptography.SHA256.hash_data(
+        let digest = Crypto.sha256(
             [script, System.Text.Encoding.utf8.get_bytes(key.to_string())] |> Ghul.Pipes.flat_map(b => b) |> Ghul.Pipes.collect())
 
         let run_dir = Path.join([cache_root(), System.Convert.to_hex_string(digest).to_lower()])
