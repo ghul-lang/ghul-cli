@@ -248,6 +248,23 @@ if err="$(cd "$wasm" && dotnet "$cli" build --library "ghul-runtime=$scratch/no-
 fi
 [[ "$err" == *"no-such-core"* ]] || fail "unexpected message for a missing library directory: $err"
 
+echo "project: the runtime library's own manifest builds as its own library..." >&2
+runtime_rsp="$scratch/runtime.rsp"
+for target in wasm llvm; do
+    (cd "$scratch/runtime-checkout" && dotnet "$cli" project response-file --target "$target" --output "$runtime_rsp") >&2 \
+        || fail "ghul project response-file failed on the runtime library's own manifest for $target"
+    grep -qx -- "--library-source ghul-runtime@[^=]*=$scratch/runtime-checkout" "$runtime_rsp" \
+        || fail "expected the $target response file to declare the runtime checkout as the ghul-runtime library: $(cat "$runtime_rsp")"
+    grep -q '\.ghul$' "$runtime_rsp" && fail "the $target response file should not list the runtime's sources, which are the project's own"
+done
+# An editor's round trip on llvm: the response file and the project's own
+# sources, type-checked by the compiler ghul names.
+compiler="$(cd "$scratch/runtime-checkout" && dotnet "$cli" project compiler)"
+(cd "$scratch/runtime-checkout" && eval "$compiler" "@$runtime_rsp" --type-check $(find ghul-core/src ghul-runtime/src -name '*.ghul')) >&2 \
+    || fail "the compiler did not check the runtime library's sources with its llvm response file"
+(cd "$scratch/runtime-checkout" && dotnet "$cli" build --target wasm) >&2 \
+    || fail "ghul build --target wasm failed on the runtime library's own manifest"
+
 echo "project: --compiler builds with the command given..." >&2
 compiler="$(cd "$wasm" && dotnet "$cli" project compiler)"
 out="$(cd "$wasm" && dotnet "$cli" run --compiler "$compiler" 2>/dev/null)" || fail "ghul run with --compiler failed"

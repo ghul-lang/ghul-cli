@@ -1,6 +1,5 @@
 namespace Ghul.Cli.Tests is
     use Collections.LIST
-    use Ghul.Pipes.collect
     use Ghul.Pipes.repeat
 
     use Ghul.Project.GIT
@@ -150,7 +149,7 @@ namespace Ghul.Cli.Tests is
         _answer(client: System.Net.Sockets.TcpClient) is
             try
                 let stream = client.get_stream()
-                let buffer = repeat(0ub, 1024) |> collect()
+                let buffer = repeat(0ub, 1024) |> ARRAY()
                 let header mut = ""
 
                 while !header.contains("\r\n\r\n") do

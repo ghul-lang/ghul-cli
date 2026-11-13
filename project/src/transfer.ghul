@@ -83,7 +83,7 @@ namespace Ghul.Project is
         read(content: System.Net.Http.HttpContent) -> ARRAY[ubyte] static is
             let stream = use content.read_as_stream_async().result
             let memory = use IO.MemoryStream()
-            let buffer = repeat(0ub, 65536) |> collect()
+            let buffer = repeat(0ub, 65536) |> ARRAY()
             let total = content.headers?.content_length ?? 0L
             let got mut = 0L
             let read mut = stream.read(buffer, 0, buffer.count)

@@ -320,7 +320,7 @@ namespace Ghul.Cli.Repl is
                 if is_from then
                     REPLAY.from(session.submissions, number)
                 else
-                    session.submissions |> Ghul.Pipes.filter(c => c.number == number) |> Ghul.Pipes.collect_mutable()
+                    session.submissions |> Ghul.Pipes.filter(c => c.number == number) |> LIST()
                 fi
 
             if cells.count == 0 then
