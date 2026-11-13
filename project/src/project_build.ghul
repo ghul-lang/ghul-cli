@@ -62,7 +62,7 @@ namespace Ghul.Project is
         /// - manifest: the project's manifest
         /// - cache: where fetched libraries are kept
         undeclared_libraries(manifest: MANIFEST, cache: LIBRARY_CACHE) -> string? static is
-            if manifest.dependencies.contains_key(RUNTIME_LIBRARY.NAME) then
+            if RUNTIME_LIBRARY.is_own(manifest) \/ manifest.dependencies.contains_key(RUNTIME_LIBRARY.NAME) then
                 return null
             fi
 

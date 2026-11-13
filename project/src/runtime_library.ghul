@@ -16,6 +16,14 @@ namespace Ghul.Project is
         /// The library's name, which a manifest declares it under.
         NAME: string static => "ghul-runtime"
 
+        /// Whether `manifest` is the runtime library's own. Its sources are
+        /// the core and runtime sources, so it declares no runtime library
+        /// and is its own.
+        ///
+        /// - manifest: the project being built
+        is_own(manifest: MANIFEST) -> bool static =>
+            manifest.name =~ NAME
+
         /// Where ghul-runtime is fetched from: `GHUL_RUNTIME_REPOSITORY`
         /// where that is set, for a mirror or a test, and its own repository
         /// otherwise.
@@ -30,7 +38,10 @@ namespace Ghul.Project is
         si
 
         /// The runtime library for `manifest`, fetching it into `cache` if it
-        /// is not there already.
+        /// is not there already. For the runtime's own manifest it is the
+        /// manifest's directory with no files listed: the project's own
+        /// sources are the library's, and are compiled in once, as the
+        /// project's.
         ///
         /// - manifest: the project being built
         /// - manifest_directory: the directory holding the manifest, which a
@@ -41,6 +52,10 @@ namespace Ghul.Project is
             manifest_directory: string,
             cache: LIBRARY_CACHE
         ) -> Result[SOURCE_LIBRARY, string] static is
+            if is_own(manifest) then
+                return OK(SOURCE_LIBRARY(NAME, manifest.version ?? "0.0.0", Path.get_full_path(manifest_directory), Collections.LIST[string]()))
+            fi
+
             let declared: DEPENDENCY mut
 
             if manifest.dependencies.try_get_value(NAME, declared ref) then
