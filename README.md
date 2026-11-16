@@ -503,7 +503,12 @@ in after ghul-runtime: a directory holding a `ghul-project.json` that lists
 (at least that, below the next minor) or `>=1.2.3`, and resolves to the newest
 matching release, listed on every build, with the one used last where GitHub
 cannot be reached. A `branch` in place of the `version` reads the repository
-at the head of that branch. A library's own dependencies are
+at the head of that branch. As for a version, the head is looked up on every
+build, so a branch that has moved is fetched again at its new commit, and the
+commit it was at last is used where GitHub cannot be reached; each commit is
+fetched once and kept. A `directory` with either names the library's directory
+within the repository, so one repository can hold several libraries. A
+library's own dependencies are
 compiled in too, each before the libraries that use it, and a `path` in a
 library's manifest is relative to that library.
 

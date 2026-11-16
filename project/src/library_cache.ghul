@@ -12,7 +12,9 @@ namespace Ghul.Project is
     /// A library is kept at `<root>/<repository>/<commit>/`: the files of
     /// that commit and no `.git` directory, made read-only once written.
     /// The commit a tag resolved to is remembered beside it, so a tag
-    /// already fetched is found with no `git` call and no network.
+    /// already fetched is found with no `git` call and no network. A branch
+    /// is looked up afresh each time, and the commit it was at last is
+    /// remembered too, for when the repository cannot be reached.
     class LIBRARY_CACHE(root: string) is
         /// The cache under `XDG_CACHE_HOME` where that is set, and under
         /// `~/.cache` where it is not.
@@ -82,6 +84,77 @@ namespace Ghul.Project is
             finally
                 lock.close()
             yrt
+        si
+
+        /// The files of the commit at the head of `branch` in the repository at
+        /// `url`, fetching them first if they are not already here. The head
+        /// is looked up each time, so a branch that has moved is fetched
+        /// again at its new commit; where the repository cannot be reached,
+        /// the commit the branch was at last is used.
+        ///
+        /// - url: the repository, as `git clone` takes it
+        /// - branch: a branch in it
+        fetch_branch(url: string, branch: string) -> Result[(directory: string, commit: string), string] is
+            let repository = Path.join([root, repository_directory_name(url)])
+            let branch_record = Path.join([repository, "branches", branch])
+            let head = _resolve_branch(url, branch)
+
+            if let (problem): Result.ERROR = head then
+                if let found = _recorded(repository, branch_record) then
+                    return OK(found)
+                fi
+
+                return ERROR(problem)
+            fi
+
+            let commit = head!
+            let directory = Path.join([repository, commit])
+
+            if Directory.exists(directory) then
+                _record(branch_record, commit)
+
+                return OK((directory = directory, commit = commit))
+            fi
+
+            let lock = FILE_LOCK.acquire(Path.join([repository, ".lock"]), "ghul: waiting for another ghul process to fetch {url}...")
+
+            try
+                if !Directory.exists(directory) then
+                    IO.Std.error.write_line("ghul: fetching {url} {branch}...")
+
+                    let fetched = _fetch_into(url, branch, commit, repository, directory)
+
+                    if let (problem): Result.ERROR = fetched then
+                        return ERROR(problem)
+                    fi
+                fi
+
+                _record(branch_record, commit)
+
+                return OK((directory = directory, commit = commit))
+            finally
+                lock.close()
+            yrt
+        si
+
+        // The commit at the head of a branch.
+        _resolve_branch(url: string, branch: string) -> Result[string, string] is
+            let branch_ref = "refs/heads/{branch}"
+            let result = GIT.run_with_retries(LIST[string](["ls-remote", url, branch_ref]), null, () is si)
+
+            if !result.succeeded then
+                return ERROR("cannot read {url}: {result.error.trim()}")
+            fi
+
+            for line in result.output.split(['\n']) do
+                let fields = line.trim().split(['\t'])
+
+                if fields.count == 2 /\ fields[1] =~ branch_ref then
+                    return OK(fields[0])
+                fi
+            od
+
+            return ERROR("branch {branch} was not found in {url}")
         si
 
         // The commit a tag was recorded as resolving to, where it was and its
@@ -177,7 +250,7 @@ namespace Ghul.Project is
             return ERROR("tag {tag} was not found in {url}")
         si
 
-        // Clones the tag into a scratch directory beside the final one,
+        // Clones the tag or branch into a scratch directory beside the final one,
         // checks it is the commit expected, leaves out the repository's
         // own metadata, and renames it into place. Null on success.
         _fetch_into(url: string, tag: string, commit: string, repository: string, directory: string) -> Result[unit, string] is
@@ -198,7 +271,7 @@ namespace Ghul.Project is
                 let head = GIT.run(LIST[string](["rev-parse", "HEAD"]), scratch)
 
                 if !head.succeeded \/ head.output.trim() !~ commit then
-                    return ERROR("tag {tag} in {url} moved while it was being fetched")
+                    return ERROR("{tag} in {url} moved while it was being fetched; build again to fetch where it is now")
                 fi
 
                 _delete(Path.join([scratch, ".git"]))

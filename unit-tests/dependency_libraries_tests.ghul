@@ -208,16 +208,75 @@ namespace Ghul.Cli.Tests is
             yrt
         si
 
+        // A repository in the scratch directory with the library project
+        // `lib` at `within`, committed on the branch main, reached by a
+        // file:// URL.
+        _library_repository(scratch: string, within: string) -> string is
+            let repository = Path.combine(scratch, "repository")
+
+            Directory.create_directory(repository)
+
+            _git(repository, ["init", "--quiet", "--initial-branch=main"])
+            _git(repository, ["config", "user.email", "test@example.com"])
+            _git(repository, ["config", "user.name", "test"])
+
+            _project(if within.length == 0 then repository else Path.combine(repository, within) fi, "lib", "\"wasm\"", "")
+
+            _git(repository, ["add", "."])
+            _git(repository, ["commit", "--quiet", "-m", "lib"])
+
+            return System.Uri(repository).absolute_uri
+        si
+
         @Test()
-        a_git_library_without_a_tag_is_a_problem() is
+        a_git_library_at_a_branch_is_compiled_in_from_its_head() is
             let scratch = _scratch()
 
             try
-                _project(Path.combine(scratch, "app"), "app", "\"wasm\"", "\"lib\": {{ \"git\": \"https://example.com/lib\", \"branch\": \"main\" }}")
+                let url = _library_repository(scratch, "")
+
+                _project(Path.combine(scratch, "app"), "app", "\"wasm\"", "\"lib\": {{ \"git\": \"{url}\", \"branch\": \"main\" }}")
 
                 let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
 
-                assert _message(found) =~ "lib must be declared with a version, a tag or a path" else _message(found)
+                assert _names(found!) =~ "lib@0.0.0" else _names(found!)
+                assert File.exists(Path.combine(found![0].root, "src", "lib.ghul"))
+            finally
+                _delete(scratch)
+            yrt
+        si
+
+        @Test()
+        a_git_library_at_a_branch_is_found_in_its_directory() is
+            let scratch = _scratch()
+
+            try
+                let url = _library_repository(scratch, Path.combine("libraries", "lib"))
+
+                _project(Path.combine(scratch, "app"), "app", "\"wasm\"", "\"lib\": {{ \"git\": \"{url}\", \"branch\": \"main\", \"directory\": \"libraries/lib\" }}")
+
+                let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
+
+                assert _names(found!) =~ "lib@0.0.0" else _names(found!)
+                assert Path.get_full_path(found![0].root).ends_with(Path.combine("libraries", "lib")) else found![0].root
+                assert File.exists(Path.combine(found![0].root, "src", "lib.ghul"))
+            finally
+                _delete(scratch)
+            yrt
+        si
+
+        @Test()
+        a_git_library_at_a_branch_that_is_not_there_is_a_problem() is
+            let scratch = _scratch()
+
+            try
+                let url = _library_repository(scratch, "")
+
+                _project(Path.combine(scratch, "app"), "app", "\"wasm\"", "\"lib\": {{ \"git\": \"{url}\", \"branch\": \"develop\" }}")
+
+                let found = DEPENDENCY_LIBRARIES.find(_manifest(Path.combine(scratch, "app")), Path.combine(scratch, "app"), LIBRARY_CACHE(Path.combine(scratch, "cache")), BuildTarget.WASM)
+
+                assert _message(found).contains("branch develop was not found") else _message(found)
             finally
                 _delete(scratch)
             yrt
