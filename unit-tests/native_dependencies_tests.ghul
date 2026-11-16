@@ -142,6 +142,8 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         a_static_link_takes_a_musl_archive_from_a_library_path() is
+            unix_only("native libraries are linked on Linux, where these paths are")
+
             let system = FAKE_NATIVE_SYSTEM()
 
             system.files.add("/work/musl/libz.a")
@@ -151,6 +153,8 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         a_static_link_takes_an_archive_named_in_link_as_it_is() is
+            unix_only("native libraries are linked on Linux, where these paths are")
+
             let result = _resolve(_declared([("ghul-zlib", _zlib(null, false))]), false, ["/work/build/libz.a"], [], FAKE_NATIVE_SYSTEM())
 
             assert _names(result) =~ "" else _names(result)
@@ -158,6 +162,8 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         a_static_link_refuses_glibcs_archive_and_suggests_linking_dynamically() is
+            unix_only("native libraries are linked on Linux, where these paths are")
+
             let system = FAKE_NATIVE_SYSTEM()
 
             system.files.add("/usr/lib/x86_64-linux-gnu/libz.a")
@@ -178,6 +184,8 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         a_system_directory_on_a_musl_system_holds_musl_archives() is
+            unix_only("native libraries are linked on Linux, where these paths are")
+
             let system = FAKE_NATIVE_SYSTEM()
 
             system.is_glibc = false
@@ -188,6 +196,8 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         system_directories_are_the_c_librarys_own() is
+            unix_only("native libraries are linked on Linux, where these paths are")
+
             for directory in ["/lib", "/usr/lib", "/usr/lib64", "/lib64", "/usr/lib/x86_64-linux-gnu", "/lib/aarch64-linux-gnu/"] do
                 assert NATIVE_DEPENDENCIES.is_system_directory(directory) else directory
             od
