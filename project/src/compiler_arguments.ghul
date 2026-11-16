@@ -149,6 +149,10 @@ namespace Ghul.Project is
                 add(["--llvm-parallel-gc"])
             fi
 
+            if options.dynamic_link /\ target == BuildTarget.LLVM then
+                add(["--llvm-link-mode", "dynamic"])
+            fi
+
             // What the program reads as the version it was built as.
             if let version = manifest.version then
                 add(["--version", version])

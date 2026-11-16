@@ -269,6 +269,70 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
+        the_llvm_section_declares_native_libraries_with_their_sonames() is
+            let manifest = _read("{{ \"name\": \"ghul-zlib\", \"kind\": \"library\", \"targets\": [\"llvm\"], \"llvm\": {{ \"native\": {{ \"zlib\": {{ \"soname\": \"libz.so.1\", \"version\": \"^1.2.11\", \"file-version\": true, \"libraries\": [\"z\"], \"install\": {{ \"debian\": \"zlib1g\" }} }}, \"m\": {{ \"soname\": \"libm.so.6\" }} }} }} }}")!
+            let dependencies = manifest.native.dependencies
+
+            assert dependencies.count == 2
+
+            let zlib = dependencies[0]
+
+            assert zlib.name =~ "zlib" /\ zlib.soname =~ "libz.so.1"
+            assert zlib.version?.to_string() =~ "^1.2.11"
+            assert zlib.file_version
+            assert zlib.pkg_config =~ "zlib"
+            assert zlib.libraries.count == 1 /\ zlib.libraries[0] =~ "z"
+            assert zlib.install["debian"] =~ "zlib1g"
+
+            let m = dependencies[1]
+
+            assert !m.version? /\ !m.file_version
+            assert m.libraries.count == 1 /\ m.libraries[0] =~ "m"
+        si
+
+        @Test()
+        a_native_library_names_its_soname() is
+            let problems = _problems("{{ \"name\": \"app\", \"llvm\": {{ \"native\": {{ \"zlib\": {{ \"version\": \"^1.2.11\" }} }} }} }}")
+
+            assert problems.count == 1 else problems |> join("; ")
+            assert problems[0].contains("llvm.native.zlib") /\ problems[0].contains("soname") else problems[0]
+        si
+
+        @Test()
+        a_native_library_of_the_wrong_shape_is_a_problem_naming_the_key() is
+            for (value, key) in [
+                ("\"libz.so.1\"", "llvm.native.zlib"),
+                ("{{ \"soname\": \"libz.so.1\", \"version\": \"newest\" }}", "llvm.native.zlib.version"),
+                ("{{ \"soname\": \"libz.so.1\", \"file-version\": \"yes\" }}", "llvm.native.zlib.file-version"),
+                ("{{ \"soname\": \"libz.so.1\", \"shared\": true }}", "llvm.native.zlib.shared")
+            ] do
+                let problems = _problems("{{ \"name\": \"app\", \"llvm\": {{ \"native\": {{ \"zlib\": {value} }} }} }}")
+
+                assert problems.count == 1 else "{key}: {problems |> join("; ")}"
+                assert problems[0].contains(key) else "{key}: {problems[0]}"
+            od
+        si
+
+        @Test()
+        a_program_chooses_how_it_is_linked() is
+            assert !(_read(DEFAULT)!).options.dynamic_link
+            assert (_read("{{ \"name\": \"app\", \"llvm\": {{ \"link-mode\": \"dynamic\" }} }}")!).options.dynamic_link
+            assert !(_read("{{ \"name\": \"app\", \"llvm\": {{ \"link-mode\": \"static\" }} }}")!).options.dynamic_link
+
+            let problems = _problems("{{ \"name\": \"app\", \"llvm\": {{ \"link-mode\": \"shared\" }} }}")
+
+            assert problems.count == 1 /\ problems[0].contains("llvm.link-mode") else problems |> join("; ")
+        si
+
+        @Test()
+        a_library_does_not_choose_how_it_is_linked() is
+            let problems = _problems("{{ \"name\": \"ghul-zlib\", \"kind\": \"library\", \"llvm\": {{ \"link-mode\": \"dynamic\" }} }}")
+
+            assert problems.count == 1 else problems |> join("; ")
+            assert problems[0].contains("llvm.link-mode") /\ problems[0].contains("program that uses it") else problems[0]
+        si
+
+        @Test()
         a_manifest_without_native_code_names_none() is
             let native = (_read(DEFAULT)!).native
 

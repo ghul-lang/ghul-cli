@@ -42,6 +42,7 @@ namespace Ghul.Cli.Tests is
                 LIST[string](),
                 null,
                 null,
+                false,
                 false)
 
         _plain_options() -> MANIFEST_OPTIONS => _options(null, false, [], [], [], [])
@@ -244,7 +245,10 @@ namespace Ghul.Cli.Tests is
         // The options a manifest's reflection and collector give: the
         // others left at their defaults.
         _built_options(reflection: string?, parallel_gc: bool) -> MANIFEST_OPTIONS =>
-            MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](), LIST[string](), LIST[string](), null, reflection, parallel_gc)
+            _built_options(reflection, parallel_gc, false)
+
+        _built_options(reflection: string?, parallel_gc: bool, dynamic_link: bool) -> MANIFEST_OPTIONS =>
+            MANIFEST_OPTIONS(null, false, LIST[string](), LIST[string](), LIST[string](), LIST[string](), LIST[string](), LIST[string](), null, reflection, parallel_gc, dynamic_link)
 
         @Test()
         reflection_roots_and_all_are_passed_to_both_targets() is
@@ -265,6 +269,17 @@ namespace Ghul.Cli.Tests is
             assert llvm.contains("--llvm-parallel-gc") else llvm
             assert !wasm.contains("--llvm-parallel-gc") else wasm
             assert !wasm.contains("--rtti") else wasm
+        si
+
+        @Test()
+        a_dynamic_link_is_passed_to_an_llvm_build_only() is
+            let llvm = _joined(COMPILER_ARGUMENTS.options(_manifest(ManifestKind.PROGRAM, _built_options(null, false, true)), BuildTarget.LLVM, _no_libraries()))
+            let wasm = _joined(COMPILER_ARGUMENTS.options(_manifest(ManifestKind.PROGRAM, _built_options(null, false, true)), BuildTarget.WASM, _no_libraries()))
+            let static_llvm = _joined(COMPILER_ARGUMENTS.options(_manifest(ManifestKind.PROGRAM, _built_options(null, false, false)), BuildTarget.LLVM, _no_libraries()))
+
+            assert llvm.contains("--llvm-link-mode dynamic") else llvm
+            assert !wasm.contains("--llvm-link-mode") else wasm
+            assert !static_llvm.contains("--llvm-link-mode") else static_llvm
         si
 
         @Test()

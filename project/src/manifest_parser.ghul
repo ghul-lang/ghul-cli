@@ -46,11 +46,15 @@ namespace Ghul.Project is
             let host_wasm = _engine(wasm)
             let optimise = _optimise(llvm)
             let parallel_gc = _collector(llvm)
+            let dynamic_link = _link_mode(llvm, kind)
             let native = _native(llvm, wasm)
+
+            native.dependencies.add_range(_native_dependencies(llvm))
+
             if let section = llvm then
                 _requires(section, "llvm.requires", PROJECT_TOOLS.LLVM, tools)
             fi
-            let options = _options(root, optimise, parallel_gc)
+            let options = _options(root, optimise, parallel_gc, dynamic_link)
             let dependencies = _dependencies(root)
             let test = _test(root)
 
@@ -120,7 +124,7 @@ namespace Ghul.Project is
                 kind,
                 LIST[BuildTarget](),
                 LIST[string](),
-                _options(root, null, false),
+                _options(root, null, false, false),
                 MAP[string, DEPENDENCY](),
                 null,
                 MAP[string, VERSION_RANGE]()
@@ -590,7 +594,7 @@ namespace Ghul.Project is
         // The compiler options: `language`, which change the program, and
         // `diagnostics`, which change only what is reported, with the llvm
         // section's optimisation level.
-        _options(root: JsonElement, optimise: int?, parallel_gc: bool) -> MANIFEST_OPTIONS is
+        _options(root: JsonElement, optimise: int?, parallel_gc: bool, dynamic_link: bool) -> MANIFEST_OPTIONS is
             let underscore_access: string? mut = null
             let global_namespace mut = false
             let default_use mut = LIST[string]()
@@ -635,7 +639,7 @@ namespace Ghul.Project is
                 od
             fi
 
-            return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error, warn, warn_as_hint, optimise, reflection, parallel_gc)
+            return MANIFEST_OPTIONS(underscore_access, global_namespace, default_use, define, suppress, warn_as_error, warn, warn_as_hint, optimise, reflection, parallel_gc, dynamic_link)
         si
 
         // The object under `key`, with its keys checked against `known`, or
@@ -667,7 +671,7 @@ namespace Ghul.Project is
 
         _wasm_keys() -> ARRAY[string] static => ["engine", "externs"]
 
-        _llvm_keys() -> ARRAY[string] static => ["collector", "library-paths", "libraries", "link", "optimise", "requires"]
+        _llvm_keys() -> ARRAY[string] static => ["collector", "library-paths", "libraries", "link", "link-mode", "native", "optimise", "requires"]
 
         // The native code the llvm and wasm sections bring: the object files,
         // archives, libraries and library directories an llvm build links
@@ -738,6 +742,122 @@ namespace Ghul.Project is
             fi
 
             return false
+        si
+
+        // Whether the llvm section asks for a program linked dynamically
+        // against the system's glibc and shared libraries: `dynamic`,
+        // against `static`. Only a program is linked, so only a program
+        // chooses.
+        _link_mode(llvm: JsonElement?, kind: ManifestKind) -> bool is
+            let value: JsonElement mut
+
+            if !llvm? \/ !llvm.try_get_property("link-mode", value ref) then
+                return false
+            fi
+
+            if kind == ManifestKind.LIBRARY then
+                _report("llvm.link-mode", "a library is not linked: the program that uses it chooses how it is linked")
+                return false
+            fi
+
+            let text = if value.value_kind == JsonValueKind.STRING then value.get_string() ?? "" else "" fi
+
+            if text =~ "dynamic" then
+                return true
+            elif text !~ "static" then
+                _report("llvm.link-mode", "the value is neither static nor dynamic")
+            fi
+
+            return false
+        si
+
+        // The C libraries the llvm section's `native` key declares, each
+        // under its own name.
+        _native_dependencies(llvm: JsonElement?) -> Collections.List[NATIVE_DEPENDENCY] is
+            let result = LIST[NATIVE_DEPENDENCY]()
+            let value: JsonElement mut
+
+            if !llvm? \/ !llvm.try_get_property("native", value ref) then
+                return result
+            fi
+
+            if value.value_kind != JsonValueKind.OBJECT then
+                _report("llvm.native", "the value is not an object")
+                return result
+            fi
+
+            for member in value.enumerate_object() do
+                if let dependency = _native_dependency(member.name, member.value) then
+                    result.add(dependency)
+                fi
+            od
+
+            return result
+        si
+
+        // One C library under `native`: its soname, which is required, the
+        // range of its release, the names it is linked by and the rest.
+        _native_dependency(name: string, value: JsonElement) -> NATIVE_DEPENDENCY? is
+            let key = "llvm.native.{name}"
+
+            if value.value_kind != JsonValueKind.OBJECT then
+                _report(key, "the value is not an object: give at least the library's soname, as {{ \"soname\": \"lib{name}.so.1\" }}")
+                return null
+            fi
+
+            let soname: string? mut = null
+            let version: VERSION_RANGE? mut = null
+            let file_version mut = false
+            let pkg_config mut = name
+            let libraries = LIST[string]()
+            let install = MAP[string, string]()
+
+            for member in value.enumerate_object() do
+                let member_key = "{key}.{member.name}"
+
+                if member.name =~ "soname" then
+                    soname = _string_option(member_key, member.value)
+                elif member.name =~ "version" then
+                    if let text = _string_option(member_key, member.value) then
+                        let parsed = VERSION_RANGE.parse(text)
+
+                        if let (range): Result.OK = parsed then
+                            version = range
+                        elif let (problem): Result.ERROR = parsed then
+                            _report(member_key, problem)
+                        fi
+                    fi
+                elif member.name =~ "file-version" then
+                    file_version = _option_boolean(member_key, member.value)
+                elif member.name =~ "pkg-config" then
+                    pkg_config = _string_option(member_key, member.value) ?? name
+                elif member.name =~ "libraries" then
+                    libraries.add_range(_string_list_option(member_key, member.value))
+                elif member.name =~ "install" then
+                    if member.value.value_kind != JsonValueKind.OBJECT then
+                        _report(member_key, "the value is not an object")
+                    else
+                        for hint in member.value.enumerate_object() do
+                            if let text = _string_option("{member_key}.{hint.name}", hint.value) then
+                                install[hint.name] = text
+                            fi
+                        od
+                    fi
+                else
+                    _report(member_key, "unknown key")
+                fi
+            od
+
+            if !soname? then
+                _report(key, "a native library names its soname, the shared library a program links against, such as \"soname\": \"lib{name}.so.1\"")
+                return null
+            fi
+
+            if libraries.count == 0 then
+                libraries.add(name)
+            fi
+
+            return NATIVE_DEPENDENCY(name, soname, version, file_version, pkg_config, libraries, install)
         si
 
         // The llvm build's optimisation level, where its section sets one.

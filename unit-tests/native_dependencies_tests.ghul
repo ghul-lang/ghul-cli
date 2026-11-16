@@ -1,0 +1,210 @@
+namespace Ghul.Cli.Tests is
+    use Collections.LIST
+    use Collections.MAP
+    use Ghul.Pipes
+
+    use Ghul.Project.DECLARED_NATIVE
+    use Ghul.Project.FOUND_LIBRARY
+    use Ghul.Project.NATIVE_DEPENDENCIES
+    use Ghul.Project.NATIVE_DEPENDENCY
+    use Ghul.Project.NativeSystem
+    use Ghul.Project.VERSION_RANGE
+
+    use Result.*
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // A machine with the shared libraries, pkg-config packages and files it
+    // is given, and nothing else.
+    class FAKE_NATIVE_SYSTEM: NativeSystem is
+        shared: MAP[string, FOUND_LIBRARY]
+        packages: MAP[string, string]
+        files: Collections.SET[string]
+        is_glibc: bool public
+
+        init() is
+            shared = MAP[string, FOUND_LIBRARY]()
+            packages = MAP[string, string]()
+            files = Collections.SET[string]()
+            is_glibc = true
+        si
+
+        find_shared(name: string, paths: Collections.List[string]) -> FOUND_LIBRARY? =>
+            if shared.contains_key(name) then shared[name] else null fi
+
+        pkg_config_version(package: string) -> string? =>
+            if packages.contains_key(package) then packages[package] else null fi
+
+        file_exists(path: string) -> bool => files.contains(path)
+    si
+
+    @TestClass()
+    class NATIVE_DEPENDENCIES_TESTS is
+        init() is si
+
+        _zlib(range: string?, file_version: bool) -> NATIVE_DEPENDENCY =>
+            NATIVE_DEPENDENCY(
+                "zlib",
+                "libz.so.1",
+                if let text = range then (VERSION_RANGE.parse(text) |> _range()) else null fi,
+                file_version,
+                "zlib",
+                LIST[string](["z"]),
+                MAP[string, string]([("debian", "zlib1g")]))
+
+        _range(parsed: Result[VERSION_RANGE, string]) -> VERSION_RANGE? =>
+            if let (range): OK = parsed then range else null fi
+
+        _declared(items: (string, NATIVE_DEPENDENCY)[]) -> LIST[DECLARED_NATIVE] =>
+            LIST[DECLARED_NATIVE](items |> map(((declarer, dependency): (string, NATIVE_DEPENDENCY)) => DECLARED_NATIVE(declarer, dependency)))
+
+        _resolve(declared: LIST[DECLARED_NATIVE], dynamic: bool, link: string[], paths: string[], system: FAKE_NATIVE_SYSTEM) -> Result[Collections.List[string], string] =>
+            NATIVE_DEPENDENCIES.resolve(declared, dynamic, LIST[string](link), LIST[string](paths), system)
+
+        _names(result: Result[Collections.List[string], string]) -> string =>
+            case result
+            when ok: OK then ok.value |> join(" ")
+            when error: ERROR then "error: {error.error}"
+            esac
+
+        _problem(result: Result[Collections.List[string], string]) -> string =>
+            if let (problem): ERROR = result then problem else "" fi
+
+        _with_zlib(version: string) -> FAKE_NATIVE_SYSTEM is
+            let system = FAKE_NATIVE_SYSTEM()
+
+            system.shared["z"] = FOUND_LIBRARY("/usr/lib/x86_64-linux-gnu/libz.so.1", "libz.so.1", version)
+
+            return system
+        si
+
+        @Test()
+        a_dynamic_link_names_a_library_found_with_its_soname() is
+            let result = _resolve(_declared([("ghul-zlib", _zlib("^1.2.11", true))]), true, [], [], _with_zlib("1.3.1"))
+
+            assert _names(result) =~ "z" else _names(result)
+        si
+
+        @Test()
+        a_library_declared_twice_is_linked_once() is
+            let result = _resolve(_declared([("app", _zlib(null, false)), ("ghul-zlib", _zlib("^1.2.11", true))]), true, [], [], _with_zlib("1.3.1"))
+
+            assert _names(result) =~ "z" else _names(result)
+        si
+
+        @Test()
+        a_missing_shared_library_names_what_to_install() is
+            let problem = _problem(_resolve(_declared([("ghul-zlib", _zlib("^1.2.11", true))]), true, [], [], FAKE_NATIVE_SYSTEM()))
+
+            assert problem.contains("ghul-zlib needs the native library zlib (^1.2.11)") else problem
+            assert problem.contains("libz.so.1") /\ problem.contains("debian: zlib1g") else problem
+        si
+
+        @Test()
+        a_shared_library_with_another_soname_is_refused() is
+            let system = FAKE_NATIVE_SYSTEM()
+
+            system.shared["z"] = FOUND_LIBRARY("/opt/lib/libz.so.2", "libz.so.2", "2.0.0")
+
+            let problem = _problem(_resolve(_declared([("ghul-zlib", _zlib(null, false))]), true, [], [], system))
+
+            assert problem.contains("as libz.so.1") /\ problem.contains("/opt/lib/libz.so.2, is libz.so.2") else problem
+        si
+
+        @Test()
+        the_version_pkg_config_gives_is_checked_against_each_range() is
+            let system = _with_zlib("1.3.1")
+
+            system.packages["zlib"] = "1.2.8"
+
+            let problem = _problem(_resolve(_declared([("app", _zlib(null, false)), ("ghul-zlib", _zlib("^1.2.11", false))]), true, [], [], system))
+
+            assert problem.contains("ghul-zlib needs the native library zlib at ^1.2.11, but the one found is 1.2.8 (pkg-config)") else problem
+            assert !problem.contains("app needs") else problem
+        si
+
+        @Test()
+        the_file_names_version_is_checked_only_where_the_declaration_says_it_is_the_releases() is
+            let old = _with_zlib("1.2.8")
+
+            assert _problem(_resolve(_declared([("ghul-zlib", _zlib("^1.2.11", true))]), true, [], [], old)).contains("1.2.8 (the name of")
+            assert _names(_resolve(_declared([("ghul-zlib", _zlib("^1.2.11", false))]), true, [], [], old)) =~ "z"
+        si
+
+        @Test()
+        two_declarations_of_one_library_with_different_sonames_are_a_problem() is
+            let other = NATIVE_DEPENDENCY("zlib", "libz.so.2", null, false, "zlib", LIST[string](["z"]), MAP[string, string]())
+            let problem = _problem(_resolve(_declared([("app", _zlib(null, false)), ("ghul-zlib", other)]), true, [], [], _with_zlib("1.3.1")))
+
+            assert problem.contains("app declares the native library zlib as libz.so.1, and ghul-zlib as libz.so.2") else problem
+        si
+
+        @Test()
+        a_static_link_takes_a_musl_archive_from_a_library_path() is
+            let system = FAKE_NATIVE_SYSTEM()
+
+            system.files.add("/work/musl/libz.a")
+
+            assert _names(_resolve(_declared([("ghul-zlib", _zlib(null, false))]), false, [], ["/work/musl"], system)) =~ "z"
+        si
+
+        @Test()
+        a_static_link_takes_an_archive_named_in_link_as_it_is() is
+            let result = _resolve(_declared([("ghul-zlib", _zlib(null, false))]), false, ["/work/build/libz.a"], [], FAKE_NATIVE_SYSTEM())
+
+            assert _names(result) =~ "" else _names(result)
+        si
+
+        @Test()
+        a_static_link_refuses_glibcs_archive_and_suggests_linking_dynamically() is
+            let system = FAKE_NATIVE_SYSTEM()
+
+            system.files.add("/usr/lib/x86_64-linux-gnu/libz.a")
+
+            let problem = _problem(_resolve(_declared([("ghul-zlib", _zlib(null, false))]), false, [], ["/usr/lib/x86_64-linux-gnu"], system))
+
+            assert problem.contains("/usr/lib/x86_64-linux-gnu/libz.a is glibc's") else problem
+            assert problem.contains("\"link-mode\": \"dynamic\"") else problem
+        si
+
+        @Test()
+        a_static_link_with_no_archive_suggests_linking_dynamically() is
+            let problem = _problem(_resolve(_declared([("ghul-zlib", _zlib(null, false))]), false, [], [], FAKE_NATIVE_SYSTEM()))
+
+            assert problem.contains("no libz.a built for musl") /\ problem.contains("\"link-mode\": \"dynamic\"") else problem
+        si
+
+        @Test()
+        a_system_directory_on_a_musl_system_holds_musl_archives() is
+            let system = FAKE_NATIVE_SYSTEM()
+
+            system.is_glibc = false
+            system.files.add("/usr/lib/libz.a")
+
+            assert _names(_resolve(_declared([("ghul-zlib", _zlib(null, false))]), false, [], ["/usr/lib"], system)) =~ "z"
+        si
+
+        @Test()
+        system_directories_are_the_c_librarys_own() is
+            for directory in ["/lib", "/usr/lib", "/usr/lib64", "/lib64", "/usr/lib/x86_64-linux-gnu", "/lib/aarch64-linux-gnu/"] do
+                assert NATIVE_DEPENDENCIES.is_system_directory(directory) else directory
+            od
+
+            for directory in ["/usr/local/lib", "/opt/zlib/lib", "/home/user/musl/lib", "/usr/lib/x86_64-linux-gnu/zlib"] do
+                assert !NATIVE_DEPENDENCIES.is_system_directory(directory) else directory
+            od
+        si
+
+        @Test()
+        versions_are_read_from_their_leading_numbers() is
+            for (text, expected) in [("1.3.1", "1.3.1"), ("1.2", "1.2.0"), ("3", "3.0.0"), ("1.1.1w", "1.1.1"), ("3.46.1.4", "3.46.1")] do
+                let version = NATIVE_DEPENDENCIES.parse_version(text)
+
+                assert "{version}" =~ expected else "{text}: {version}"
+            od
+
+            assert !NATIVE_DEPENDENCIES.parse_version("unknown")?
+        si
+    si
+si

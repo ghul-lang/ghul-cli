@@ -1,0 +1,380 @@
+namespace Ghul.Project is
+    use Collections.LIST
+    use IO.File
+    use IO.Path
+
+    use Result.*
+
+    /// A shared library found for a dynamic link, as `ghul-llvm
+    /// --find-library` answers.
+    ///
+    /// - path: the file a program links against
+    /// - soname: its soname, or empty where it has none
+    /// - version: the version its file name carries, or empty
+    class FOUND_LIBRARY(path: string public, soname: string public, version: string public) is si
+
+    /// What resolving native dependencies asks of the machine, so the
+    /// decisions can be checked without one.
+    trait NativeSystem open is
+        /// The shared library `-l<name>` would link, searching `paths` first.
+        find_shared(name: string, paths: Collections.List[string]) -> FOUND_LIBRARY?
+
+        /// The version pkg-config gives `package`, or null where pkg-config
+        /// is not installed or does not know the package.
+        pkg_config_version(package: string) -> string?
+
+        /// Whether there is a file at `path`.
+        file_exists(path: string) -> bool
+
+        /// Whether the system's C library is glibc, whose static archives a
+        /// program linked statically against musl must not link.
+        is_glibc: bool
+    si
+
+    /// A native dependency and the project that declares it.
+    ///
+    /// - declarer: the name of the program or library declaring it
+    /// - dependency: what it declares
+    class DECLARED_NATIVE(declarer: string public, dependency: NATIVE_DEPENDENCY public) is si
+
+    /// Checks the C libraries a program and its libraries declare under
+    /// `llvm.native` against what the machine has, and gives the names to
+    /// link them by.
+    class NATIVE_DEPENDENCIES is
+        /// The library names to pass as `--native-library`, each once, or
+        /// every problem found, one to a line.
+        ///
+        /// A dynamic link takes each library from the system's shared
+        /// libraries, or a `library_paths` directory, as `ghul-llvm` finds it:
+        /// its soname must be the one declared, and its version, where
+        /// pkg-config gives it or the declaration says the file name
+        /// carries it, must be in each declarer's range. A static link takes
+        /// each library from a static archive: one `link` names, or one in a
+        /// `library_paths` directory, never one of glibc's.
+        ///
+        /// - declared: the native dependencies, the program's first
+        /// - dynamic: whether the program is linked dynamically
+        /// - link: the object files and archives the build links in
+        /// - library_paths: the directories the build searches
+        /// - system: the machine
+        resolve(
+            declared: Collections.List[DECLARED_NATIVE],
+            dynamic: bool,
+            link: Collections.List[string],
+            library_paths: Collections.List[string],
+            system: NativeSystem
+        ) -> Result[Collections.List[string], string] static is
+            let problems = LIST[string]()
+            let names = LIST[string]()
+            let seen = Collections.SET[string]()
+
+            for group in _groups(declared) do
+                let first = group[0]
+
+                for other in group do
+                    if other.dependency.soname !~ first.dependency.soname then
+                        problems.add(
+                            "{first.declarer} declares the native library {first.dependency.name} as {first.dependency.soname}, and {other.declarer} as {other.dependency.soname}")
+                    fi
+                od
+
+                let found =
+                    if dynamic then
+                        _dynamic(group, library_paths, system, problems)
+                    else
+                        _static(group, link, library_paths, system, problems)
+                    fi
+
+                for name in found do
+                    if seen.add(name) then
+                        names.add(name)
+                    fi
+                od
+            od
+
+            if problems.count > 0 then
+                return ERROR(problems |> Ghul.Pipes.join("\n"))
+            fi
+
+            return OK(names)
+        si
+
+        // The declarations of each name, in the order the names first appear.
+        _groups(declared: Collections.List[DECLARED_NATIVE]) -> Collections.List[Collections.List[DECLARED_NATIVE]] static is
+            let order = LIST[string]()
+            let by_name = Collections.MAP[string, LIST[DECLARED_NATIVE]]()
+
+            for item in declared do
+                let name = item.dependency.name
+
+                if !by_name.contains_key(name) then
+                    by_name[name] = LIST[DECLARED_NATIVE]()
+                    order.add(name)
+                fi
+
+                by_name[name].add(item)
+            od
+
+            let result = LIST[Collections.List[DECLARED_NATIVE]]()
+
+            for name in order do
+                result.add(by_name[name])
+            od
+
+            return result
+        si
+
+        // The names a dynamic link takes the group's libraries by, each
+        // found among the system's shared libraries: the first is the one
+        // the soname names, and the version is checked against it.
+        _dynamic(
+            group: Collections.List[DECLARED_NATIVE],
+            library_paths: Collections.List[string],
+            system: NativeSystem,
+            problems: LIST[string]
+        ) -> Collections.List[string] static is
+            let first = group[0]
+            let dependency = first.dependency
+            let result = LIST[string]()
+            let i mut = 0
+
+            for library in dependency.libraries do
+                let found = system.find_shared(library, library_paths)
+
+                if !found? then
+                    problems.add(_missing(first, "a shared library lib{library}.so, such as {dependency.soname}, wasn't found where the dynamic loader looks or in llvm.library-paths"))
+                elif i == 0 /\ found.soname !~ dependency.soname then
+                    problems.add(
+                        "{first.declarer} needs the native library {dependency.name} as {dependency.soname}, but the one found, {found.path}, is {_soname_text(found)}")
+                else
+                    result.add(library)
+
+                    if i == 0 then
+                        _check_versions(group, found, system, problems)
+                    fi
+                fi
+
+                i = i + 1
+            od
+
+            return result
+        si
+
+        _soname_text(found: FOUND_LIBRARY) -> string static =>
+            if found.soname.length == 0 then "a library with no soname" else found.soname fi
+
+        // Each declarer's range against the version pkg-config gives, or the
+        // one the file name carries where the declaration says that is the
+        // release's.
+        _check_versions(group: Collections.List[DECLARED_NATIVE], found: FOUND_LIBRARY, system: NativeSystem, problems: LIST[string]) static is
+            let dependency = group[0].dependency
+            let from_pkg_config = system.pkg_config_version(dependency.pkg_config)
+
+            let (text, source) =
+                if let version = from_pkg_config then
+                    (version, "pkg-config")
+                elif dependency.file_version /\ found.version.length > 0 then
+                    (found.version, "the name of {found.path}")
+                else
+                    ("", "")
+                fi
+
+            if text.length == 0 then
+                return
+            fi
+
+            let version = parse_version(text)
+
+            if !version? then
+                return
+            fi
+
+            for item in group do
+                if let range = item.dependency.version then
+                    if !range.admits(version) then
+                        problems.add(
+                            "{item.declarer} needs the native library {dependency.name} at {range}, but the one found is {text} ({source})")
+                    fi
+                fi
+            od
+        si
+
+        // The names a static link takes the group's libraries by: each a
+        // static archive that `link` names or a library path holds, not one
+        // of glibc's, which a program linked against musl can't use.
+        _static(
+            group: Collections.List[DECLARED_NATIVE],
+            link: Collections.List[string],
+            library_paths: Collections.List[string],
+            system: NativeSystem,
+            problems: LIST[string]
+        ) -> Collections.List[string] static is
+            let first = group[0]
+            let result = LIST[string]()
+
+            for library in first.dependency.libraries do
+                let archive = "lib{library}.a"
+
+                if link |> Ghul.Pipes.any(path => Path.get_file_name(path) =~ archive) then
+                    continue
+                fi
+
+                let found = library_paths |> Ghul.Pipes.find(directory => system.file_exists(Path.combine(directory, archive)))
+
+                if let directory = found then
+                    if system.is_glibc /\ is_system_directory(directory) then
+                        problems.add(_missing(first,
+                            "{Path.combine(directory, archive)} is glibc's, and this program links statically against musl; "
+                            "link it dynamically against the system's {first.dependency.soname} with \"llvm\": {{ \"link-mode\": \"dynamic\" }}"))
+                    else
+                        result.add(library)
+                    fi
+                else
+                    problems.add(_missing(first,
+                        "this program links statically, and no {archive} built for musl was found in llvm.library-paths or llvm.link; "
+                        "link it dynamically against the system's {first.dependency.soname} with \"llvm\": {{ \"link-mode\": \"dynamic\" }}, "
+                        "or add the directory of a musl {archive} to llvm.library-paths"))
+                fi
+            od
+
+            return result
+        si
+
+        _missing(item: DECLARED_NATIVE, why: string) -> string static is
+            let dependency = item.dependency
+            let wanted = if let range = dependency.version then " ({range})" else "" fi
+            let hints = dependency.install |> Ghul.Pipes.map(pair => "{pair.key}: {pair.value}") |> Ghul.Pipes.join(", ")
+            let install = if hints.length > 0 then "\n  to install it: {hints}" else "" fi
+
+            return "{item.declarer} needs the native library {dependency.name}{wanted}: {why}{install}"
+        si
+
+        /// Whether `directory` is one of the C library's own: where the
+        /// distribution's packages put their libraries.
+        ///
+        /// - directory: a library directory
+        is_system_directory(directory: string) -> bool static is
+            let full = Path.get_full_path(directory).trim_end(['/'])
+
+            if full =~ "/lib" \/ full =~ "/usr/lib" \/ full =~ "/lib64" \/ full =~ "/usr/lib64" then
+                return true
+            fi
+
+            let parent = Path.get_directory_name(full) ?? ""
+
+            return (parent =~ "/lib" \/ parent =~ "/usr/lib") /\ full.ends_with("-linux-gnu")
+        si
+
+        /// The version `text` gives, as up to four numbers taken from its
+        /// start, so that `1.2` reads as 1.2.0 and OpenSSL's `1.1.1w` as
+        /// 1.1.1; null where it does not start with a number.
+        ///
+        /// - text: a version as pkg-config or a file name gives it
+        parse_version(text: string) -> System.Version? static is
+            let numbers = LIST[int]()
+            let current mut = 0
+            let digits mut = 0
+
+            for c in text do
+                if c >= '0' /\ c <= '9' then
+                    current = current * 10 + (int(c) - int('0'))
+                    digits = digits + 1
+                elif c == '.' /\ digits > 0 /\ numbers.count < 3 then
+                    numbers.add(current)
+                    current = 0
+                    digits = 0
+                else
+                    break
+                fi
+            od
+
+            if digits > 0 then
+                numbers.add(current)
+            fi
+
+            if numbers.count == 0 then
+                return null
+            fi
+
+            while numbers.count < 3 do
+                numbers.add(0)
+            od
+
+            return System.Version(numbers[0], numbers[1], numbers[2])
+        si
+    si
+
+    /// The machine as it is: shared libraries found by `ghul-llvm
+    /// --find-library`, versions asked of pkg-config.
+    ///
+    /// - linker: the `ghul-llvm` to ask, or null for the one on the path
+    class SYSTEM_NATIVE(linker: string?): NativeSystem is
+        find_shared(name: string, paths: Collections.List[string]) -> FOUND_LIBRARY? is
+            let arguments = LIST[string]()
+
+            arguments.add("--find-library={name}")
+
+            for path in paths do
+                arguments.add("-L")
+                arguments.add(path)
+            od
+
+            let output = _run(linker ?? "ghul-llvm", arguments)
+
+            if !output? then
+                return null
+            fi
+
+            let fields = output.trim_end(['\n', '\r']).split(['\t'])
+
+            if fields.count < 3 \/ fields[0].length == 0 then
+                return null
+            fi
+
+            return FOUND_LIBRARY(fields[0], fields[1], fields[2])
+        si
+
+        pkg_config_version(package: string) -> string? is
+            let output = _run("pkg-config", ["--modversion", package] |> LIST())
+
+            if let text = output then
+                let trimmed = text.trim()
+
+                return if trimmed.length > 0 then trimmed else null fi
+            fi
+
+            return null
+        si
+
+        file_exists(path: string) -> bool => File.exists(path)
+
+        is_glibc: bool => File.exists("/lib64/ld-linux-x86-64.so.2") \/ File.exists("/lib/ld-linux-aarch64.so.1")
+
+        // What `program` writes to standard output, or null where it can't
+        // be started or doesn't succeed.
+        _run(program: string, arguments: Collections.List[string]) -> string? static is
+            let start_info = System.Diagnostics.ProcessStartInfo()
+
+            start_info.file_name = program
+            start_info.use_shell_execute = false
+            start_info.redirect_standard_output = true
+            start_info.redirect_standard_error = true
+
+            for argument in arguments do
+                start_info.argument_list.add(argument)
+            od
+
+            if let process: System.Diagnostics.Process = PROCESS_START.start(start_info) then
+                let errors = process.standard_error.read_to_end_async()
+                let output = process.standard_output.read_to_end()
+
+                process.wait_for_exit()
+                errors.wait()
+
+                return if process.exit_code == 0 then output else null fi
+            fi
+
+            return null
+        si
+    si
+si

@@ -225,7 +225,12 @@ namespace Ghul.Project is
 
             Directory.create_directory(Path.get_directory_name(output)!)
 
-            let native = project.manifest.native.resolved(project.directory)
+            let native = _with_native_dependencies(project, compiled_in, project.manifest.native.resolved(project.directory), SYSTEM_NATIVE(linker), say)
+
+            if !native? then
+                return 1
+            fi
+
             let arguments = LIST[string](COMPILER_ARGUMENTS.for_build(project.manifest, project.target, compiled_in, native, mode, output, sources))
 
             arguments.add_range(extra)
@@ -256,6 +261,74 @@ namespace Ghul.Project is
             finally
                 Directory.delete(scratch, true)
             yrt
+        si
+
+        /// Checks the C libraries an llvm program and the libraries it
+        /// compiles in declare under `llvm.native`, as
+        /// `NATIVE_DEPENDENCIES.resolve` does, and answers `native` with the
+        /// names they are linked by added to its libraries. Reports every
+        /// problem through `say` and answers null where there is one; answers
+        /// `native` as it is for any other build.
+        ///
+        /// - project: the project being built
+        /// - compiled_in: the libraries compiled into it
+        /// - native: the project's own native code
+        /// - system: the machine
+        /// - say: where a problem is reported
+        _with_native_dependencies(
+            project: LOADED_PROJECT,
+            compiled_in: Collections.List[SOURCE_LIBRARY],
+            native: NATIVE_INPUTS,
+            system: NativeSystem,
+            say: (string) -> void
+        ) -> NATIVE_INPUTS? static is
+            if project.target != BuildTarget.LLVM \/ project.manifest.kind == ManifestKind.LIBRARY then
+                return native
+            fi
+
+            let declared = LIST[DECLARED_NATIVE]()
+            let link = LIST[string](native.link)
+            let library_paths = LIST[string](native.library_paths)
+
+            for dependency in native.dependencies do
+                declared.add(DECLARED_NATIVE(project.manifest.name, dependency))
+            od
+
+            for library in compiled_in do
+                for dependency in library.native.dependencies do
+                    declared.add(DECLARED_NATIVE(library.name, dependency))
+                od
+
+                link.add_range(library.native.link)
+                library_paths.add_range(library.native.library_paths)
+            od
+
+            if declared.count == 0 then
+                return native
+            fi
+
+            let resolved = NATIVE_DEPENDENCIES.resolve(declared, project.manifest.options.dynamic_link, link, library_paths, system)
+
+            if let (problems): ERROR = resolved then
+                say(problems)
+                return null
+            elif let (names): OK = resolved then
+                let libraries = LIST[string](native.libraries)
+
+                for name in names do
+                    if !(libraries |> Ghul.Pipes.any(existing => existing =~ name)) then
+                        libraries.add(name)
+                    fi
+                od
+
+                let result = NATIVE_INPUTS(LIST[string](native.link), libraries, LIST[string](native.library_paths), native.externs)
+
+                result.dependencies.add_range(native.dependencies)
+
+                return result
+            fi
+
+            return native
         si
 
         // Runs the compiler on the response file. Its standard output goes

@@ -292,6 +292,47 @@ Only `name` is required. The keys are:
   passed to the compiler as `--native-input`; `libraries` lists names linked as
   `lib<name>.a`, each passed as `--native-library`; `library-paths` lists
   directories searched for them, each passed as `--native-library-path`.
+- `llvm.link-mode`: `static`, the default, or `dynamic`. A program linked
+  statically runs on any Linux of its architecture; one linked dynamically is
+  linked against the system's glibc and shared libraries, and needs them where
+  it runs. Only a program sets it: a library is not linked.
+- `llvm.native`: the C libraries the project needs, each under a name of its
+  own, checked and linked when a program that uses the project is built, so a
+  library project can bring its C dependency with it:
+
+  ```json
+  "llvm": {
+      "native": {
+          "zlib": {
+              "soname": "libz.so.1",
+              "version": "^1.2.11",
+              "file-version": true,
+              "libraries": ["z"],
+              "install": { "debian": "zlib1g", "alpine": "zlib-dev zlib-static" }
+          }
+      }
+  }
+  ```
+
+  `soname` is required: the shared library a dynamically linked program is
+  built against, which the dynamic loader checks again when it starts.
+  `libraries` are the names linked, `lib<name>`, the first being the one the
+  soname names; by default the key itself. `version` is a range of the
+  library's release, checked against what pkg-config gives where pkg-config
+  is installed and knows the package (`pkg-config` names the package, by
+  default the key), or else against the version in the shared library's file
+  name where `file-version` says that is the release's, as zlib's is
+  (`libz.so.1.3.1`), and otherwise not checked. `install` lists what to
+  install, by distribution, for the message a missing library gives.
+
+  In a dynamic link each library is found where the dynamic loader looks, or
+  in `llvm.library-paths`, as `ghul-llvm --find-library` finds it, through the
+  runtime file its soname names, so the library's runtime package is enough
+  (`zlib1g`, not `zlib1g-dev`). In a static link each library must be a
+  static archive built for musl, named in `llvm.link` or found in
+  `llvm.library-paths`; glibc's own archives are refused, and either problem
+  says to link dynamically instead. A library declared by more than one
+  project is linked once, and each declarer's range must hold.
 - `test`: what `ghul test` adds to the project, and nothing else does:
   `sources`, the globs naming the test sources, which is required, and
   `dependencies`, the libraries the tests need beyond the project's own,
@@ -306,9 +347,9 @@ Only `name` is required. The keys are:
   both.
 
 Paths in `llvm` and `wasm` are relative to the manifest's directory. A
-dependency's own `llvm.link`, `llvm.libraries`, `llvm.library-paths` and
-`wasm.externs` are carried into every program that compiles it in, with its
-paths relative to the dependency's own root.
+dependency's own `llvm.link`, `llvm.libraries`, `llvm.library-paths`,
+`llvm.native` and `wasm.externs` are carried into every program that compiles
+it in, with its paths relative to the dependency's own root.
 
 A key the manifest does not know is an error, never ignored. The keys of the
 first version of the manifest, `tools`, `options`, `prefer`, `engine`, `host`
