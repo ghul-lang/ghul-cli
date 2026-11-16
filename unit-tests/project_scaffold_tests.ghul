@@ -135,11 +135,11 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
-        a_project_holds_a_manifest_a_hello_program_and_a_gitignore() is
+        a_project_holds_a_manifest_a_hello_program_a_first_test_and_a_gitignore() is
             let files = PROJECT_SCAFFOLD.files("hello", LIST[BuildTarget]([BuildTarget.WASM]), LIST[(tool: string, version: string)](), LIST[(tool: string, version: string)]())
 
-            _same("ghul-project.json src/main.ghul .gitignore", string.join(" ", files |> Ghul.Pipes.map(f => f.path.replace('\\', '/'))))
-            _same("out/\n", files[2].text)
+            _same("ghul-project.json src/main.ghul tests/example_tests.ghul .gitignore", string.join(" ", files |> Ghul.Pipes.map(f => f.path.replace('\\', '/'))))
+            _same("out/\n", files[3].text)
             assert files[1].text.contains("write_line(\"hello\")")
         si
     si

@@ -1,0 +1,120 @@
+namespace Ghul.Project is
+    use Collections.LIST
+    use Collections.MAP
+    use IO.File
+    use IO.Path
+
+    use Result.*
+
+    /// What `ghul test` builds: the project with its `test` section's
+    /// sources and libraries added, its types described for reflection so
+    /// the tests can be found, and an entry of its own that runs them, in
+    /// place of any entry the project has.
+    class TEST_BUILD is
+        /// The name of the entry a test build runs.
+        ENTRY: string static => "ghul_test_entry"
+
+        /// The project a test build of `project` compiles: a program named
+        /// for the project's tests, with the test section's sources and
+        /// libraries beside its own. Its types are described as far as a
+        /// runner needs, or wholly where the manifest asks for all of them.
+        /// An error, saying what to add, where the manifest has no `test`
+        /// section.
+        ///
+        /// - project: the project as loaded
+        project_for(project: LOADED_PROJECT) -> Result[LOADED_PROJECT, string] static is
+            let manifest = project.manifest
+
+            if manifest.kind != ManifestKind.PROGRAM /\ manifest.kind != ManifestKind.LIBRARY then
+                return ERROR("{manifest.name} holds no sources, so it has no tests")
+            fi
+
+            let test = manifest.test
+
+            if !test? then
+                return ERROR(
+                    "ghul-project.json has no test section; add one naming the test sources and the test library, as in "
+                    "\"test\": {{ \"sources\": [\"tests/**/*.ghul\"], \"dependencies\": {{ \"ghul-testing\": {{ \"git\": \"{KNOWN_LIBRARIES.repository("ghul-testing")}\", \"version\": \">=0.3.0\" }} }} }}")
+            fi
+
+            let sources = LIST[string](manifest.sources)
+
+            sources.add_range(test.sources)
+
+            let dependencies = MAP[string, DEPENDENCY]()
+
+            for (name, dependency) in manifest.dependencies do
+                dependencies[name] = dependency
+            od
+
+            for (name, dependency) in test.dependencies do
+                if dependencies.contains_key(name) then
+                    return ERROR("{name} is declared in both dependencies and test.dependencies; declare it once")
+                fi
+
+                dependencies[name] = dependency
+            od
+
+            let options = manifest.options
+
+            // A project's own top-level statements are compiled but not
+            // run: the test entry is the one that runs.
+            let suppress = LIST[string](options.suppress)
+
+            suppress.add("top-level-statements-not-run")
+
+            let reflection = if (options.reflection ?? "") =~ "all" then "all" else "roots" fi
+
+            let test_options =
+                MANIFEST_OPTIONS(
+                    options.underscore_access,
+                    options.global_namespace,
+                    options.default_use,
+                    options.define,
+                    suppress,
+                    options.warn_as_error,
+                    options.warn,
+                    options.warn_as_hint,
+                    options.optimise,
+                    reflection,
+                    options.parallel_gc)
+
+            let test_manifest =
+                MANIFEST(
+                    "{manifest.name}-tests",
+                    manifest.version,
+                    ManifestKind.PROGRAM,
+                    manifest.targets,
+                    sources,
+                    test_options,
+                    dependencies,
+                    manifest.host_wasm,
+                    manifest.tools)
+
+            test_manifest.native = manifest.native
+
+            return OK(LOADED_PROJECT(test_manifest, project.directory, project.target))
+        si
+
+        /// The source of the entry a test build runs: it finds the tests
+        /// through reflection and runs them with the arguments it is given.
+        entry_source: string static =>
+            "namespace Ghul.Test.Generated is\n"
+            "    {ENTRY}(arguments: string[]) -> int => Testing.RUNNER.run(Testing.DISCOVERY.tests(), arguments)\n"
+            "si\n"
+
+        /// Writes the entry beside the build's output and returns the
+        /// arguments that add it to the compiler's own: the file, and the
+        /// option naming it as the entry.
+        ///
+        /// - output: where the test build is written
+        entry_arguments(output: string) -> Collections.List[string] static is
+            let path = Path.join([Path.get_directory_name(output)!, "ghul-test-entry.ghul"])
+
+            IO.Directory.create_directory(Path.get_directory_name(path)!)
+            File.write_all_text(path, entry_source)
+
+            return LIST[string](["--entry", ENTRY, path])
+        si
+    si
+si

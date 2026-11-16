@@ -1,0 +1,178 @@
+namespace Ghul.Cli.Tests is
+    use Collections.LIST
+
+    use Ghul.Project.BuildTarget
+    use Ghul.Project.LOADED_PROJECT
+    use Ghul.Project.MANIFEST
+    use Ghul.Project.MANIFEST_READER
+    use Ghul.Project.ManifestKind
+    use Ghul.Project.PROJECT_SCAFFOLD
+    use Ghul.Project.ReadOutcome
+    use Ghul.Project.TAP_LINE
+    use Ghul.Project.TAP_LINES
+    use Ghul.Project.TEST_BUILD
+    use Ghul.Project.TEST_RUN_PROGRESS
+
+    use Result.*
+
+    use Assert = Microsoft.VisualStudio.TestTools.UnitTesting.Assert;
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // What `ghul test` reads from a manifest, the project it builds, and how
+    // it follows the run.
+    @TestClass()
+    class TEST_BUILD_TESTS is
+        init() is si
+
+        _manifest(test_section: string) -> MANIFEST is
+            let text =
+                "{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"], \"sources\": [\"src/*.ghul\"], "
+                "\"dependencies\": {{ \"ghul-runtime\": {{ \"version\": \">=42.4.0\" }} }}{test_section} }}"
+
+            let outcome = MANIFEST_READER.read(text, "ghul-project.json")
+
+            if let failed: ReadOutcome.PROBLEMS = outcome then
+                Assert.fail("expected a manifest, got: {string.join("; ", failed.problems |> Ghul.Pipes.map(p => p.describe()))}")
+            fi
+
+            return cast ReadOutcome.OK(outcome).manifest
+        si
+
+        _problems(test_section: string) -> string is
+            let text = "{{ \"name\": \"app\", \"kind\": \"program\", \"targets\": [\"wasm\"]{test_section} }}"
+
+            if let failed: ReadOutcome.PROBLEMS = MANIFEST_READER.read(text, "ghul-project.json") then
+                return string.join("; ", failed.problems |> Ghul.Pipes.map(p => p.describe()))
+            fi
+
+            return ""
+        si
+
+        _testing: string static =>
+            ", \"test\": {{ \"sources\": [\"tests/**/*.ghul\"], \"dependencies\": {{ \"ghul-testing\": {{ \"git\": \"https://github.com/ghul-lang/ghul-testing\", \"version\": \">=0.3.0\" }} }} }}"
+
+        @Test()
+        a_manifest_without_a_test_section_has_none() is
+            assert !_manifest("").test?
+        si
+
+        @Test()
+        a_test_section_names_its_sources_and_libraries() is
+            let test = _manifest(_testing).test!
+
+            assert test.sources.count == 1 /\ test.sources[0] =~ "tests/**/*.ghul"
+            assert test.dependencies.contains_key("ghul-testing")
+        si
+
+        // Nothing is assumed about where tests are: a section that does not
+        // say is a problem, not a default.
+        @Test()
+        a_test_section_without_sources_is_a_problem() is
+            let problems = _problems(", \"test\": {{ \"dependencies\": {{}} }}")
+
+            assert problems.contains("test.sources") else problems
+        si
+
+        @Test()
+        an_unknown_key_in_the_test_section_is_a_problem() is
+            let problems = _problems(", \"test\": {{ \"sources\": [], \"runner\": \"x\" }}")
+
+            assert problems.contains("test.runner") else problems
+        si
+
+        @Test()
+        a_project_without_a_test_section_is_refused_saying_what_to_add() is
+            let built = TEST_BUILD.project_for(LOADED_PROJECT(_manifest(""), "/p", BuildTarget.WASM))
+
+            assert !built?
+            assert (cast Result.ERROR(built)).error.contains("\"test\": {{") else (cast Result.ERROR(built)).error
+        si
+
+        // The test build is the project with its tests beside it, its types
+        // described for reflection, and the warning about its own top-level
+        // statements, which do not run, left out.
+        @Test()
+        the_test_build_adds_the_test_sources_and_libraries() is
+            let built = TEST_BUILD.project_for(LOADED_PROJECT(_manifest(_testing), "/p", BuildTarget.WASM))
+
+            assert built? else (cast Result.ERROR(built)).error
+
+            let manifest = built!.manifest
+
+            assert manifest.name =~ "app-tests"
+            assert manifest.kind == ManifestKind.PROGRAM
+            assert manifest.sources.count == 2 /\ manifest.sources[1] =~ "tests/**/*.ghul"
+            assert manifest.dependencies.contains_key("ghul-runtime") /\ manifest.dependencies.contains_key("ghul-testing")
+            assert manifest.options.reflection =~ "roots"
+            assert manifest.options.suppress |> Ghul.Pipes.any(s => s =~ "top-level-statements-not-run")
+        si
+
+        @Test()
+        a_library_named_twice_is_refused() is
+            let section = ", \"test\": {{ \"sources\": [\"tests/*.ghul\"], \"dependencies\": {{ \"ghul-runtime\": {{ \"version\": \">=42.4.0\" }} }} }}"
+            let built = TEST_BUILD.project_for(LOADED_PROJECT(_manifest(section), "/p", BuildTarget.WASM))
+
+            assert !built?
+            assert (cast Result.ERROR(built)).error.contains("ghul-runtime")
+        si
+
+        @Test()
+        the_entry_runs_the_discovered_tests() is
+            assert TEST_BUILD.entry_source.contains("{TEST_BUILD.ENTRY}(arguments: string[]) -> int => Testing.RUNNER.run(Testing.DISCOVERY.tests(), arguments)")
+        si
+
+        @Test()
+        tap_lines_read_the_plan_and_each_result() is
+            assert (cast TAP_LINE.PLAN(TAP_LINES.read("1..12"))).count == 12
+
+            let passed = cast TAP_LINE.RESULT(TAP_LINES.read("ok 3 - Maths.adds"))
+
+            assert passed.passed /\ passed.name =~ "Maths.adds"
+
+            let failed = cast TAP_LINE.RESULT(TAP_LINES.read("not ok 4 - Maths.subtracts"))
+
+            assert !failed.passed /\ failed.name =~ "Maths.subtracts"
+
+            assert isa TAP_LINE.OTHER(TAP_LINES.read("TAP version 14"))
+            assert isa TAP_LINE.OTHER(TAP_LINES.read("  message: \"ok 5 - not a result\""))
+        si
+
+        // The snapshot keeps ghul-test's field names: they are what the
+        // status line and the dashboard read.
+        @Test()
+        the_progress_snapshot_uses_ghul_tests_field_names() is
+            let record = TEST_RUN_PROGRESS()
+
+            record.total = 3
+            record.passed = 2
+
+            let json = record.to_json()
+
+            for key in ["version", "pid", "cwd", "suites", "state", "started_at", "updated_at", "total", "completed", "passed", "failed", "skipped", "percent", "running", "last"] do
+                assert json.contains("\"{key}\":") else "missing {key}: {json}"
+            od
+
+            assert json.contains("\"total\":3") /\ json.contains("\"passed\":2") /\ json.contains("\"version\":1")
+        si
+
+        // `ghul new` writes the test section out in full, so the manifest
+        // says where the tests are rather than relying on a default.
+        @Test()
+        a_new_project_writes_its_test_section_and_a_first_test() is
+            let libraries = LIST[(tool: string, version: string)]([(tool = "ghul-testing", version = "0.3.0")])
+            let files = PROJECT_SCAFFOLD.files("hello", LIST[BuildTarget]([BuildTarget.WASM]), LIST[(tool: string, version: string)](), LIST[(tool: string, version: string)](), libraries)
+
+            let manifest_text = files[0].text
+            let read = MANIFEST_READER.read(manifest_text, "ghul-project.json")
+
+            assert isa ReadOutcome.OK(read) else manifest_text
+
+            let test = cast ReadOutcome.OK(read).manifest.test!
+
+            assert test.sources[0] =~ "tests/**/*.ghul"
+            assert test.dependencies.contains_key("ghul-testing")
+            assert files |> Ghul.Pipes.any(f => f.path.ends_with("example_tests.ghul") /\ f.text.contains("@test()"))
+        si
+    si
+si

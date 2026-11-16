@@ -332,6 +332,7 @@ namespace Ghul.Cli is
         out.write_line("       ghul rosetta <task>[/<part>] [<directory>]")
         out.write_line("       ghul build [--target <name>] [--debug] [--optimise <0-3>]")
         out.write_line("       ghul run [--target <name>] [--debug] [--optimise <0-3>] [-- args...]")
+        out.write_line("       ghul test [--target <name>] [--debug] [--optimise <0-3>] [-- runner args...]")
         out.write_line("       ghul project response-file --output <path> [--source-globs <path>] [--target <name>] [--compiler-host <host>]")
         out.write_line("       ghul project compiler [--json] [--compiler-host <host>]")
         out.write_line("       ghul install <compiler|wasmtime|node|llvm>")
@@ -403,6 +404,23 @@ namespace Ghul.Cli is
 
         if runtime? then
             libraries.add((tool = Ghul.Project.RUNTIME_LIBRARY.NAME, version = runtime!.substring(1)))
+        fi
+
+        return libraries
+    si
+
+    // The libraries a new project's tests use, at their newest releases:
+    // ghul-testing, where its newest release can be found.
+    new_project_test_libraries() -> Collections.List[(tool: string, version: string)] is
+        let libraries = Collections.LIST[(tool: string, version: string)]()
+        let resolver = Ghul.Project.LIBRARY_RESOLVER(Ghul.Project.LIBRARY_CACHE.for_this_user())
+
+        if let repository = Ghul.Project.KNOWN_LIBRARIES.repository("ghul-testing") then
+            let newest = resolver.latest("ghul-testing", repository)
+
+            if newest? then
+                libraries.add((tool = "ghul-testing", version = newest!.substring(1)))
+            fi
         fi
 
         return libraries
@@ -499,7 +517,7 @@ namespace Ghul.Cli is
         fi
 
         let command_line = parsed!
-        let created = Ghul.Project.PROJECT_SCAFFOLD.create(command_line, new_project_floors(command_line.targets), new_project_libraries())
+        let created = Ghul.Project.PROJECT_SCAFFOLD.create(command_line, new_project_floors(command_line.targets), new_project_libraries(), new_project_test_libraries())
 
         if let (problem): ERROR = created then
             LOG.say("{problem}")
@@ -1444,7 +1462,16 @@ namespace Ghul.Cli is
     // `ghul build` and `ghul run` in a directory with a manifest: the
     // compiler the manifest names is installed if need be, the project is
     // built into out/<target>/, or out/<target>-debug/ and the like for other modes, and a run then starts what was built.
-    cmd_project(rest: Collections.List[string], wants_run: bool) -> int is
+    cmd_project(rest: Collections.List[string], wants_run: bool) -> int =>
+        cmd_project(rest, wants_run, false)
+
+    // `ghul test`: the project built with its test section and an entry
+    // that finds and runs its tests, then run, with its progress published
+    // where ghul-test publishes its own.
+    cmd_test(rest: Collections.List[string]) -> int =>
+        cmd_project(rest, true, true)
+
+    cmd_project(rest: Collections.List[string], wants_run: bool, for_tests: bool) -> int is
         let say = (message: string) -> void => LOG.say("{message}")
         let command_line = Ghul.Project.PROJECT_COMMAND_LINE.parse(rest, wants_run)
 
@@ -1487,8 +1514,36 @@ namespace Ghul.Cli is
         let as_loaded = cast Ghul.Project.LoadOutcome.LOADED(loaded).project
         let overrides = command_line.overrides
 
-        let project =
+        let applied =
             Ghul.Project.LOADED_PROJECT(overrides.apply(as_loaded.manifest), as_loaded.directory, as_loaded.target)
+
+        let project mut = applied
+
+        if for_tests then
+            let for_test = Ghul.Project.TEST_BUILD.project_for(applied)
+
+            if let (problem): ERROR = for_test then
+                say(problem)
+                return 1
+            fi
+
+            project = for_test!
+        fi
+
+        let start = (output: string) -> int is
+            if !for_tests then
+                return Ghul.Project.PROJECT_RUN.run(project, output, command_line.program_arguments, global_defaults.host_wasm, say)
+            fi
+
+            let progress = Ghul.Project.TEST_PROGRESS("{Path.get_file_name(project.directory)}/tests")
+
+            try
+                return Ghul.Project.PROJECT_RUN.run(
+                    project, output, command_line.program_arguments, global_defaults.host_wasm, say, line => progress.observe(line))
+            finally
+                progress.close()
+            yrt
+        si
 
         let mode =
             Ghul.Project.BUILD_MODE(command_line.debug, command_line.optimise ?? project.manifest.options.optimise)
@@ -1508,13 +1563,7 @@ namespace Ghul.Cli is
         // since runs it as it stands, with nothing said: the build is not
         // what was asked for, the program is.
         if wants_run /\ Ghul.Project.PROJECT_BUILD.is_fresh(project, mode) then
-            return
-                Ghul.Project.PROJECT_RUN.run(
-                    project,
-                    Ghul.Project.PROJECT_BUILD.output_path(project, mode),
-                    command_line.program_arguments,
-                    global_defaults.host_wasm,
-                    say)
+            return start(Ghul.Project.PROJECT_BUILD.output_path(project, mode))
         fi
 
         if let reason: string = chosen.reason then
@@ -1548,20 +1597,14 @@ namespace Ghul.Cli is
                     linker,
                     mode,
                     say,
-                    Collections.LIST[string](),
+                    if for_tests then Ghul.Project.TEST_BUILD.entry_arguments(Ghul.Project.PROJECT_BUILD.output_path(project, mode)) else Collections.LIST[string]() fi,
                     true)
 
             if exit_code != 0 \/ !wants_run then
                 return exit_code
             fi
 
-            return
-                Ghul.Project.PROJECT_RUN.run(
-                    project,
-                    Ghul.Project.PROJECT_BUILD.output_path(project, mode),
-                    command_line.program_arguments,
-                    global_defaults.host_wasm,
-                    say)
+            return start(Ghul.Project.PROJECT_BUILD.output_path(project, mode))
         fi
 
         say("ghul.compiler not installed")
@@ -1949,7 +1992,7 @@ namespace Ghul.Cli is
 
     // Whether `word` is one of the commands, rather than a script to run.
     is_verb(word: string) -> bool =>
-        ["run", "compile", "new", "add", "rosetta", "build", "project", "install-compiler", "install", "update", "cache", "repl", "version"]
+        ["run", "compile", "new", "add", "rosetta", "build", "test", "project", "install-compiler", "install", "update", "cache", "repl", "version"]
             |> any(verb => verb =~ word)
 
     entry(args: ARRAY[string]) -> int is
@@ -2034,6 +2077,10 @@ namespace Ghul.Cli is
 
         if verb =~ "build" then
             return cmd_project(rest, false)
+        fi
+
+        if verb =~ "test" then
+            return cmd_test(rest)
         fi
 
         if verb =~ "project" then

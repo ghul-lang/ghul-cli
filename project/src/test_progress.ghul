@@ -1,0 +1,249 @@
+namespace Ghul.Project is
+    use Collections.LIST
+    use IO.Directory
+    use IO.File
+    use IO.Path
+
+    /// One line of a TAP stream, as far as a run's progress needs it: the
+    /// plan, a test's result, or anything else.
+    @suppress("non-pascal-case-name")
+    union TAP_LINE is
+        /// `1..N`: how many tests the run holds.
+        PLAN(count: int);
+
+        /// `ok N - name` or `not ok N - name`.
+        RESULT(passed: bool, name: string);
+
+        /// Any other line: the version, a diagnostic block, a comment.
+        OTHER;
+    si
+
+    /// Reads the lines of the TAP version 14 stream the test runner writes.
+    class TAP_LINES is
+        /// What `line` says.
+        ///
+        /// - line: one line of the stream
+        read(line: string) -> TAP_LINE static is
+            if line.starts_with("1..") then
+                let count: int mut
+
+                if int.try_parse(line.substring(3), count ref) then
+                    return TAP_LINE.PLAN(count)
+                fi
+            elif line.starts_with("ok ") then
+                return TAP_LINE.RESULT(true, _name(line.substring(3)))
+            elif line.starts_with("not ok ") then
+                return TAP_LINE.RESULT(false, _name(line.substring(7)))
+            fi
+
+            return TAP_LINE.OTHER
+        si
+
+        // The test's name from what follows `ok `: its number, then ` - `
+        // and the name.
+        _name(rest: string) -> string static is
+            let dash = rest.index_of(" - ")
+
+            return if dash >= 0 then rest.substring(dash + 3) else rest fi
+        si
+    si
+
+    /// A snapshot of one run's progress, as ghul-test writes it: the field
+    /// names are the format the status line and the dashboard read, and
+    /// `version` gates any change to it.
+    @suppress("non-upper-snake-case-name")
+    class TEST_RUN_PROGRESS is
+        version: int public
+        pid: int public
+        cwd: string public
+        suites: ARRAY[string] public
+        state: string public
+        started_at: long public
+        updated_at: long public
+        total: int public
+        completed: int public
+        passed: int public
+        failed: int public
+        skipped: int public
+        percent: int public
+        running: ARRAY[string] public
+        last: string public
+
+        init() is
+            version = 1
+            cwd = ""
+            suites = []
+            state = "running"
+            running = []
+            last = ""
+        si
+
+        /// The snapshot as JSON, written member by member so no reflection
+        /// is needed to write it.
+        to_json() -> string is
+            let use buffer = IO.MemoryStream()
+            let use writer = System.Text.Json.Utf8JsonWriter(buffer, _)
+
+            writer.write_start_object()
+            writer.write_number("version", version)
+            writer.write_number("pid", pid)
+            writer.write_string("cwd", cwd)
+            writer.write_start_array("suites")
+
+            for suite in suites do
+                writer.write_string_value(suite)
+            od
+
+            writer.write_end_array()
+            writer.write_string("state", state)
+            writer.write_number("started_at", started_at)
+            writer.write_number("updated_at", updated_at)
+            writer.write_number("total", total)
+            writer.write_number("completed", completed)
+            writer.write_number("passed", passed)
+            writer.write_number("failed", failed)
+            writer.write_number("skipped", skipped)
+            writer.write_number("percent", percent)
+            writer.write_start_array("running")
+
+            for name in running do
+                writer.write_string_value(name)
+            od
+
+            writer.write_end_array()
+            writer.write_string("last", last)
+            writer.write_end_object()
+            writer.flush()
+
+            return System.Text.Encoding.utf8.get_string(buffer.to_array())
+        si
+    si
+
+    /// Publishes a `ghul test` run's progress where ghul-test publishes its
+    /// own, so whatever shows ghul-test's runs shows this one: a snapshot in
+    /// `$XDG_RUNTIME_DIR/ghul-test/<pid>.json` and an append-only log beside
+    /// it in `<pid>.events`. Best effort: where the directory is missing or
+    /// cannot be written, or `GHUL_TEST_NO_PROGRESS` is set, nothing is
+    /// written and the run is not affected.
+    class TEST_PROGRESS is
+        _enabled: bool
+        _snapshot_path: string
+        _snapshot_temp_path: string
+        _events_path: string
+        _record: TEST_RUN_PROGRESS
+
+        /// Starts reporting a run of `suite`.
+        ///
+        /// - suite: what the run is of, as a status line names it
+        init(suite: string) is
+            _record = TEST_RUN_PROGRESS()
+            _snapshot_path = ""
+            _snapshot_temp_path = ""
+            _events_path = ""
+
+            try
+                _record.pid = System.Environment.process_id
+                _record.cwd = System.Environment.current_directory
+                _record.suites = [suite]
+                _record.started_at = _now()
+                _record.updated_at = _record.started_at
+
+                if let directory = state_directory() then
+                    Directory.create_directory(directory)
+
+                    _snapshot_path = Path.join(directory, "{_record.pid}.json")
+                    _snapshot_temp_path = "{_snapshot_path}.tmp"
+                    _events_path = Path.join(directory, "{_record.pid}.events")
+                    _enabled = true
+                fi
+            catch ex: System.Exception
+                _enabled = false
+            yrt
+
+            _event("run", "")
+            _flush()
+        si
+
+        /// Where progress is written, or null where it is not.
+        state_directory() -> string? static is
+            if System.Environment.get_environment_variable("GHUL_TEST_NO_PROGRESS")? then
+                return null
+            fi
+
+            let runtime_directory = System.Environment.get_environment_variable("XDG_RUNTIME_DIR")
+
+            if string.is_null_or_white_space(runtime_directory) then
+                return null
+            fi
+
+            return Path.join(runtime_directory!, "ghul-test")
+        si
+
+        /// Records what one line of the run's TAP stream says.
+        ///
+        /// - line: the line the test program wrote
+        observe(line: string) is
+            let read = TAP_LINES.read(line)
+
+            if let plan: TAP_LINE.PLAN = read then
+                _record.total = plan.count
+                _flush()
+            elif let result: TAP_LINE.RESULT = read then
+                _record.completed = _record.completed + 1
+
+                if result.passed then
+                    _record.passed = _record.passed + 1
+                else
+                    _record.failed = _record.failed + 1
+                fi
+
+                _record.last = result.name
+                _event(if result.passed then "pass" else "fail" fi, result.name)
+                _flush()
+            fi
+        si
+
+        /// Records that the run has ended. The snapshot is left in place, so
+        /// what shows it can still show the outcome.
+        close() is
+            _record.state = "done"
+            _event("done", "")
+            _flush()
+        si
+
+        _now() -> long static => System.DateTimeOffset.utc_now.to_unix_time_milliseconds()
+
+        _flush() is
+            if !_enabled then
+                return
+            fi
+
+            _record.updated_at = _now()
+
+            if _record.total > 0 then
+                _record.percent = 100 * _record.completed / _record.total
+            fi
+
+            try
+                File.write_all_text(_snapshot_temp_path, _record.to_json())
+                File.move(_snapshot_temp_path, _snapshot_path, true)
+            catch ex: System.Exception
+                _enabled = false
+            yrt
+        si
+
+        _event(kind: string, name: string) is
+            if !_enabled then
+                return
+            fi
+
+            let suffix = if name.length > 0 then " {name}" else "" fi
+
+            try
+                File.append_all_text(_events_path, "{_now()} {kind} {_record.completed}/{_record.total}{suffix}\n")
+            catch ex: System.Exception
+                _enabled = false
+            yrt
+        si
+    si
+si

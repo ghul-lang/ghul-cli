@@ -82,11 +82,23 @@ namespace Ghul.Project is
         /// - targets: the targets the project builds for
         /// - floors: the oldest release of each tool the project is written with
         /// - libraries: the oldest release of ghul-runtime it is written with
-        files(name: string, targets: Collections.List[BuildTarget], floors: Collections.List[(tool: string, version: string)], libraries: Collections.List[(tool: string, version: string)]) -> Collections.List[(path: string, text: string)] static is
+        files(name: string, targets: Collections.List[BuildTarget], floors: Collections.List[(tool: string, version: string)], libraries: Collections.List[(tool: string, version: string)]) -> Collections.List[(path: string, text: string)] static =>
+            files(name, targets, floors, libraries, LIST[(tool: string, version: string)]())
+
+        /// The files a new project holds, with a test section naming
+        /// `test_libraries` and a first test under `tests/`.
+        ///
+        /// - name: the project's name, as its manifest records it
+        /// - targets: the targets the project builds for
+        /// - floors: the oldest release of each tool the project is written with
+        /// - libraries: the oldest release of ghul-runtime it is written with
+        /// - test_libraries: the oldest release of each library its tests use
+        files(name: string, targets: Collections.List[BuildTarget], floors: Collections.List[(tool: string, version: string)], libraries: Collections.List[(tool: string, version: string)], test_libraries: Collections.List[(tool: string, version: string)]) -> Collections.List[(path: string, text: string)] static is
             let result = LIST[(path: string, text: string)]()
 
-            result.add((path = MANIFEST_LOCATION.FILE_NAME, text = manifest_text(name, targets, floors, libraries)))
+            result.add((path = MANIFEST_LOCATION.FILE_NAME, text = manifest_text(name, targets, floors, libraries, test_libraries)))
             result.add((path = Path.join(["src", "main.ghul"]), text = "use IO.Std.write_line\n\nentry() is\n    write_line(\"hello\")\nsi\n"))
+            result.add((path = Path.join(["tests", "example_tests.ghul"]), text = EXAMPLE_TEST))
             result.add((path = ".gitignore", text = "out/\n"))
 
             return result
@@ -99,7 +111,18 @@ namespace Ghul.Project is
         /// - targets: the targets the project builds for
         /// - floors: the oldest release of each tool the project is written with, as `>=` ranges
         /// - libraries: the oldest release of each library the compiler compiles in, as `>=` ranges
-        manifest_text(name: string, targets: Collections.List[BuildTarget], floors: Collections.List[(tool: string, version: string)], libraries: Collections.List[(tool: string, version: string)]) -> string static is
+        manifest_text(name: string, targets: Collections.List[BuildTarget], floors: Collections.List[(tool: string, version: string)], libraries: Collections.List[(tool: string, version: string)]) -> string static =>
+            manifest_text(name, targets, floors, libraries, LIST[(tool: string, version: string)]())
+
+        /// The manifest of a new program, as above, with a test section
+        /// naming the sources under `tests/` and `test_libraries`.
+        ///
+        /// - name: the project's name
+        /// - targets: the targets the project builds for
+        /// - floors: the oldest release of each tool the project is written with, as `>=` ranges
+        /// - libraries: the oldest release of each library the compiler compiles in, as `>=` ranges
+        /// - test_libraries: the oldest release of each library the tests use, as `>=` ranges
+        manifest_text(name: string, targets: Collections.List[BuildTarget], floors: Collections.List[(tool: string, version: string)], libraries: Collections.List[(tool: string, version: string)], test_libraries: Collections.List[(tool: string, version: string)]) -> string static is
             let quoted = LIST[string]()
 
             for target in targets do
@@ -116,14 +139,43 @@ namespace Ghul.Project is
 
             let dependencies_text = if dependencies.count > 0 then ",\n    \"dependencies\": {{ {string.join(", ", dependencies)} }}" else "" fi
 
+            let test_dependencies = LIST[string]()
+
+            for library in test_libraries do
+                let repository = KNOWN_LIBRARIES.repository(library.tool)
+                let git = if let url = repository then "\"git\": \"{url}\", " else "" fi
+
+                test_dependencies.add("\"{library.tool}\": {{ {git}\"version\": \">={library.version}\" }}")
+            od
+
+            let test_dependencies_text =
+                if test_dependencies.count > 0 then ",\n        \"dependencies\": {{ {string.join(", ", test_dependencies)} }}" else "" fi
+
             return
                 "{{\n"
                 "    \"name\": \"{name}\",\n"
                 "    \"kind\": \"program\",\n"
                 "    \"targets\": [{string.join(", ", quoted)}],\n"
-                "    \"sources\": [\"src/**/*.ghul\"]{tools_text}{dependencies_text}\n"
+                "    \"sources\": [\"src/**/*.ghul\"]{tools_text}{dependencies_text},\n"
+                "    \"test\": {{\n"
+                "        \"sources\": [\"tests/**/*.ghul\"]{test_dependencies_text}\n"
+                "    }}\n"
                 "}}\n"
         si
+
+        /// The first test a new project holds, which `ghul test` runs.
+        EXAMPLE_TEST: string static =>
+            "namespace Tests is\n"
+            "    class ExampleTests is\n"
+            "        init() is si\n"
+            "\n"
+            "        @test()\n"
+            "        adds() is\n"
+            "            assert 1 + 1 == 2\n"
+            "        si\n"
+            "    si\n"
+            "si\n"
+
 
         /// Creates the project `command_line` describes, answering what went
         /// wrong, or null once it is written. An existing directory that is
@@ -133,7 +185,17 @@ namespace Ghul.Project is
         /// - command_line: the parsed arguments, with no problem
         /// - floors: the oldest release of each tool the project is written with
         /// - libraries: the oldest release of ghul-runtime it is written with
-        create(command_line: NEW_COMMAND_LINE, floors: Collections.List[(tool: string, version: string)], libraries: Collections.List[(tool: string, version: string)]) -> Result[unit, string] static is
+        create(command_line: NEW_COMMAND_LINE, floors: Collections.List[(tool: string, version: string)], libraries: Collections.List[(tool: string, version: string)]) -> Result[unit, string] static =>
+            create(command_line, floors, libraries, LIST[(tool: string, version: string)]())
+
+        /// Creates the project `command_line` describes, as above, with a
+        /// test section naming `test_libraries`.
+        ///
+        /// - command_line: the parsed arguments, with no problem
+        /// - floors: the oldest release of each tool the project is written with
+        /// - libraries: the oldest release of ghul-runtime it is written with
+        /// - test_libraries: the oldest release of each library its tests use
+        create(command_line: NEW_COMMAND_LINE, floors: Collections.List[(tool: string, version: string)], libraries: Collections.List[(tool: string, version: string)], test_libraries: Collections.List[(tool: string, version: string)]) -> Result[unit, string] static is
             let directory = Path.get_full_path(command_line.directory!)
             let name = Path.get_file_name(Path.trim_ending_directory_separator(directory)) ?? ""
 
@@ -141,7 +203,7 @@ namespace Ghul.Project is
                 return ERROR("{command_line.directory} already exists and is not empty")
             fi
 
-            let written = files(name, command_line.targets, floors, libraries)
+            let written = files(name, command_line.targets, floors, libraries, test_libraries)
             let manifest = written[0]
             let read = MANIFEST_READER.read(manifest.text, Path.join([directory, manifest.path]))
 

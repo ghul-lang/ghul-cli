@@ -4,7 +4,7 @@ namespace Ghul.Project is
     class KNOWN_LIBRARIES is
         /// The names `repository` knows, in the order a usage message
         /// lists them.
-        NAMES: ARRAY[string] static => [RUNTIME_LIBRARY.NAME, "ghul-raster"]
+        NAMES: ARRAY[string] static => [RUNTIME_LIBRARY.NAME, "ghul-raster", "ghul-testing"]
 
         /// Where the library called `name` is fetched from, or null where
         /// `name` is not one of `NAMES`.
@@ -17,6 +17,10 @@ namespace Ghul.Project is
 
             if name =~ "ghul-raster" then
                 return "https://github.com/ghul-lang/ghul-raster"
+            fi
+
+            if name =~ "ghul-testing" then
+                return "https://github.com/ghul-lang/ghul-testing"
             fi
 
             return null
