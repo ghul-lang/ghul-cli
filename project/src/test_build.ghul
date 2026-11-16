@@ -77,7 +77,8 @@ namespace Ghul.Project is
                     options.warn_as_hint,
                     options.optimise,
                     reflection,
-                    options.parallel_gc)
+                    options.parallel_gc,
+                    options.dynamic_link)
 
             let test_manifest =
                 MANIFEST(

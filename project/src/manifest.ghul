@@ -61,16 +61,57 @@ namespace Ghul.Project is
         /// library names are not paths and are left as they are.
         ///
         /// - root: the directory the paths are relative to
-        resolved(root: string) -> NATIVE_INPUTS =>
-            NATIVE_INPUTS(
+        resolved(root: string) -> NATIVE_INPUTS is
+            let result = NATIVE_INPUTS(
                 Collections.LIST[string](link |> Ghul.Pipes.map(path => _absolute(root, path))),
                 Collections.LIST[string](libraries),
                 Collections.LIST[string](library_paths |> Ghul.Pipes.map(path => _absolute(root, path))),
                 if let module = externs then _absolute(root, module) else null fi)
 
+            result.dependencies.add_range(dependencies)
+
+            return result
+        si
+
+        /// The C libraries the project declares it needs under the llvm
+        /// section's `native` key, each checked and linked by name when a
+        /// program that uses the project is built.
+        dependencies: Collections.LIST[NATIVE_DEPENDENCY] public
+
+        init(..) is
+            dependencies = Collections.LIST[NATIVE_DEPENDENCY]()
+        si
+
         _absolute(root: string, path: string) -> string static =>
             IO.Path.get_full_path(IO.Path.combine(root, path))
     si
+
+    /// A C library a project declares under the llvm section's `native` key:
+    /// the shared library a dynamically linked program needs, or the static
+    /// archive a statically linked one links in.
+    ///
+    /// - name: the key it is declared under, which names it in messages
+    /// - soname: the shared library's soname, such as `libz.so.1`: the major
+    ///   version a dynamically linked program is built against, which the
+    ///   dynamic loader checks again when the program starts
+    /// - version: the versions of the library's release the project works
+    ///   with, or null for any
+    /// - file_version: whether the version in the shared library's file name
+    ///   is its release's version, as zlib's is, so that it can be checked
+    ///   where pkg-config does not know the library
+    /// - pkg_config: the library's pkg-config package, asked for its version
+    ///   where pkg-config is installed
+    /// - libraries: the names linked, each as `lib<name>`
+    /// - install: what to install where it is missing, by distribution
+    class NATIVE_DEPENDENCY(
+        name: string,
+        soname: string,
+        version: VERSION_RANGE?,
+        file_version: bool,
+        pkg_config: string,
+        libraries: Collections.List[string],
+        install: Collections.Map[string, string]
+    ) is si
 
     /// The manifest's `test` section: the sources that hold the project's
     /// tests and the libraries they need, both added to the project's own
@@ -127,7 +168,8 @@ namespace Ghul.Project is
         warn_as_hint: Collections.List[string],
         optimise: int?,
         reflection: string?,
-        parallel_gc: bool
+        parallel_gc: bool,
+        dynamic_link: bool
     ) is si
 
     // Where a library comes from: a git repository at a tag or a branch,
