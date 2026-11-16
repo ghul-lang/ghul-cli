@@ -12,7 +12,7 @@ namespace Ghul.Project is
     /// source libraries whether declared or not.
     ///
     /// Each is a directory holding a `ghul-project.json`, declared by `path`
-    /// or as a `git` repository at a `tag`, and fetched into the library cache
+    /// or as a `git` repository at a `version` or a `branch`, and fetched into the library cache
     /// as ghul-runtime is. A library's own dependencies are
     /// found the same way, a `path` read relative to that library, and come
     /// before it, so every library follows everything it uses.
@@ -168,7 +168,7 @@ namespace Ghul.Project is
                 return OK(tag)
             fi
 
-            return ERROR("{name} must be declared with a version, a tag or a path")
+            return ERROR("{name} must be declared with a version, a branch or a path")
         si
 
         // The directory a dependency's library is in, fetching it where it is
@@ -179,6 +179,20 @@ namespace Ghul.Project is
             fi
 
             let git = cast DEPENDENCY.GIT(declared)
+
+            if !git.version? /\ !git.tag? then
+                if let branch = git.branch then
+                    let at_head = _cache.fetch_branch(git.url, branch)
+
+                    if let (problem): Result.ERROR = at_head then
+                        return ERROR(problem)
+                    fi
+
+                    let head = at_head!
+
+                    return OK((root = _within(head.directory, git.directory), version = "0.0.0"))
+                fi
+            fi
 
             let resolved = _tag(name, git)
 
@@ -194,10 +208,14 @@ namespace Ghul.Project is
             fi
 
             let found = fetched!
-            let root = if let sub: string = git.directory then Path.join([found.directory, sub]) else found.directory fi
             let version = if tag.starts_with("v") then tag.substring(1) else tag fi
 
-            return OK((root = root, version = version))
+            return OK((root = _within(found.directory, git.directory), version = version))
         si
+
+        // The library's directory within what was fetched: the `directory`
+        // the dependency names, or the whole repository.
+        _within(fetched: string, directory: string?) -> string =>
+            if let sub: string = directory then Path.join([fetched, sub]) else fetched fi
     si
 si

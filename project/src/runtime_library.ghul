@@ -79,7 +79,11 @@ namespace Ghul.Project is
                     return _fetched(cache.fetch_tag(git.url, tag), git.directory, tag)
                 fi
 
-                return ERROR("{NAME} must be declared with a version, a tag or a path")
+                if let branch: string = git.branch then
+                    return _fetched(cache.fetch_branch(git.url, branch), git.directory, "0.0.0")
+                fi
+
+                return ERROR("{NAME} must be declared with a version, a branch or a path")
             fi
 
             return ERROR("{NAME} must be declared in the manifest's dependencies")

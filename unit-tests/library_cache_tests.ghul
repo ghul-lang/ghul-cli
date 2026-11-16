@@ -98,6 +98,80 @@ namespace Ghul.Cli.Tests is
             yrt
         si
 
+        @Test()
+        a_branch_is_fetched_as_the_files_of_its_head() is
+            let scratch = _scratch()
+
+            try
+                let repository = _repository(scratch)
+                let branch = _current_branch(repository)
+                let cache = LIBRARY_CACHE(Path.combine(scratch, "cache"))
+
+                let found = _found(cache.fetch_branch(_url(repository), branch))
+
+                assert found.commit =~ _commit_of(repository, "HEAD")
+                assert File.read_all_text(Path.combine(found.directory, "lib.ghul")) =~ "second"
+                assert !Directory.exists(Path.combine(found.directory, ".git"))
+            finally
+                _delete(scratch)
+            yrt
+        si
+
+        // As for a version range, the head is looked up on every build: a
+        // branch that has moved is fetched again at its new commit.
+        @Test()
+        a_branch_that_has_moved_is_fetched_at_its_new_head() is
+            let scratch = _scratch()
+
+            try
+                let repository = _repository(scratch)
+                let url = _url(repository)
+                let branch = _current_branch(repository)
+                let cache = LIBRARY_CACHE(Path.combine(scratch, "cache"))
+
+                let first = _found(cache.fetch_branch(url, branch))
+
+                File.write_all_text(Path.combine(repository, "lib.ghul"), "third")
+                _git(repository, ["commit", "--quiet", "-am", "third"])
+
+                let second = _found(cache.fetch_branch(url, branch))
+
+                assert second.commit !~ first.commit
+                assert second.commit =~ _commit_of(repository, "HEAD")
+                assert File.read_all_text(Path.combine(second.directory, "lib.ghul")) =~ "third"
+            finally
+                _delete(scratch)
+            yrt
+        si
+
+        // Where the repository cannot be reached, the commit the branch was
+        // at last is used, as the release chosen last is for a version range.
+        @Test()
+        a_branch_whose_repository_is_gone_is_read_at_the_commit_it_was_at_last() is
+            let scratch = _scratch()
+
+            try
+                let repository = _repository(scratch)
+                let url = _url(repository)
+                let branch = _current_branch(repository)
+                let cache = LIBRARY_CACHE(Path.combine(scratch, "cache"))
+
+                let first = _found(cache.fetch_branch(url, branch))
+
+                _delete(repository)
+
+                let second = _found(cache.fetch_branch(url, branch))
+
+                assert second.directory =~ first.directory
+                assert second.commit =~ first.commit
+            finally
+                _delete(scratch)
+            yrt
+        si
+
+        _current_branch(repository: string) -> string =>
+            GIT.run(LIST[string](["rev-parse", "--abbrev-ref", "HEAD"]), repository).output.trim()
+
         // A record found empty is one another process is still writing: it
         // must read as not there, not as the repository directory.
         @Test()
