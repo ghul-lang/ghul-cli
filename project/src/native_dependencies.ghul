@@ -142,7 +142,7 @@ namespace Ghul.Project is
                 let found = system.find_shared(library, library_paths)
 
                 if !found? then
-                    problems.add(_missing(first, "a shared library lib{library}.so, such as {dependency.soname}, wasn't found where the dynamic loader looks or in llvm.library-paths"))
+                    problems.add(_missing(first, true, "a shared library lib{library}.so, such as {dependency.soname}, wasn't found where the dynamic loader looks or in llvm.library-paths"))
                 elif i == 0 /\ found.soname !~ dependency.soname then
                     problems.add(
                         "{first.declarer} needs the native library {dependency.name} as {dependency.soname}, but the one found, {found.path}, is {_soname_text(found)}")
@@ -223,14 +223,14 @@ namespace Ghul.Project is
 
                 if let directory = found then
                     if system.is_glibc /\ is_system_directory(directory) then
-                        problems.add(_missing(first,
+                        problems.add(_missing(first, false,
                             "{Path.combine(directory, archive)} is glibc's, and this program links statically against musl; "
                             "link it dynamically against the system's {first.dependency.soname} with \"llvm\": {{ \"link-mode\": \"dynamic\" }}"))
                     else
                         result.add(library)
                     fi
                 else
-                    problems.add(_missing(first,
+                    problems.add(_missing(first, false,
                         "this program links statically, and no {archive} built for musl was found in llvm.library-paths or llvm.link; "
                         "link it dynamically against the system's {first.dependency.soname} with \"llvm\": {{ \"link-mode\": \"dynamic\" }}, "
                         "or add the directory of a musl {archive} to llvm.library-paths"))
@@ -240,11 +240,13 @@ namespace Ghul.Project is
             return result
         si
 
-        _missing(item: DECLARED_NATIVE, why: string) -> string static is
+        // Why `item` can't be linked, with what to install where installing
+        // it is the answer.
+        _missing(item: DECLARED_NATIVE, installing_helps: bool, why: string) -> string static is
             let dependency = item.dependency
             let wanted = if let range = dependency.version then " ({range})" else "" fi
             let hints = dependency.install |> Ghul.Pipes.map(pair => "{pair.key}: {pair.value}") |> Ghul.Pipes.join(", ")
-            let install = if hints.length > 0 then "\n  to install it: {hints}" else "" fi
+            let install = if installing_helps /\ hints.length > 0 then "\n  to install it: {hints}" else "" fi
 
             return "{item.declarer} needs the native library {dependency.name}{wanted}: {why}{install}"
         si

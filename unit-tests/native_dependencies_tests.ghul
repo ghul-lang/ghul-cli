@@ -166,6 +166,7 @@ namespace Ghul.Cli.Tests is
 
             assert problem.contains("/usr/lib/x86_64-linux-gnu/libz.a is glibc's") else problem
             assert problem.contains("\"link-mode\": \"dynamic\"") else problem
+            assert !problem.contains("to install it") else problem
         si
 
         @Test()
