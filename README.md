@@ -138,6 +138,7 @@ ghul add <name> [<git-url>]                  # depend on the newest release of a
 ghul rosetta <task>[/<part>] [<directory>]  # fetch a Rosetta Code solution as a project
 ghul build [--target <name>] [--debug] [--optimise <0-3>] [overrides]  # build the project in this directory
 ghul run [--target <name>] [--debug] [--optimise <0-3>] [overrides] [-- args...]  # build, then run it
+ghul test [--target <name>] [--debug] [--optimise <0-3>] [overrides] [-- runner args...]  # build the project with its tests, then run them
 ghul project response-file|compiler         # what editors read (see below)
 ghul install <compiler|wasmtime|node|llvm>  # install or update a component
 ghul update [--check]                     # update ghul and every installed tool to the newest release
@@ -291,6 +292,13 @@ Only `name` is required. The keys are:
   passed to the compiler as `--native-input`; `libraries` lists names linked as
   `lib<name>.a`, each passed as `--native-library`; `library-paths` lists
   directories searched for them, each passed as `--native-library-path`.
+- `test`: what `ghul test` adds to the project, and nothing else does:
+  `sources`, the globs naming the test sources, which is required, and
+  `dependencies`, the libraries the tests need beyond the project's own,
+  written as `dependencies` is. Nothing is assumed: a project without the
+  section has no tests, and `ghul test` says what to add. `ghul new` writes
+  one naming `tests/**/*.ghul` and the newest release of ghul-testing, with a
+  first test in `tests/example_tests.ghul`.
 - `wasm.externs`: a JavaScript module whose exported functions supply the
   program's `@extern` functions on wasm. A build copies it beside the output
   and writes `<program>.externs.mjs` there re-exporting it, which the loader
@@ -310,6 +318,22 @@ and `compiler-build`, are refused with a message naming what replaced them.
 `out/<target>/`. `ghul run` builds it and then runs it, passing the arguments
 after `--` to the program; `ghul run <script>` still runs a script, project
 or not.
+
+`ghul test` builds the project with its `test` section's sources and
+libraries added, as a program of its own in `out/<target>/<name>-tests`, and
+runs it. The build describes the program's types for reflection (as
+`"reflection": "roots"` does, unless the manifest asks for `all`), and runs an
+entry of its own, which finds every method and global function marked
+`@test()` in the project's own sources with ghul-testing's
+`Testing.DISCOVERY` and runs them with `Testing.RUNNER`. The project's own
+entry and top-level statements are compiled but not run. The runner writes
+TAP version 14 to standard output, and `ghul test` exits with its status: 0
+when every test passed, 1 when any failed, and 2 when an argument was not
+understood or no test was selected. The arguments after `--` go to the runner:
+`--filter <pattern>`, `--shard <i>/<n>`, `--list` and `--format text`. While it
+runs, `ghul test` publishes its progress where ghul-test publishes its own,
+in `$XDG_RUNTIME_DIR/ghul-test/<pid>.json` and `<pid>.events`;
+`GHUL_TEST_NO_PROGRESS` turns that off. `ghul test` builds for wasm and llvm.
 
 A project that lists one target builds that one. Where it lists several,
 `--target` names the one to build, or failing that `GHUL_TARGET` in the

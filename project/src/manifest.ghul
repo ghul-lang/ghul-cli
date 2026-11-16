@@ -28,6 +28,10 @@ namespace Ghul.Project is
         /// directory.
         native: NATIVE_INPUTS public
 
+        /// What `ghul test` adds to the project to build its tests, or null
+        /// where the manifest has no `test` section.
+        test: TEST_SECTION? public
+
         init(..) is
             members = Collections.LIST[string]()
             native = NATIVE_INPUTS.none
@@ -67,6 +71,18 @@ namespace Ghul.Project is
         _absolute(root: string, path: string) -> string static =>
             IO.Path.get_full_path(IO.Path.combine(root, path))
     si
+
+    /// The manifest's `test` section: the sources that hold the project's
+    /// tests and the libraries they need, both added to the project's own
+    /// for a `ghul test` build and left out of every other.
+    ///
+    /// - sources: the globs naming the test sources, relative to the
+    ///   manifest's directory
+    /// - dependencies: the libraries the tests need beyond the project's own
+    class TEST_SECTION(
+        sources: Collections.List[string],
+        dependencies: Collections.Map[string, DEPENDENCY]
+    ) is si
 
     // Whether the project is something to run or something to depend on, or
     // a directory that owns no sources: a workspace lists the projects under

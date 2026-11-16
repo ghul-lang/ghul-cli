@@ -52,6 +52,7 @@ namespace Ghul.Project is
             fi
             let options = _options(root, optimise, parallel_gc)
             let dependencies = _dependencies(root)
+            let test = _test(root)
 
             // A manifest with anything wrong with it is not a manifest,
             // so anything the walk found rules the whole thing out - the
@@ -64,8 +65,30 @@ namespace Ghul.Project is
 
             manifest.ignores_dotnet = _ignored_dotnet
             manifest.native = native
+            manifest.test = test
 
             return manifest
+        si
+
+        // The `test` section, or null where there is none. It names its
+        // sources itself: nothing is assumed about where tests are.
+        _test(root: JsonElement) -> TEST_SECTION? is
+            let section = _section(root, "test", ["sources", "dependencies"])
+
+            if !section? then
+                return null
+            fi
+
+            let value: JsonElement mut
+
+            if !section.try_get_property("sources", value ref) then
+                _report("test.sources", "a test section lists the sources that hold the tests")
+                return null
+            fi
+
+            let sources = _string_list_option("test.sources", value)
+
+            return TEST_SECTION(sources, _dependencies(section))
         si
 
         // A workspace or a collection: a directory that owns no sources and
@@ -850,6 +873,7 @@ namespace Ghul.Project is
             keys.add("requires")
             keys.add("sources")
             keys.add("targets")
+            keys.add("test")
             keys.add("version")
             keys.add("wasm")
             // Refused by _reject_old_keys, which names the new spelling.

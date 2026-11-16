@@ -393,6 +393,26 @@ namespace Ghul.Project is
             arguments: Collections.List[string],
             global_host_wasm: string?,
             say: (string) -> void
+        ) -> int static =>
+            run(project, output, arguments, global_host_wasm, say, null)
+
+        /// Runs the build as `run` does, handing each line the program writes
+        /// to standard output to `observe` after writing it out unchanged.
+        ///
+        /// - project: the project that was built
+        /// - output: what the build wrote
+        /// - arguments: the arguments for the program being run
+        /// - global_host_wasm: the machine's global default wasm host
+        /// - say: where a problem is reported
+        /// - observe: what is told each line of the program's output, or
+        ///   null to leave the output alone
+        run(
+            project: LOADED_PROJECT,
+            output: string,
+            arguments: Collections.List[string],
+            global_host_wasm: string?,
+            say: (string) -> void,
+            observe: ((string) -> void)?
         ) -> int static is
             let wasm_host mut = (host = "", executable = "")
 
@@ -423,6 +443,7 @@ namespace Ghul.Project is
 
             start_info.file_name = to_run.file_name
             start_info.use_shell_execute = false
+            start_info.redirect_standard_output = observe?
 
             for argument in to_run.arguments do
                 start_info.argument_list.add(argument)
@@ -430,6 +451,13 @@ namespace Ghul.Project is
 
             try
                 if let process: System.Diagnostics.Process = System.Diagnostics.Process.start(start_info) then
+                    if let line_seen = observe then
+                        while let line = process.standard_output.read_line() do
+                            IO.Std.write_line(line)
+                            line_seen(line)
+                        od
+                    fi
+
                     process.wait_for_exit()
 
                     return process.exit_code

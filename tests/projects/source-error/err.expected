@@ -1,1 +1,1 @@
-src/main.ghul: 2,9..2,30: error: string is not assignable to int
+src/main.ghul: 2,9..2,30: error: 'string' is not assignable to 'int'

@@ -296,6 +296,25 @@ grep -q '"ghul-llvm": ">=' "$scratch/scaffolded/ghul-project.json" || fail "ghul
 out="$(cd "$scratch/scaffolded" && dotnet "$cli" run 2>/dev/null)" || fail "ghul run of a new project failed on wasm"
 check "$out" "hello" "new project output on wasm"
 
+echo "project: ghul test runs a new project's first test on wasm..." >&2
+grep -q '"ghul-testing": { "git": "https://github.com/ghul-lang/ghul-testing", "version": ">=' "$scratch/scaffolded/ghul-project.json" || fail "ghul new wrote no test section naming ghul-testing: $(cat "$scratch/scaffolded/ghul-project.json")"
+out="$(cd "$scratch/scaffolded" && dotnet "$cli" test --target wasm 2>/dev/null)" || fail "ghul test of a new project failed on wasm: $out"
+[[ "$out" == *"ok 1 - Tests.ExampleTests.adds"* ]] || fail "ghul test did not run the first test: $out"
+cat >> "$scratch/scaffolded/tests/example_tests.ghul" <<'GHUL'
+
+namespace Tests.More is
+    @test()
+    fails() is
+        assert 1 + 1 == 3
+    si
+si
+GHUL
+if out="$(cd "$scratch/scaffolded" && dotnet "$cli" test --target wasm 2>/dev/null)"; then
+    fail "expected ghul test to fail when a test fails: $out"
+fi
+[[ "$out" == *"not ok 2 - Tests.More.fails"* ]] || fail "ghul test did not report the failing test: $out"
+out="$(cd "$scratch/scaffolded" && dotnet "$cli" test --target wasm -- --filter 'Tests.ExampleTests.*' 2>/dev/null)" || fail "ghul test did not pass the runner's arguments on: $out"
+
 echo "project: ghul new refuses a directory that is not empty..." >&2
 if err="$(cd "$scratch" && dotnet "$cli" new scaffolded 2>&1)"; then
     fail "expected ghul new to refuse a non-empty directory"

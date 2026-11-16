@@ -227,7 +227,11 @@ looks for them.
   `GIT` into a read-only per-user cache entry, found again with no `git`
   call); the wasm loader is its `ghul-core/host/loader.mjs`. `DEPENDENCY_LIBRARIES` supplies a
   wasm build the other source libraries the manifest's dependencies name,
-  each after the libraries it depends on. `FILE_LOCK` is the advisory lock
+  each after the libraries it depends on. `TEST_BUILD` turns a project into
+  what `ghul test` builds: its `test` section's sources and libraries added,
+  reflection on, and a generated entry chosen with `--entry`;
+  `TEST_PROGRESS` reads the runner's TAP from `PROJECT_RUN`'s line observer
+  and writes ghul-test's progress files. `FILE_LOCK` is the advisory lock
   the cache and the CLI's script cache share. `EDITOR_FILES` writes what
   `ghul project response-file` hands an editor (the build's option groups
   from `COMPILER_ARGUMENTS.option_groups`, one a line, and the manifest's
