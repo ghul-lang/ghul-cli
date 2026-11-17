@@ -1,29 +1,82 @@
 namespace Ghul.Project is
-    /// How a project is built: with or without debug information, and at
-    /// which optimisation level, where one was asked for.
-    class BUILD_MODE(debug: bool, optimise: int?) is
+    /// A listing of an llvm build's code that `ghul build --emit` writes in
+    /// place of a program, for reading rather than for assembling or linking.
+    enum Listing is
+        /// The assembly ghul-llvm generates for the machine, as a `.s` file.
+        ASM,
+
+        /// The llvm IR, optimised at the build's level, as a `.ll` file.
+        LL
+    si
+
+    /// How a project is built: with or without debug information, at
+    /// which optimisation level, where one was asked for, and whether a
+    /// listing is written in place of the program.
+    class BUILD_MODE(debug: bool, optimise: int?, emit: Listing?) is
         /// An ordinary build: no debug information, the compiler's default
-        /// optimisation level.
-        release: BUILD_MODE static => BUILD_MODE(false, null)
+        /// optimisation level, and the program itself.
+        release: BUILD_MODE static => BUILD_MODE(false, null, null)
+
+        /// A build with debug information as `debug` says, at `optimise`,
+        /// writing the program itself.
+        ///
+        /// - debug: whether to build with debug information
+        /// - optimise: the level asked for, or null for the default
+        init(debug: bool, optimise: int?) is
+            init(debug, optimise, null)
+        si
 
         /// The optimisation level the compiler builds an llvm program at
         /// when none is asked for: 0 for a debug build, 2 otherwise.
         default_optimise: int => if debug then 0 else 2 fi
 
+        /// The optimisation level an llvm build is made at: the one asked
+        /// for, or the default.
+        level: int => optimise ?? default_optimise
+
         /// The suffix on `out/<target>` that keeps this build apart from the
         /// others: `-debug` for a debug build, then, for llvm, `-O<n>` where
-        /// the level asked for is not the default one. Only an llvm build is
-        /// given a level, so only an llvm build is kept apart by one.
+        /// the level asked for is not the default one, then `-asm` or `-ll`
+        /// where a listing is written. Only an llvm build is given a level or
+        /// writes a listing, so only an llvm build is kept apart by one.
         ///
         /// - target: the target being built
         directory_suffix(target: BuildTarget) -> string is
             let debug_part = if debug then "-debug" else "" fi
 
-            if let level = optimise /\ level != default_optimise /\ target == BuildTarget.LLVM then
-                return "{debug_part}-O{level}"
+            if target != BuildTarget.LLVM then
+                return debug_part
             fi
 
-            return debug_part
+            let level_part =
+                if let level = optimise /\ level != default_optimise then "-O{level}" else "" fi
+
+            let listing_part =
+                if let listing = emit then "-{LISTINGS.name(listing)}" else "" fi
+
+            return "{debug_part}{level_part}{listing_part}"
         si
+    si
+
+    /// How `--emit` names each listing.
+    class LISTINGS is
+        /// The name `--emit` takes for `listing`: `asm` or `ll`.
+        ///
+        /// - listing: the listing
+        name(listing: Listing) -> string static =>
+            if listing == Listing.ASM then "asm" else "ll" fi
+
+        /// The listing `--emit` names with `text`, or null where it names
+        /// none.
+        ///
+        /// - text: what followed `--emit`
+        parse(text: string) -> Listing? static =>
+            if text =~ "asm" then Listing.ASM elif text =~ "ll" then Listing.LL else null fi
+
+        /// The extension of the file `listing` is written to: `.s` or `.ll`.
+        ///
+        /// - listing: the listing
+        extension(listing: Listing) -> string static =>
+            if listing == Listing.ASM then "s" else "ll" fi
     si
 si
