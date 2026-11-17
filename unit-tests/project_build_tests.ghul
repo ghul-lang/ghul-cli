@@ -4,6 +4,7 @@ namespace Ghul.Cli.Tests is
 
     use Ghul.Project.LIBRARY_CACHE
     use Ghul.Project.BUILD_MODE
+    use Ghul.Project.Listing
     use Ghul.Project.BuildTarget
     use Ghul.Project.CompilerBuild
     use Ghul.Project.RUNTIME_LIBRARY
@@ -143,6 +144,25 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
+        a_listing_goes_in_a_directory_of_its_own_named_for_the_mode() is
+            let root = IO.Path.combine("/", "project", "out")
+            let program = _project(ManifestKind.PROGRAM, BuildTarget.LLVM)
+
+            _same(IO.Path.combine(root, "llvm-asm", "app.s"), PROJECT_BUILD.output_path(program, BUILD_MODE(false, null, Listing.ASM)))
+            _same(IO.Path.combine(root, "llvm-ll", "app.ll"), PROJECT_BUILD.output_path(program, BUILD_MODE(false, null, Listing.LL)))
+            _same(IO.Path.combine(root, "llvm-O3-asm", "app.s"), PROJECT_BUILD.output_path(program, BUILD_MODE(false, 3, Listing.ASM)))
+            _same(IO.Path.combine(root, "llvm-debug-ll", "app.ll"), PROJECT_BUILD.output_path(program, BUILD_MODE(true, null, Listing.LL)))
+            _same(IO.Path.combine(root, "llvm-asm", "app.s"), PROJECT_BUILD.output_path(_project(ManifestKind.LIBRARY, BuildTarget.LLVM), BUILD_MODE(false, null, Listing.ASM)))
+        si
+
+        @Test()
+        a_listing_is_made_at_the_level_the_build_is() is
+            assert BUILD_MODE(false, null, Listing.ASM).level == 2
+            assert BUILD_MODE(true, null, Listing.ASM).level == 0
+            assert BUILD_MODE(true, 3, Listing.LL).level == 3
+        si
+
+        @Test()
         a_debug_build_goes_beside_the_release_build() is
             let root = IO.Path.combine("/", "project", "out")
 
@@ -248,6 +268,20 @@ namespace Ghul.Cli.Tests is
             let parsed = PROJECT_COMMAND_LINE.parse(LIST[string](["--", "a"]), false)
 
             _same("unexpected argument --", parsed.problem ?? "")
+        si
+
+        @Test()
+        the_command_line_takes_a_listing_to_emit() is
+            let parsed = PROJECT_COMMAND_LINE.parse(LIST[string](["--emit", "asm", "--optimise", "3"]), false)
+
+            assert !parsed.problem?
+            assert parsed.emit =~ Listing.ASM
+            assert parsed.optimise =~ 3
+            assert PROJECT_COMMAND_LINE.parse(LIST[string](["--emit", "ll"]), false).emit =~ Listing.LL
+            assert !PROJECT_COMMAND_LINE.parse(LIST[string](), false).emit?
+            _same("--emit needs asm or ll", PROJECT_COMMAND_LINE.parse(LIST[string](["--emit", "obj"]), false).problem ?? "")
+            _same("--emit needs asm or ll", PROJECT_COMMAND_LINE.parse(LIST[string](["--emit"]), false).problem ?? "")
+            assert PROJECT_COMMAND_LINE.names_project(LIST[string](["--emit", "asm"]))
         si
 
         @Test()

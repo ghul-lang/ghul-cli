@@ -133,6 +133,12 @@ if err="$(cd "$program" && dotnet "$cli" build --target llvm 2>&1)"; then
 fi
 [[ "$err" == *"ghul: the manifest does not list the target llvm; it lists wasm"* ]] || fail "unexpected message for an unlisted target: $err"
 
+echo "project: --emit is refused for a wasm build..." >&2
+if err="$(cd "$program" && dotnet "$cli" build --emit asm 2>&1)"; then
+    fail "expected ghul build --emit asm on a wasm project to be refused"
+fi
+[[ "$err" == *"--emit lists the code an llvm build generates; build with --target llvm"* ]] || fail "unexpected message for --emit on wasm: $err"
+
 echo "project: 'ghul build' with no manifest fails..." >&2
 empty="$scratch/empty"
 mkdir -p "$empty"
@@ -395,6 +401,18 @@ IO.Std.write_line("1 + 2 is {add(1, 2)}")
 GHUL
     out="$(cd "$adder" && dotnet "$cli" run 2>/dev/null)" || fail "the llvm program naming a native object failed to build or run"
     check "$out" "1 + 2 is 3" "llvm program with a native object"
+
+    echo "project: --emit asm and --emit ll write a listing to a directory of their own, and build no program..." >&2
+    (cd "$adder" && dotnet "$cli" build --emit asm >&2) || fail "ghul build --emit asm failed"
+    [[ -s "$adder/out/llvm-asm/adder.s" ]] || fail "ghul build --emit asm wrote no out/llvm-asm/adder.s"
+    grep -q 'ghul_test_add' "$adder/out/llvm-asm/adder.s" || fail "the assembly listing does not call the program's native function"
+    [[ ! -e "$adder/out/llvm-asm/adder" ]] || fail "ghul build --emit asm built a program as well as the listing"
+    (cd "$adder" && dotnet "$cli" build --emit ll --optimise 3 >&2) || fail "ghul build --emit ll --optimise 3 failed"
+    grep -q '^define ' "$adder/out/llvm-O3-ll/adder.ll" || fail "ghul build --emit ll --optimise 3 wrote no IR to out/llvm-O3-ll/adder.ll"
+    if err="$(cd "$adder" && dotnet "$cli" run --emit asm 2>&1)"; then
+        fail "expected ghul run --emit asm to be refused"
+    fi
+    [[ "$err" == *"--emit writes a listing in place of the program, so it is for ghul build"* ]] || fail "unexpected message for ghul run --emit: $err"
 
     echo "project: an llvm program links the native object a library it depends on names..." >&2
     native_library="$scratch/native-adder"

@@ -136,7 +136,7 @@ ghul compile [--no-cache] <script.ghul>     # compile, and print the path to the
 ghul new <name> [--target <names>]           # create a project to build and run
 ghul add <name> [<git-url>]                  # depend on the newest release of a library (writes ^newest)
 ghul rosetta <task>[/<part>] [<directory>]  # fetch a Rosetta Code solution as a project
-ghul build [--target <name>] [--debug] [--optimise <0-3>] [overrides]  # build the project in this directory
+ghul build [--target <name>] [--debug] [--optimise <0-3>] [--emit <asm|ll>] [overrides]  # build the project in this directory
 ghul run [--target <name>] [--debug] [--optimise <0-3>] [overrides] [-- args...]  # build, then run it
 ghul test [--target <name>] [--debug] [--optimise <0-3>] [overrides] [-- runner args...]  # build the project with its tests, then run them
 ghul project response-file|compiler         # what editors read (see below)
@@ -614,6 +614,22 @@ beside the machine code, and `gdb` steps through it:
 ghul build --debug
 objdump -d -S out/llvm-debug/<name>
 gdb out/llvm-debug/<name>
+```
+
+`ghul build --emit asm` writes the assembly the llvm target generates, for
+reading rather than for assembling, and `--emit ll` writes the llvm IR
+optimised at the build's level. Each goes into a directory of its own beside
+the program's, named for the build's mode with `-asm` or `-ll` added:
+`out/llvm-asm/<name>.s`, `out/llvm-O3-ll/<name>.ll`, `out/llvm-debug-asm/<name>.s`.
+`--optimise` and `--debug` apply as they do to a program; at the default
+level, 2, the listing is of the code `ghul build` would link. No program is
+built, so `ghul run` and `ghul test` refuse `--emit`, and so does a build for
+another target. The listing covers the whole module, the runtime library's
+code included, not only the project's own functions.
+
+```sh
+ghul build --emit asm
+less out/llvm-asm/<name>.s
 ```
 
 ### Rosetta Code solutions

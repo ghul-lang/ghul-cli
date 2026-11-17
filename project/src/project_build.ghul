@@ -32,8 +32,10 @@ namespace Ghul.Project is
     /// running the compiler once.
     class PROJECT_BUILD is
         /// Where the build of `project` is written: `out/<target>/`, with
-        /// `-debug` for a debug build and `-O<n>` for a level other than the
-        /// default, so builds of different modes do not overwrite each other.
+        /// `-debug` for a debug build, `-O<n>` for a level other than the
+        /// default and `-asm` or `-ll` for a listing, so builds of different
+        /// modes do not overwrite each other. A listing is `<name>.s` or
+        /// `<name>.ll` there.
         ///
         /// - project: the project being built
         /// - mode: how the build is made
@@ -43,6 +45,10 @@ namespace Ghul.Project is
             let name = project.manifest.name
 
             let is_library = project.manifest.kind == ManifestKind.LIBRARY
+
+            if let listing = mode.emit /\ project.target == BuildTarget.LLVM then
+                return Path.join([directory, "{name}.{LISTINGS.extension(listing)}"])
+            fi
 
             return
                 case project.target
@@ -222,6 +228,12 @@ namespace Ghul.Project is
 
             let output = output_path(project, mode)
             let sources = SOURCE_SET.expand(project.directory, project.manifest.sources)
+            let listing = if project.target == BuildTarget.LLVM then mode.emit else null fi
+
+            if listing? /\ !linker? then
+                say("--emit needs ghul-llvm, which writes the listing")
+                return 1
+            fi
 
             Directory.create_directory(Path.get_directory_name(output)!)
 
@@ -231,20 +243,33 @@ namespace Ghul.Project is
                 return 1
             fi
 
-            let arguments = LIST[string](COMPILER_ARGUMENTS.for_build(project.manifest, project.target, compiled_in, native, mode, output, sources))
-
-            arguments.add_range(extra)
-
             let scratch = Path.join([Path.get_temp_path(), "ghul-build-{System.Environment.process_id}-{System.Guid.new_guid().to_string("N")}"])
 
             Directory.create_directory(scratch)
 
             try
+                // A listing is made from the module the compiler writes
+                // without linking it, so no program is built beside it.
+                let module = Path.join([scratch, "module.ll"])
+                let compiled_to = if listing? then Path.join([scratch, project.manifest.name]) else output fi
+
+                let arguments = LIST[string](COMPILER_ARGUMENTS.for_build(project.manifest, project.target, compiled_in, native, mode, compiled_to, sources))
+
+                if listing? then
+                    arguments.add_range(["--llvm-output", module, "--llvm-no-link"])
+                fi
+
+                arguments.add_range(extra)
+
                 let response_file = Path.join([scratch, "arguments.rsp"])
 
                 File.write_all_text(response_file, RESPONSE_FILE.text(arguments))
 
                 let status = _compile(compiler, response_file, project.directory, linker, say, quiet)
+
+                if status == 0 /\ listing? then
+                    return _write_listing(linker!, module, mode.level, listing, output, say)
+                fi
 
                 if status != 0 \/ project.target != BuildTarget.WASM \/ project.manifest.kind == ManifestKind.LIBRARY then
                     return status
@@ -329,6 +354,35 @@ namespace Ghul.Project is
             fi
 
             return native
+        si
+
+        // Has ghul-llvm turn `module` into `listing` at `level`, written to
+        // `output`, linking nothing: the steps the playground takes for its
+        // assembly and IR views. Its messages go to standard error.
+        _write_listing(linker: string, module: string, level: int, listing: Listing, output: string, say: (string) -> void) -> int static is
+            let start_info = System.Diagnostics.ProcessStartInfo()
+
+            start_info.file_name = linker
+            start_info.use_shell_execute = false
+            start_info.redirect_standard_output = true
+
+            for argument in [module, "-O{level}", "--emit={LISTINGS.name(listing)}", "-o", output] do
+                start_info.argument_list.add(argument)
+            od
+
+            if let process: System.Diagnostics.Process = PROCESS_START.start(start_info) then
+                process.standard_output.base_stream.copy_to(IO.Std.open_standard_error())
+                process.wait_for_exit()
+
+                if process.exit_code != 0 then
+                    say("ghul-llvm could not write the {LISTINGS.name(listing)} listing")
+                fi
+
+                return process.exit_code
+            fi
+
+            say("cannot start ghul-llvm {linker}; it is missing, or cannot be run")
+            return 1
         si
 
         // Runs the compiler on the response file. Its standard output goes
