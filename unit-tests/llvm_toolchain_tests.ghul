@@ -22,7 +22,7 @@ namespace Ghul.Cli.Tests is
         @Test()
         a_checksum_is_the_first_word_of_its_file() is
             let content = System.Text.Encoding.utf8.get_bytes("hello")
-            let digest = System.Convert.to_hex_string(Crypto.sha256(content)).to_lower_invariant()
+            let digest = Text.to_hex_lower(Crypto.sha256(content))
 
             assert LLVM_TOOLCHAIN.matches_checksum(content, "{digest}  ghul-llvm.tar.gz\n")
             assert !LLVM_TOOLCHAIN.matches_checksum(content, "0000  ghul-llvm.tar.gz\n")
@@ -175,7 +175,7 @@ namespace Ghul.Cli.Tests is
 
             let digest =
                 if checksum_matches then
-                    System.Convert.to_hex_string(Crypto.sha256(archive)).to_lower_invariant()
+                    Text.to_hex_lower(Crypto.sha256(archive))
                 else
                     string('0', 64)
                 fi
