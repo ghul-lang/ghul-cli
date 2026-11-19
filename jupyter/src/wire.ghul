@@ -50,7 +50,7 @@ namespace Ghul.Jupyter is
                 return ""
             fi
 
-            return System.Convert.to_hex_string(digest).to_lower()
+            return Text.to_hex_lower(digest)
         si
 
         // Whether the signature frame matches what the four parts hash

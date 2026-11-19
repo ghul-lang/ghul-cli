@@ -429,8 +429,7 @@ namespace Ghul.Project is
                     return ERROR("node {version} downloaded no bytes")
                 fi
 
-                let actual = System.Convert.to_hex_string(
-                    Crypto.sha256(bytes)).to_lower_invariant()
+                let actual = Text.to_hex_lower(Crypto.sha256(bytes))
 
                 if actual !~ digest then
                     return ERROR("node {version} failed its checksum (expected {digest}, got {actual})")
