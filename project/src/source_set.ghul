@@ -100,7 +100,7 @@ namespace Ghul.Project is
 
             result.append('$')
 
-            return Regex(result.to_string(), RegexOptions.CULTURE_INVARIANT)
+            return Regex(result.to_string(), RegexOptions.LOCALE_INVARIANT)
         si
     si
 si
