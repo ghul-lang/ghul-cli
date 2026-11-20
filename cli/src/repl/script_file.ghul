@@ -1,6 +1,6 @@
 namespace Ghul.Cli.Repl is
     use Collections.LIST
-    use System.Text.RegularExpressions.Regex
+    use Text.Regex
 
     use Ghul.Repl.Host.CELL_RECORD
     use Ghul.Repl.Host.CellStatus
@@ -13,7 +13,7 @@ namespace Ghul.Cli.Repl is
         init() is si
 
         text(records: Collections.List[CELL_RECORD]) -> string static is
-            let result = System.Text.StringBuilder()
+            let result = Text.StringBuilder()
 
             for record in records do
                 if record.status == CellStatus.OK then
@@ -35,7 +35,7 @@ namespace Ghul.Cli.Repl is
         // out.
         cells(text: string) -> LIST[string] static is
             let result = LIST[string]()
-            let current = System.Text.StringBuilder()
+            let current = Text.StringBuilder()
 
             for line in text.replace("\r\n", "\n").split(['\n']) do
                 if Regex.is_match(line, "^// cell [0-9]+\\s*$") then
@@ -51,7 +51,7 @@ namespace Ghul.Cli.Repl is
             return result
         si
 
-        _add(current: System.Text.StringBuilder, result: LIST[string]) static is
+        _add(current: Text.StringBuilder, result: LIST[string]) static is
             let cell = current.to_string().trim()
 
             if cell.length > 0 then

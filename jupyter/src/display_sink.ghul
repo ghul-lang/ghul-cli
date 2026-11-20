@@ -5,7 +5,7 @@ namespace Ghul.Jupyter is
     // What display shows from a running cell, published as display_data
     // with the same bundle a cell's value is shown with, and redrawn with
     // update_display_data under the id it was shown with.
-    class KERNEL_DISPLAY_SINK(_publish: (string, string) -> void, _runtime: () -> System.Reflection.Assembly?): DisplaySink is
+    class KERNEL_DISPLAY_SINK(_publish: (string, string) -> void, _runtime: () -> Ghul.Reflection.Assembly?): DisplaySink is
         _bundle: CELL_BUNDLE
 
         init(..) is

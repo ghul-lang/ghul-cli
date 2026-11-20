@@ -157,7 +157,7 @@ namespace Ghul.Repl.Host is
             fi
 
             if c == '/' /\ _is_at(text, i + 1, '*') then
-                let close = text.index_of("*/", i + 2, System.StringComparison.ORDINAL)
+                let close = text.index_of("*/", i + 2, Text.StringComparison.ORDINAL)
                 let end = if close < 0 then length else close + 2 fi
 
                 result.add(TOKEN_SPAN(i, end - i, TokenKind.COMMENT))
@@ -358,7 +358,7 @@ namespace Ghul.Repl.Host is
             i >= 0 /\ i < text.length /\ text[i] == c
 
         _index_or_end(text: string, value: string, from: int) -> int static is
-            let found = text.index_of(value, from, System.StringComparison.ORDINAL)
+            let found = text.index_of(value, from, Text.StringComparison.ORDINAL)
 
             return if found < 0 then text.length else found fi
         si

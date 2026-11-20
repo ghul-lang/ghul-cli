@@ -28,7 +28,7 @@ namespace Ghul.Cli.Repl is
             let seen = Collections.SET[string]()
 
             for name in names do
-                if name.starts_with(typed, System.StringComparison.ORDINAL) /\ seen.add(name) then
+                if name.starts_with(typed, Text.StringComparison.ORDINAL) /\ seen.add(name) then
                     result.add(name)
                 fi
             od
@@ -52,7 +52,7 @@ namespace Ghul.Cli.Repl is
             let per_row = System.Math.max(1, width / cell)
             let shown = System.Math.min(names.count, per_row * rows)
 
-            let row = System.Text.StringBuilder()
+            let row = Text.StringBuilder()
 
             for i in 0..shown do
                 row.append(names[i].pad_right(cell))

@@ -1,6 +1,6 @@
 namespace Ghul.Repl is
     use Collections.LIST
-    use System.Text.RegularExpressions.Regex
+    use Text.Regex
 
     // A range in a file, as the compiler reports one: lines and columns
     // from 1, the end column one past the last character.
@@ -40,7 +40,7 @@ namespace Ghul.Repl is
             fi
 
             let slug = if code? /\ code.length > 0 then "[{code}] " else "" fi
-            let result = System.Text.StringBuilder("{location.render()}: {severity}: {slug}{message}")
+            let result = Text.StringBuilder("{location.render()}: {severity}: {slug}{message}")
 
             for r in related do
                 if let at = r.location then

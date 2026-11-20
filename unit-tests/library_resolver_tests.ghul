@@ -61,7 +61,7 @@ namespace Ghul.Cli.Tests is
         si
 
         _latest(scratch: string) -> Result[string, string] is
-            let url = System.Uri(_repository(scratch)).absolute_uri
+            let url = IO.Uri(_repository(scratch)).absolute_uri
             let resolver = LIBRARY_RESOLVER(LIBRARY_CACHE(Path.combine(scratch, "cache")))
 
             return resolver.latest("lib", url)
@@ -100,7 +100,7 @@ namespace Ghul.Cli.Tests is
             try
                 let resolver = LIBRARY_RESOLVER(LIBRARY_CACHE(Path.combine(scratch, "cache")))
 
-                assert !resolver.latest("lib", System.Uri(Path.combine(scratch, "missing")).absolute_uri)?
+                assert !resolver.latest("lib", IO.Uri(Path.combine(scratch, "missing")).absolute_uri)?
             finally
                 _delete(scratch)
             yrt

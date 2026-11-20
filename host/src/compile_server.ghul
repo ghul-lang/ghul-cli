@@ -54,7 +54,7 @@ namespace Ghul.Repl.Host is
             let process = System.Diagnostics.Process.start(start_info)
 
             if !process? then
-                throw System.Exception("the compile server did not start")
+                throw Ghul.Exception("the compile server did not start")
             fi
 
             _process = process
@@ -85,7 +85,7 @@ namespace Ghul.Repl.Host is
                 if line.wait(timeout_ms) then
                     return line.result
                 fi
-            catch e: System.AggregateException
+            catch e: Ghul.AggregateException
             yrt
 
             return null
@@ -97,7 +97,7 @@ namespace Ghul.Repl.Host is
                     _process.kill(true)
                     _process.wait_for_exit(5000)
                 fi
-            catch e: System.Exception
+            catch e: Ghul.Exception
             yrt
 
             _process.dispose()
@@ -182,7 +182,7 @@ namespace Ghul.Repl.Host is
                     if let server = _server then
                         _through(server, CELL_REQUEST(0, WARM_UP_NAME, "0\n", 0, LIST[string](), 0, LIST[string]()))
                     fi
-                catch e: System.Exception
+                catch e: Ghul.Exception
                     // A server that fails here fails the first cell too,
                     // which reports it.
                 finally
@@ -337,7 +337,7 @@ namespace Ghul.Repl.Host is
 
         _give_up(server: ServerConnection, reason: string) -> COMPILE_RESULT? is
             // A reason can name a cell's file, which is shown by its label.
-            let labelled = System.Text.RegularExpressions.Regex.replace(
+            let labelled = Text.Regex.replace(
                 reason,
                 "[^\\s:]*cell([0-9]+)\\.(ghul|dll)\\b",
                 m => Ghul.Repl.cell_label_for(int.parse(m.groups[1].value)))
@@ -376,7 +376,7 @@ namespace Ghul.Repl.Host is
             json.flush()
             json.dispose()
 
-            System.Text.Encoding.utf8.get_string(buffer.to_array())
+            Text.Encoding.utf8.get_string(buffer.to_array())
         si
 
         _request_line(request: CELL_REQUEST) -> string is
@@ -398,7 +398,7 @@ namespace Ghul.Repl.Host is
             json.flush()
             json.dispose()
 
-            System.Text.Encoding.utf8.get_string(buffer.to_array())
+            Text.Encoding.utf8.get_string(buffer.to_array())
         si
     si
 
@@ -441,7 +441,7 @@ namespace Ghul.Repl.Host is
                 fi
 
                 return COMPILE_SERVER_REPLY(status.get_int32(), text, parsed, _string(root, "completeness"), _string(root, "last_statement"))
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return null
             yrt
         si

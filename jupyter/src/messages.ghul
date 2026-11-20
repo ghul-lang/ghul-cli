@@ -20,7 +20,7 @@ namespace Ghul.Jupyter is
         published(parent: MESSAGE?, msg_type: string, content: string) -> MESSAGE is
             let identities = LIST[ARRAY[ubyte]]()
 
-            identities.add(System.Text.Encoding.utf8.get_bytes(msg_type))
+            identities.add(Text.Encoding.utf8.get_bytes(msg_type))
 
             return MESSAGE(
                 identities,
@@ -38,7 +38,7 @@ namespace Ghul.Jupyter is
             members.add((name = "username", value = JSON.quote("kernel")))
             members.add((
                 name = "date",
-                value = JSON.quote(System.DateTime.utc_now.to_string("yyyy-MM-ddTHH:mm:ss.fffffffZ"))))
+                value = JSON.quote(Time.DateTime.utc_now.to_string("yyyy-MM-ddTHH:mm:ss.fffffffZ"))))
             members.add((name = "msg_type", value = JSON.quote(msg_type)))
             members.add((name = "version", value = JSON.quote(PROTOCOL_VERSION)))
 

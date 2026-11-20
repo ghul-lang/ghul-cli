@@ -100,7 +100,7 @@ namespace Ghul.Project is
             writer.write_end_array()
             writer.flush()
 
-            return System.Text.Encoding.utf8.get_string(buffer.to_array())
+            return Text.Encoding.utf8.get_string(buffer.to_array())
         si
 
         _write(path: string, text: string) static is

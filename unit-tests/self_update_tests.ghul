@@ -22,7 +22,7 @@ namespace Ghul.Cli.Tests is
             return path
         si
 
-        _bytes(text: string) -> ARRAY[ubyte] static => System.Text.Encoding.utf8.get_bytes(text)
+        _bytes(text: string) -> ARRAY[ubyte] static => Text.Encoding.utf8.get_bytes(text)
 
         _sha256_line(content: ARRAY[ubyte], name: string) -> string static =>
             "{Text.to_hex_lower(Crypto.sha256(content))}  {name}\n"
@@ -153,12 +153,12 @@ namespace Ghul.Cli.Tests is
                 let path = Path.join([root, "latest"])
                 File.write_all_text(path, "body")
 
-                let body = SELF_UPDATE.fetch(System.Uri(path).absolute_uri)
+                let body = SELF_UPDATE.fetch(IO.Uri(path).absolute_uri)
 
                 assert body? else (cast Result.ERROR(body)).error
-                assert System.Text.Encoding.utf8.get_string(body!) =~ "body"
+                assert Text.Encoding.utf8.get_string(body!) =~ "body"
 
-                let missing = SELF_UPDATE.fetch(System.Uri(Path.join([root, "absent"])).absolute_uri)
+                let missing = SELF_UPDATE.fetch(IO.Uri(Path.join([root, "absent"])).absolute_uri)
 
                 assert !missing?
             finally
@@ -211,7 +211,7 @@ namespace Ghul.Cli.Tests is
                 let fetched = update.install_script("v1.2.3")
 
                 assert fetched? else (cast Result.ERROR(fetched)).error
-                assert System.Text.Encoding.utf8.get_string(fetched!) =~ System.Text.Encoding.utf8.get_string(script)
+                assert Text.Encoding.utf8.get_string(fetched!) =~ Text.Encoding.utf8.get_string(script)
             finally
                 server.stop()
             yrt

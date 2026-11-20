@@ -14,7 +14,7 @@ namespace Ghul.Cli.Tests is
         init() is si
 
         _sources(project: string) -> string static is
-            let directory: string? mut = IO.Path.get_directory_name(System.Reflection.Assembly.get_executing_assembly().location)
+            let directory: string? mut = IO.Path.get_directory_name(Ghul.Reflection.Assembly.get_executing_assembly().location)
 
             while directory? do
                 let candidate = IO.Path.combine(directory, project, "src")

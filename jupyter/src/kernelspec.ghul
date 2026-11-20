@@ -43,7 +43,7 @@ namespace Ghul.Jupyter is
             let process_path = System.Environment.process_path
 
             return contents(
-                LAUNCH.command(process_path, System.Reflection.Assembly.get_entry_assembly()?.location),
+                LAUNCH.command(process_path, Ghul.Reflection.Assembly.get_entry_assembly()?.location),
                 LAUNCH.environment(LAUNCH.current_dotnet_root(), LAUNCH.current_tools_directory(process_path)))
         si
 

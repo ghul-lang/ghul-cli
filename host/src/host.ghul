@@ -132,7 +132,7 @@ namespace Ghul.Repl.Host is
                 fi
 
                 return false
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return false
             yrt
         si

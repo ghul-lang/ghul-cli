@@ -50,7 +50,7 @@ namespace Ghul.Repl.Host is
                 if url.starts_with("file://") then
                     // A file mirror serves the index as a file, as the
                     // self-update mirror already does.
-                    let path = System.Uri(url).local_path
+                    let path = IO.Uri(url).local_path
 
                     if !File.exists(path) then
                         return ERROR("the feed at {url} does not exist")
@@ -66,7 +66,7 @@ namespace Ghul.Repl.Host is
                         fi
 
                         text = answer.text
-                    catch e: System.Exception
+                    catch e: Ghul.Exception
                         return ERROR("the feed at {url} could not be read ({e.get_type().name})")
                     yrt
                 fi
@@ -178,7 +178,7 @@ namespace Ghul.Repl.Host is
             let url = _package_url(version)
 
             if url.starts_with("file://") then
-                let path = System.Uri(url).local_path
+                let path = IO.Uri(url).local_path
 
                 if !File.exists(path) then
                     return ERROR("ghul.compiler {version} is not on the feed (no {url})")
@@ -203,7 +203,7 @@ namespace Ghul.Repl.Host is
                 File.write_all_bytes(destination, bytes)
 
                 return OK(unit())
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return ERROR("ghul.compiler {version} could not be downloaded ({e.get_type().name})")
             finally
                 client.dispose()
@@ -253,7 +253,7 @@ namespace Ghul.Repl.Host is
                 od
 
                 return OK(unit())
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return ERROR("the ghul.compiler package could not be read ({e.get_type().name})")
             finally
                 zip.dispose()

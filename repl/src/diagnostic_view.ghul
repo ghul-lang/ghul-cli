@@ -84,7 +84,7 @@ namespace Ghul.Repl is
             fi
 
             let marker = ": {severity}: "
-            let at = text.index_of(marker, System.StringComparison.ORDINAL)
+            let at = text.index_of(marker, Text.StringComparison.ORDINAL)
 
             if at < 0 then
                 return text
@@ -98,7 +98,7 @@ namespace Ghul.Repl is
         _excerpt(line: string, number: int, group: DIAGNOSTIC_GROUP, colours: DiagnosticColours?, result: LIST[string]) static is
             let gutter = number.to_string()
             let blank = string(' ', gutter.length)
-            let carets = System.Text.StringBuilder()
+            let carets = Text.StringBuilder()
 
             for span in group.spans do
                 let start = System.Math.clamp(span.start_column - 1, 0, line.length)

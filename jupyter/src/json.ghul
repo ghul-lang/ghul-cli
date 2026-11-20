@@ -66,7 +66,7 @@ namespace Ghul.Jupyter is
             writer.flush()
             writer.dispose()
 
-            return System.Text.Encoding.utf8.get_string(buffer.to_array())
+            return Text.Encoding.utf8.get_string(buffer.to_array())
         si
 
         // An object built from members already written as JSON, in the

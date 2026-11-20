@@ -85,7 +85,7 @@ namespace Ghul.Cli.Tests is
             let stream = entry.open()
 
             try
-                let content = System.Text.Encoding.utf8.get_bytes(text)
+                let content = Text.Encoding.utf8.get_bytes(text)
 
                 stream.write(content, 0, content.count)
             finally
@@ -94,7 +94,7 @@ namespace Ghul.Cli.Tests is
         si
 
         _bytes(text: string) -> ARRAY[ubyte] static =>
-            System.Text.Encoding.utf8.get_bytes(text)
+            Text.Encoding.utf8.get_bytes(text)
 
         _store() -> (store: COMPILER_STORE, root: string) is
             let root = Path.combine(Path.get_temp_path(), "ghul-download-{System.Guid.new_guid().to_string("N")}")
@@ -256,7 +256,7 @@ namespace Ghul.Cli.Tests is
     class FEED_SERVER is
         _handler: (string) -> ARRAY[ubyte]?
         _listener: System.Net.Sockets.TcpListener
-        _thread: System.Threading.Thread?
+        _thread: Tasks.Thread?
 
         init(handler: (string) -> ARRAY[ubyte]?) is
             _handler = handler
@@ -273,14 +273,14 @@ namespace Ghul.Cli.Tests is
         // Serves until stopped.
         start() is
             let thread =
-                System.Threading.Thread(
+                Tasks.Thread(
                     () -> void is
                         do
                             try
                                 let client = _listener.accept_tcp_client()
 
                                 _answer(client)
-                            catch e: System.Exception
+                            catch e: Ghul.Exception
                                 return
                             yrt
                         od
@@ -312,7 +312,7 @@ namespace Ghul.Cli.Tests is
                         return
                     fi
 
-                    header = "{header}{System.Text.Encoding.utf8.get_string(buffer, 0, read)}"
+                    header = "{header}{Text.Encoding.utf8.get_string(buffer, 0, read)}"
                 od
 
                 let path = header.split([' '])[1]
@@ -332,11 +332,11 @@ namespace Ghul.Cli.Tests is
                 stream.write(answered, 0, answered.count)
 
                 client.close()
-            catch e: System.Exception
+            catch e: Ghul.Exception
             yrt
         si
 
         _bytes(text: string) -> ARRAY[ubyte] static =>
-            System.Text.Encoding.utf8.get_bytes(text)
+            Text.Encoding.utf8.get_bytes(text)
     si
 si

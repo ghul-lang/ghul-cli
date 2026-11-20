@@ -119,7 +119,7 @@ namespace Ghul.Cli.Tests is
             assert _after(["    for i in xs do"]) == 8;
             assert _after(["else"]) == 4;
             assert _after(["try"]) == 4;
-            assert _after(["catch e: System.Exception"]) == 4;
+            assert _after(["catch e: Ghul.Exception"]) == 4;
             assert _after(["f() -> int =>"]) == 4;
             assert _after(["when 1 then"]) == 4;
             assert _after(["let xs = ["]) == 4;

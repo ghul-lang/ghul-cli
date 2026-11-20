@@ -145,7 +145,7 @@ namespace Ghul.Cli.Tests is
                 _git(repository, ["commit", "--quiet", "-m", "first"])
                 _git(repository, ["tag", "v1.2.0"])
 
-                let url = System.Uri(repository).absolute_uri
+                let url = IO.Uri(repository).absolute_uri
 
                 _project(Path.combine(scratch, "app"), "app", "\"wasm\"", "\"lib\": {{ \"git\": \"{url}\", \"version\": \"1.2.0\" }}")
 
@@ -225,7 +225,7 @@ namespace Ghul.Cli.Tests is
             _git(repository, ["add", "."])
             _git(repository, ["commit", "--quiet", "-m", "lib"])
 
-            return System.Uri(repository).absolute_uri
+            return IO.Uri(repository).absolute_uri
         si
 
         @Test()

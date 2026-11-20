@@ -4,7 +4,7 @@ namespace Ghul.Project is
     use Collections.SET
     use IO.File
     use IO.Path
-    use System.Text.RegularExpressions.Regex
+    use Text.Regex
 
     use Result.*
 

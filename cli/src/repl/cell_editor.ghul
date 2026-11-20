@@ -442,7 +442,7 @@ namespace Ghul.Cli.Repl is
         // cell stays on the screen as it was typed.
         _write_whole(suffix: string) is
             let lines = _buffer.lines
-            let output = System.Text.StringBuilder()
+            let output = Text.StringBuilder()
 
             if _cursor_screen_row > 0 then
                 output.append("{_escape}[{_cursor_screen_row}A")
@@ -486,7 +486,7 @@ namespace Ghul.Cli.Repl is
                 let width = Std.window_width
 
                 return if width > 0 then width else 80 fi
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return 80
             yrt
         si
@@ -496,7 +496,7 @@ namespace Ghul.Cli.Repl is
                 let height = Std.window_height
 
                 return if height > 1 then height else 24 fi
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return 24
             yrt
         si
@@ -516,7 +516,7 @@ namespace Ghul.Cli.Repl is
 
             let bottom = layout.bottom(lines, _top, room)
 
-            let output = System.Text.StringBuilder()
+            let output = Text.StringBuilder()
 
             if _cursor_screen_row > 0 then
                 output.append("{_escape}[{_cursor_screen_row}A")
@@ -602,7 +602,7 @@ namespace Ghul.Cli.Repl is
                     return true
                 fi
 
-                System.Threading.Thread.sleep(1)
+                Tasks.Thread.sleep(1)
             od
 
             return false
@@ -611,7 +611,7 @@ namespace Ghul.Cli.Repl is
         // The text of a paste, up to the marker that ends it, with every
         // line break as a newline.
         _read_paste() -> string is
-            let text = System.Text.StringBuilder()
+            let text = Text.StringBuilder()
             let end_marker = "{_escape}[201~"
 
             do
@@ -620,7 +620,7 @@ namespace Ghul.Cli.Repl is
 
                 text.append(c)
 
-                if text.length >= end_marker.length /\ text.to_string().ends_with(end_marker, System.StringComparison.ORDINAL) then
+                if text.length >= end_marker.length /\ text.to_string().ends_with(end_marker, Text.StringComparison.ORDINAL) then
                     return text.to_string(0, text.length - end_marker.length).replace("\r\n", "\n").replace('\r', '\n')
                 fi
             od

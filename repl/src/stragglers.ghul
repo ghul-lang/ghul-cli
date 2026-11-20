@@ -1,7 +1,7 @@
 namespace Ghul.Repl is
     use Collections.LIST
-    use System.Reflection.Assembly
-    use System.Reflection.BindingFlags
+    use Ghul.Reflection.Assembly
+    use Ghul.Reflection.BindingFlags
 
     // When a cell declares a type again to add to it, what earlier cells
     // defined still uses the type as it was: a function taking the old
@@ -44,7 +44,7 @@ namespace Ghul.Repl is
             return "ghul: {shown}{more} still {verb} the earlier {name}; redefine {them} to use the new one"
         si
 
-        _find_type(assembly: Assembly, cell: string, name: string) -> System.Type? static is
+        _find_type(assembly: Assembly, cell: string, name: string) -> Ghul.Type? static is
             for type in assembly.get_types() do
                 if type.`namespace =~ cell /\ _base_name(type.name) =~ name then
                     return type
@@ -62,7 +62,7 @@ namespace Ghul.Repl is
 
         // Every public name a cell exports whose signature or members
         // mention the old type.
-        _collect_users(assembly: Assembly, cell: string, old_type: System.Type, users: LIST[string]) static is
+        _collect_users(assembly: Assembly, cell: string, old_type: Ghul.Type, users: LIST[string]) static is
             let flags = cast BindingFlags(
                 cast int(BindingFlags.PUBLIC) | cast int(BindingFlags.STATIC) |
                 cast int(BindingFlags.INSTANCE) | cast int(BindingFlags.DECLARED_ONLY))
@@ -109,7 +109,7 @@ namespace Ghul.Repl is
             od
         si
 
-        _method_mentions(method: System.Reflection.MethodInfo, old_type: System.Type) -> bool static is
+        _method_mentions(method: Ghul.Reflection.MethodInfo, old_type: Ghul.Type) -> bool static is
             if _mentions(method.return_type, old_type) then
                 return true
             fi
@@ -123,7 +123,7 @@ namespace Ghul.Repl is
             return false
         si
 
-        _mentions(type: System.Type?, old_type: System.Type) -> bool static is
+        _mentions(type: Ghul.Type?, old_type: Ghul.Type) -> bool static is
             if !type? then
                 return false
             fi

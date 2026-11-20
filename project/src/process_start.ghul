@@ -11,7 +11,7 @@ namespace Ghul.Project is
                 return System.Diagnostics.Process.start(start_info)
             catch e: System.ComponentModel.Win32Exception
                 return null
-            catch e: System.InvalidOperationException
+            catch e: Ghul.InvalidOperationException
                 return null
             yrt
         si

@@ -21,7 +21,7 @@ namespace Ghul.Cli.Tests is
 
         @Test()
         a_checksum_is_the_first_word_of_its_file() is
-            let content = System.Text.Encoding.utf8.get_bytes("hello")
+            let content = Text.Encoding.utf8.get_bytes("hello")
             let digest = Text.to_hex_lower(Crypto.sha256(content))
 
             assert LLVM_TOOLCHAIN.matches_checksum(content, "{digest}  ghul-llvm.tar.gz\n")
@@ -36,7 +36,7 @@ namespace Ghul.Cli.Tests is
             try
                 _publish(Path.combine(scratch, "releases"), "v1.0.0", true)
 
-                let toolchain = LLVM_TOOLCHAIN(Path.combine(scratch, "cache"), System.Uri(Path.combine(scratch, "releases")).absolute_uri)
+                let toolchain = LLVM_TOOLCHAIN(Path.combine(scratch, "cache"), IO.Uri(Path.combine(scratch, "releases")).absolute_uri)
                 let fetched = toolchain.executable("v1.0.0", TRIPLE)
 
                 assert fetched? else (cast Result.ERROR(fetched)).error
@@ -62,7 +62,7 @@ namespace Ghul.Cli.Tests is
             try
                 _publish(Path.combine(scratch, "releases"), "v1.0.0", false)
 
-                let toolchain = LLVM_TOOLCHAIN(Path.combine(scratch, "cache"), System.Uri(Path.combine(scratch, "releases")).absolute_uri)
+                let toolchain = LLVM_TOOLCHAIN(Path.combine(scratch, "cache"), IO.Uri(Path.combine(scratch, "releases")).absolute_uri)
                 let fetched = toolchain.executable("v1.0.0", TRIPLE)
 
                 assert !fetched?
@@ -80,7 +80,7 @@ namespace Ghul.Cli.Tests is
             try
                 Directory.create_directory(Path.combine(scratch, "releases"))
 
-                let toolchain = LLVM_TOOLCHAIN(Path.combine(scratch, "cache"), System.Uri(Path.combine(scratch, "releases")).absolute_uri)
+                let toolchain = LLVM_TOOLCHAIN(Path.combine(scratch, "cache"), IO.Uri(Path.combine(scratch, "releases")).absolute_uri)
                 let fetched = toolchain.executable("v9.9.9", TRIPLE)
 
                 assert !fetched?
@@ -125,7 +125,7 @@ namespace Ghul.Cli.Tests is
             let scratch = _scratch()
 
             try
-                let toolchain = LLVM_TOOLCHAIN(Path.combine(scratch, "cache"), System.Uri(Path.combine(scratch, "releases")).absolute_uri)
+                let toolchain = LLVM_TOOLCHAIN(Path.combine(scratch, "cache"), IO.Uri(Path.combine(scratch, "releases")).absolute_uri)
 
                 assert !toolchain.latest_tag(null)?
             finally
@@ -141,7 +141,7 @@ namespace Ghul.Cli.Tests is
             Directory.create_directory(Path.combine(releases, "v1.10.0"))
             Directory.create_directory(Path.combine(releases, "v1.2.0"))
 
-            return LLVM_TOOLCHAIN(Path.combine(scratch, "cache"), System.Uri(releases).absolute_uri)
+            return LLVM_TOOLCHAIN(Path.combine(scratch, "cache"), IO.Uri(releases).absolute_uri)
         si
 
         // Writes a release laid out as ghul-llvm publishes one: a gzipped

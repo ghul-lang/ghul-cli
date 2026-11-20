@@ -1,6 +1,6 @@
 namespace Ghul.Jupyter is
     use Collections.LIST
-    use System.Text.Encoding
+    use Text.Encoding
 
     // One message on the wire. The identities are the routing frames a
     // ROUTER socket puts in front, and a reply carries back the ones its
@@ -101,7 +101,7 @@ namespace Ghul.Jupyter is
         // The next message, or nothing where none arrives inside the
         // timeout, the frames do not make one, or the signature does not
         // match.
-        try_receive(timeout: System.TimeSpan) -> MESSAGE? is
+        try_receive(timeout: Time.TimeSpan) -> MESSAGE? is
             let frames mut = LIST[ARRAY[ubyte]]()
 
             if !NetMQ.ReceivingSocketExtensions.try_receive_multipart_bytes(

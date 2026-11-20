@@ -118,7 +118,7 @@ namespace Ghul.Project is
         ///
         /// - output: the compiler's standard output
         version_in(output: string) -> string? static is
-            let found = System.Text.RegularExpressions.Regex.match(output, "[0-9]+\\.[0-9]+\\.[0-9]+")
+            let found = Text.Regex.match(output, "[0-9]+\\.[0-9]+\\.[0-9]+")
 
             if found.success then
                 return found.value

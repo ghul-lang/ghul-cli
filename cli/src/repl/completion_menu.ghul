@@ -71,7 +71,7 @@ namespace Ghul.Cli.Repl is
             let last_row = System.Math.min(row_count, _first_row + _rows)
 
             for row in _first_row..last_row do
-                let line = System.Text.StringBuilder()
+                let line = Text.StringBuilder()
 
                 for i in row * _per_row..System.Math.min(names.count, (row + 1) * _per_row) do
                     let padded = names[i].pad_right(_cell)

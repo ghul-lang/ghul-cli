@@ -1,7 +1,7 @@
 namespace Ghul.Repl is
     use Collections.LIST
-    use System.Reflection.Assembly
-    use System.Reflection.BindingFlags
+    use Ghul.Reflection.Assembly
+    use Ghul.Reflection.BindingFlags
 
     // What running a cell produced.
     class RUN_RESULT(value: object?, error: string?);
@@ -11,7 +11,7 @@ namespace Ghul.Repl is
     // since the request already named it.
     class LOADED_CELL(
         exports: Collections.List[string],
-        globals: System.Type?
+        globals: Ghul.Type?
     );
 
     // What a cell declared, read off an assembly the host loaded. The
@@ -33,7 +33,7 @@ namespace Ghul.Repl is
             let exports = LIST[string]()
 
             let types = assembly.get_types()
-            let globals: System.Type? mut = null
+            let globals: Ghul.Type? mut = null
 
             for type in types do
                 if type.is_public /\ type.name =~ GLOBALS_TYPE_NAME then
@@ -120,7 +120,7 @@ namespace Ghul.Repl is
         si
 
         // A union variant, marked as one in the assembly's metadata.
-        _is_variant(type: System.Type) -> bool static =>
+        _is_variant(type: Ghul.Type) -> bool static =>
             type.get_custom_attributes(false) |> Ghul.Pipes.any(a => a.get_type().full_name =~ VARIANT_ATTRIBUTE_NAME)
     si
 
@@ -164,12 +164,12 @@ namespace Ghul.Repl is
                 let inner = e.inner_exception
 
                 return RUN_RESULT(null, CELL_ERROR.describe(inner ?? e))
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return RUN_RESULT(null, CELL_ERROR.describe(e))
             yrt
         si
 
-        _find_entry(globals: System.Type) -> System.Reflection.MethodInfo? static is
+        _find_entry(globals: Ghul.Type) -> Ghul.Reflection.MethodInfo? static is
             let methods = globals.get_methods(CELL_EXPORTS.static_flags(true))
 
             for method in methods do
@@ -196,8 +196,8 @@ namespace Ghul.Repl is
     // it passed through, with a cell's frames naming the cell by its
     // label, and without the frames of the reflection call that ran it.
     class CELL_ERROR is
-        describe(e: System.Exception) -> string static is
-            let result = System.Text.StringBuilder("{e.get_type().full_name}: {e.message}")
+        describe(e: Ghul.Exception) -> string static is
+            let result = Text.StringBuilder("{e.get_type().full_name}: {e.message}")
             let frames = System.Diagnostics.StackTrace(e, false).get_frames()
 
             let previous: string? mut = null

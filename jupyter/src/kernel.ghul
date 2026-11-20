@@ -99,7 +99,7 @@ namespace Ghul.Jupyter is
             _publish(null, "status", CONTENT.status("starting"))
             _publish(null, "status", CONTENT.status("idle"))
 
-            let wait = System.TimeSpan.from_milliseconds(50L)
+            let wait = Time.TimeSpan.from_milliseconds(50L)
 
             // Control carries shutdown and interrupt, which a front end
             // sends precisely when the shell channel is busy running the
@@ -111,7 +111,7 @@ namespace Ghul.Jupyter is
             let shell_stopped = System.Threading.ManualResetEventSlim(false)
 
             let control_thread =
-                System.Threading.Thread(
+                Tasks.Thread(
                     System.Threading.ThreadStart(
                         () -> void is
                             while _is_running do
@@ -157,7 +157,7 @@ namespace Ghul.Jupyter is
         // a type this kernel does not implement is ignored rather than
         // answered with an error: the protocol says a kernel may not
         // implement everything.
-        _handle(channel: CHANNEL, wait: System.TimeSpan) is
+        _handle(channel: CHANNEL, wait: Time.TimeSpan) is
             let request = channel.try_receive(wait)
 
             if !request? then
@@ -469,7 +469,7 @@ namespace Ghul.Jupyter is
         // stop a thread, so the run itself may carry on unseen.
         // How long a shutdown waits for the shell thread before ending the
         // process without it.
-        SHUTDOWN_GRACE: System.TimeSpan static => System.TimeSpan.from_seconds(3.0)
+        SHUTDOWN_GRACE: Time.TimeSpan static => Time.TimeSpan.from_seconds(3.0)
 
         INTERRUPTED_NOTE: string static =>
             "interrupted; the cell kept its definitions, and may still be running in the background until the session ends"

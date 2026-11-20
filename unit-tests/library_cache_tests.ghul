@@ -51,7 +51,7 @@ namespace Ghul.Cli.Tests is
             return repository
         si
 
-        _url(repository: string) -> string => System.Uri(repository).absolute_uri
+        _url(repository: string) -> string => IO.Uri(repository).absolute_uri
 
         _commit_of(repository: string, revision: string) -> string is
             let result = GIT.run(LIST[string](["rev-parse", "{revision}^{{commit}}"]), repository)
@@ -63,7 +63,7 @@ namespace Ghul.Cli.Tests is
             if let (problem): Result.ERROR = outcome then
                 Assert.fail("expected the library, got: {problem}")
 
-                throw System.Exception("unreachable")
+                throw Ghul.Exception("unreachable")
             fi
 
             return outcome!

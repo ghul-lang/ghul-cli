@@ -155,7 +155,7 @@ namespace Ghul.Project is
                 fi
 
                 return ERROR("nodejs.org lists no release that runs the wasm target on this platform")
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return ERROR("the nodejs.org release index could not be read ({e.get_type().name})")
             yrt
         si
@@ -438,7 +438,7 @@ namespace Ghul.Project is
                 IO.File.write_all_bytes(destination, bytes)
 
                 return OK(unit())
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 if File.exists(destination) then
                     File.delete(destination)
                 fi
@@ -526,7 +526,7 @@ namespace Ghul.Project is
                 fi
 
                 return "chmod could not be started"
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return "chmod +x {path} failed ({e.get_type().name})"
             yrt
         si
@@ -562,7 +562,7 @@ namespace Ghul.Project is
                 TarFile.extract_to_directory(gzip, destination, true)
 
                 return OK(unit())
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return ERROR("the node archive could not be read ({e.get_type().name})")
             yrt
         si
@@ -578,7 +578,7 @@ namespace Ghul.Project is
                 fi
 
                 return OK(answer.text)
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return ERROR("{url} could not be read ({e.get_type().name})")
             yrt
         si
