@@ -1,5 +1,5 @@
 namespace Ghul.Jupyter is
-    use System.Text.StringBuilder
+    use Text.StringBuilder
 
     // What a cell's console output goes to while it runs: whole lines
     // are published as they are written, and whatever is left at the end
@@ -13,7 +13,7 @@ namespace Ghul.Jupyter is
             _pending = StringBuilder()
         si
 
-        encoding: System.Text.Encoding => System.Text.Encoding.utf8
+        encoding: Text.Encoding => Text.Encoding.utf8
 
         write(value: char) is
             _pending.append(value)
@@ -62,13 +62,13 @@ namespace Ghul.Jupyter is
     // thread of its own so that a kernel busy running a cell still
     // answers and the front end does not decide it has died.
     class HEARTBEAT(_address: string) is
-        _thread: System.Threading.Thread?
+        _thread: Tasks.Thread?
         _is_running: bool
 
         start() is
             _is_running = true
 
-            let thread = System.Threading.Thread(System.Threading.ThreadStart(() -> void => _serve()))
+            let thread = Tasks.Thread(System.Threading.ThreadStart(() -> void => _serve()))
 
             thread.is_background = true
 
@@ -90,14 +90,14 @@ namespace Ghul.Jupyter is
 
                     if NetMQ.ReceivingSocketExtensions.try_receive_multipart_bytes(
                         socket,
-                        System.TimeSpan.from_milliseconds(100L),
+                        Time.TimeSpan.from_milliseconds(100L),
                         frames ref,
                         1)
                     then
                         NetMQ.OutgoingSocketExtensions.send_multipart_bytes(socket, frames)
                     fi
                 od
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 // The socket is closed under us when the kernel stops,
                 // which is how this thread ends.
             finally

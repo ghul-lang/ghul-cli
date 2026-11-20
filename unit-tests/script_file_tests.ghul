@@ -19,7 +19,7 @@ namespace Ghul.Cli.Tests is
 
             records.add(CELL_RECORD(1, "let x = 1\n", CellStatus.OK, null))
             records.add(CELL_RECORD(2, "nope\n", CellStatus.FAILED, null))
-            records.add(CELL_RECORD(3, "throw System.Exception(\"x\")\n", CellStatus.THREW, null))
+            records.add(CELL_RECORD(3, "throw Ghul.Exception(\"x\")\n", CellStatus.THREW, null))
             records.add(CELL_RECORD(4, "let x = x + 1\n", CellStatus.OK, null))
 
             assert SCRIPT_FILE.text(records) =~ "// cell 1\nlet x = 1\n\n// cell 4\nlet x = x + 1\n";

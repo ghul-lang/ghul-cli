@@ -25,12 +25,12 @@ namespace Ghul.Jupyter is
         red(text: string) -> string static => "\u001B[31m{text}\u001B[39m"
 
         // The exception's type and message, out of the first line of a
-        // run-time error: `System.ArgumentException: message` names
+        // run-time error: `Ghul.ArgumentException: message` names
         // ArgumentException, as a notebook shows an error's name. A line
         // that is not in that shape is all message.
         name_and_message(error: string) -> (name: string, message: string) static is
             let first = error.replace("\r\n", "\n").split(['\n'])[0]
-            let colon = first.index_of(": ", System.StringComparison.ORDINAL)
+            let colon = first.index_of(": ", Text.StringComparison.ORDINAL)
 
             if colon <= 0 \/ first.substring(0, colon).contains(' ') then
                 return (name = "Exception", message = first)

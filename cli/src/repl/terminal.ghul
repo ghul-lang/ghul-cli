@@ -505,7 +505,7 @@ namespace Ghul.Cli.Repl is
         // A NuGet package, `NAME` or `NAME VERSION`, and what it depends on,
         // referenced by the cells after it.
         _package(session: CellSession, argument: string) is
-            let parts = argument.split([' '], System.StringSplitOptions.REMOVE_EMPTY_ENTRIES)
+            let parts = argument.split([' '], Text.StringSplitOptions.REMOVE_EMPTY_ENTRIES)
 
             if parts.count < 1 \/ parts.count > 2 then
                 Std.write_line("usage: :nuget PACKAGE [VERSION]")
@@ -601,7 +601,7 @@ namespace Ghul.Cli.Repl is
 
             try
                 IO.File.write_all_text(path, text)
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 Std.write_line("cannot write {path}: {e.message}")
 
                 return
@@ -623,7 +623,7 @@ namespace Ghul.Cli.Repl is
 
             try
                 text = IO.File.read_all_text(path)
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 Std.write_line("cannot read {path}: {e.message}")
 
                 return

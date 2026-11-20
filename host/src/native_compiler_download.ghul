@@ -156,7 +156,7 @@ namespace Ghul.Repl.Host is
                 File.write_all_bytes(destination, bytes)
 
                 return OK(unit())
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return ERROR("the {kind()} compiler for ghul.compiler {version} could not be downloaded ({e.get_type().name})")
             finally
                 client.dispose()
@@ -182,7 +182,7 @@ namespace Ghul.Repl.Host is
                 finally
                     gzip.dispose()
                 yrt
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return ERROR("the {kind()} compiler archive could not be read ({e.get_type().name})")
             finally
                 input.dispose()

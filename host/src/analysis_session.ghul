@@ -65,7 +65,7 @@ namespace Ghul.Repl.Host is
             let process = System.Diagnostics.Process.start(start_info)
 
             if !process? then
-                throw System.Exception("the analyser did not start")
+                throw Ghul.Exception("the analyser did not start")
             fi
 
             _process = process
@@ -120,7 +120,7 @@ namespace Ghul.Repl.Host is
 
                     return next.result
                 fi
-            catch e: System.AggregateException
+            catch e: Ghul.AggregateException
                 _next = null
             yrt
 
@@ -133,7 +133,7 @@ namespace Ghul.Repl.Host is
                     _process.kill(true)
                     _process.wait_for_exit(5000)
                 fi
-            catch e: System.Exception
+            catch e: Ghul.Exception
             yrt
 
             _process.dispose()
@@ -228,7 +228,7 @@ namespace Ghul.Repl.Host is
             let result = LIST[ANALYSIS_COMPLETION]()
 
             for item in ANALYSER_FRAMES.items(reply) do
-                if !is_machinery(item.name) /\ item.name.starts_with(prefix, System.StringComparison.ORDINAL) then
+                if !is_machinery(item.name) /\ item.name.starts_with(prefix, Text.StringComparison.ORDINAL) then
                     result.add(item)
                 fi
             od
@@ -443,7 +443,7 @@ namespace Ghul.Repl.Host is
             json.flush()
             json.dispose()
 
-            System.Text.Encoding.utf8.get_string(buffer.to_array())
+            Text.Encoding.utf8.get_string(buffer.to_array())
         si
 
         kind_of(line: string) -> string? static => text_of(line, "kind")
@@ -494,7 +494,7 @@ namespace Ghul.Repl.Host is
                         result.add(COMPILE_SERVER_REPLY.diagnostic_from(element, file))
                     od
                 fi
-            catch e: System.Exception
+            catch e: Ghul.Exception
             yrt
 
             return result
@@ -524,7 +524,7 @@ namespace Ghul.Repl.Host is
                                 element.get_property("description").get_string() ?? ""))
                     od
                 fi
-            catch e: System.Exception
+            catch e: Ghul.Exception
             yrt
 
             return result

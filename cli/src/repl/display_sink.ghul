@@ -7,7 +7,7 @@ namespace Ghul.Cli.Repl is
     // What display shows from a running cell, at a terminal: the line the
     // cell's value would be shown as. A terminal cannot redraw a line
     // above, so an update shows the new value as another line.
-    class TERMINAL_DISPLAY_SINK(_runtime: () -> System.Reflection.Assembly?): DisplaySink is
+    class TERMINAL_DISPLAY_SINK(_runtime: () -> Ghul.Reflection.Assembly?): DisplaySink is
         _display: CELL_DISPLAY
 
         init(..) is

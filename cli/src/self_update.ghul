@@ -146,7 +146,7 @@ namespace Ghul.Cli is
                 return ERROR(error)
             fi
 
-            if let tag: string = tag_of_release(System.Text.Encoding.utf8.get_string(fetched!)) then
+            if let tag: string = tag_of_release(Text.Encoding.utf8.get_string(fetched!)) then
                 return OK(tag)
             fi
 
@@ -182,7 +182,7 @@ namespace Ghul.Cli is
                 return ERROR(error)
             fi
 
-            if !matches_checksum(script!, System.Text.Encoding.utf8.get_string(checksum!)) then
+            if !matches_checksum(script!, Text.Encoding.utf8.get_string(checksum!)) then
                 return ERROR("{url} does not match its published sha256")
             fi
 
@@ -196,7 +196,7 @@ namespace Ghul.Cli is
         /// - url: an `http`, `https` or `file` URL
         fetch(url: string) -> Result[ARRAY[ubyte], string] static is
             if url.starts_with("file://") then
-                let path = System.Uri(url).local_path
+                let path = IO.Uri(url).local_path
 
                 if !File.exists(path) then
                     return ERROR("{url} does not exist")
@@ -218,7 +218,7 @@ namespace Ghul.Cli is
                 fi
 
                 return OK(answer.body!)
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return ERROR("{url} could not be read ({e.get_type().name})")
             finally
                 client.dispose()

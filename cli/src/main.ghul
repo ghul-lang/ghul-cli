@@ -57,7 +57,7 @@ namespace Ghul.Cli is
             let stream = File.open_read(path)
             stream.close()
             return true
-        catch e: System.Exception
+        catch e: Ghul.Exception
             return false
         yrt
     si
@@ -66,7 +66,7 @@ namespace Ghul.Cli is
         try
             let mode = File.get_unix_file_mode(path)
             return (cast int(mode) & cast int(UnixFileMode.USER_EXECUTE)) != 0
-        catch e: System.Exception
+        catch e: Ghul.Exception
             return false
         yrt
     si
@@ -78,7 +78,7 @@ namespace Ghul.Cli is
             let second = reader.read()
             reader.close()
             return first == 35 /\ second == 33  // '#' then '!'
-        catch e: System.Exception
+        catch e: Ghul.Exception
             return false
         yrt
     si
@@ -304,7 +304,7 @@ namespace Ghul.Cli is
 
     cli_version() -> string is
         let assembly_version =
-            System.Reflection.Assembly
+            Ghul.Reflection.Assembly
                 .get_executing_assembly()
                 .get_custom_attributes(typeof System.Reflection.AssemblyInformationalVersionAttribute, false)
                     |> map(va => cast System.Reflection.AssemblyInformationalVersionAttribute?(va)!)
@@ -566,7 +566,7 @@ namespace Ghul.Cli is
             return 1
         fi
 
-        let found = Ghul.Project.ROSETTA_TASK.find(System.Text.Encoding.utf8.get_string(index!), rest[0])
+        let found = Ghul.Project.ROSETTA_TASK.find(Text.Encoding.utf8.get_string(index!), rest[0])
 
         if let (problem): ERROR = found then
             LOG.say("{problem}")
@@ -1110,7 +1110,7 @@ namespace Ghul.Cli is
         // Keyed on the tool the build used as well as the target and the
         // compiler: this tool's own version, since the build is shaped
         // here, and every library and linker the build compiles against.
-        let key = Text.STRING_BUILDER()
+        let key = Text.StringBuilder()
 
         key.append("{Ghul.Project.BUILD_TARGETS.name(target)} {compiler_version} ghul-cli-{cli_version()}")
 
@@ -1133,7 +1133,7 @@ namespace Ghul.Cli is
         fi
 
         let digest = Crypto.sha256(
-            [script, System.Text.Encoding.utf8.get_bytes(key.to_string())] |> Ghul.Pipes.flat_map(b => b) |> ARRAY())
+            [script, Text.Encoding.utf8.get_bytes(key.to_string())] |> Ghul.Pipes.flat_map(b => b) |> ARRAY())
 
         let run_dir = Path.join([cache_root(), Text.to_hex_lower(digest)])
         let project = Ghul.Project.LOADED_PROJECT(manifest, run_dir, target)
@@ -1867,7 +1867,7 @@ namespace Ghul.Cli is
             errors.wait()
 
             return Ghul.Project.BUILD_OVERRIDES.version_in(output)
-        catch ex: System.Exception
+        catch ex: Ghul.Exception
             return null
         yrt
     si

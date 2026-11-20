@@ -7,7 +7,7 @@ namespace Ghul.Jupyter.Tests is
     use Ghul.Jupyter.MESSAGES
     use Ghul.Jupyter.SIGNER
     use IO.Std
-    use System.Text.Encoding
+    use Text.Encoding
 
     // A Jupyter front end, enough of one to put the kernel through what
     // a notebook does: ask what it is, run some cells, break one, and
@@ -89,11 +89,11 @@ namespace Ghul.Jupyter.Tests is
             return message.msg_id
         si
 
-        control_reply_within(budget: System.TimeSpan) -> MESSAGE? is
-            let deadline = System.DateTime.utc_now.add(budget)
+        control_reply_within(budget: Time.TimeSpan) -> MESSAGE? is
+            let deadline = Time.DateTime.utc_now.add(budget)
 
-            while System.DateTime.utc_now < deadline do
-                if let message = _control.try_receive(System.TimeSpan.from_milliseconds(200L)) then
+            while Time.DateTime.utc_now < deadline do
+                if let message = _control.try_receive(Time.TimeSpan.from_milliseconds(200L)) then
                     return message
                 fi
             od
@@ -103,13 +103,13 @@ namespace Ghul.Jupyter.Tests is
 
         // The next reply on shell, or nothing if the kernel says nothing
         // for long enough that it is not going to.
-        reply() -> MESSAGE? => reply_within(System.TimeSpan.from_seconds(60.0))
+        reply() -> MESSAGE? => reply_within(Time.TimeSpan.from_seconds(60.0))
 
-        reply_within(budget: System.TimeSpan) -> MESSAGE? is
-            let deadline = System.DateTime.utc_now.add(budget)
+        reply_within(budget: Time.TimeSpan) -> MESSAGE? is
+            let deadline = Time.DateTime.utc_now.add(budget)
 
-            while System.DateTime.utc_now < deadline do
-                if let message = _shell.try_receive(System.TimeSpan.from_milliseconds(200L)) then
+            while Time.DateTime.utc_now < deadline do
+                if let message = _shell.try_receive(Time.TimeSpan.from_milliseconds(200L)) then
                     return message
                 fi
             od
@@ -121,14 +121,14 @@ namespace Ghul.Jupyter.Tests is
         // status. Anything published for another request is skipped.
         published_until_idle(msg_id: string) -> Collections.List[MESSAGE] is
             let seen = LIST[MESSAGE]()
-            let deadline = System.DateTime.utc_now.add_seconds(60.0)
+            let deadline = Time.DateTime.utc_now.add_seconds(60.0)
 
-            while System.DateTime.utc_now < deadline do
+            while Time.DateTime.utc_now < deadline do
                 let frames = Collections.LIST[ARRAY[ubyte]]()
 
                 if !NetMQ.ReceivingSocketExtensions.try_receive_multipart_bytes(
                     _iopub,
-                    System.TimeSpan.from_milliseconds(200L),
+                    Time.TimeSpan.from_milliseconds(200L),
                     frames ref,
                     8)
                 then
@@ -156,15 +156,15 @@ namespace Ghul.Jupyter.Tests is
         // Whether a request publishes a message `wanted` accepts within
         // `budget`, reading nothing past it: what the kernel publishes
         // while a cell is still running.
-        published_within(msg_id: string, budget: System.TimeSpan, wanted: (MESSAGE) -> bool) -> bool is
-            let deadline = System.DateTime.utc_now.add(budget)
+        published_within(msg_id: string, budget: Time.TimeSpan, wanted: (MESSAGE) -> bool) -> bool is
+            let deadline = Time.DateTime.utc_now.add(budget)
 
-            while System.DateTime.utc_now < deadline do
+            while Time.DateTime.utc_now < deadline do
                 let frames = Collections.LIST[ARRAY[ubyte]]()
 
                 if !NetMQ.ReceivingSocketExtensions.try_receive_multipart_bytes(
                     _iopub,
-                    System.TimeSpan.from_milliseconds(200L),
+                    Time.TimeSpan.from_milliseconds(200L),
                     frames ref,
                     8)
                 then
@@ -188,20 +188,20 @@ namespace Ghul.Jupyter.Tests is
         // on iopub; this does the same, asking again until one arrives,
         // since the kernel only publishes when asked.
         wait_until_subscribed() -> MESSAGE? is
-            let deadline = System.DateTime.utc_now.add_seconds(60.0)
+            let deadline = Time.DateTime.utc_now.add_seconds(60.0)
 
             let reply: MESSAGE? mut = null
 
-            while System.DateTime.utc_now < deadline do
+            while Time.DateTime.utc_now < deadline do
                 let sent = send("kernel_info_request", JSON.EMPTY_OBJECT)
 
-                let answer = reply_within(System.TimeSpan.from_seconds(2.0))
+                let answer = reply_within(Time.TimeSpan.from_seconds(2.0))
 
                 if answer? /\ !reply? then
                     reply = answer
                 fi
 
-                if _saw_status(System.TimeSpan.from_seconds(1.0)) then
+                if _saw_status(Time.TimeSpan.from_seconds(1.0)) then
                     return reply
                 fi
             od
@@ -209,7 +209,7 @@ namespace Ghul.Jupyter.Tests is
             return null
         si
 
-        _saw_status(timeout: System.TimeSpan) -> bool is
+        _saw_status(timeout: Time.TimeSpan) -> bool is
             let frames = Collections.LIST[ARRAY[ubyte]]()
 
             if !NetMQ.ReceivingSocketExtensions.try_receive_multipart_bytes(

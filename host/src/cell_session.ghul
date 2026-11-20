@@ -1,5 +1,5 @@
 namespace Ghul.Repl.Host is
-    use System.Reflection.Assembly
+    use Ghul.Reflection.Assembly
 
     /// What a front end asks of a session of cells: submit text, list what has
     /// been submitted, interrupt a cell, and the questions an editor asks of

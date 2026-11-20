@@ -8,7 +8,7 @@ namespace Ghul.Repl.Host is
     use Ghul.Repl.CELL_REQUEST
     use Ghul.Repl.LOADED_CELL
     use Ghul.Repl.SESSION
-    use System.Reflection.Assembly
+    use Ghul.Reflection.Assembly
 
     /// A session whose cells run in a native host process of their own. Each
     /// cell is compiled for the llvm target as the next cell of a linked
@@ -70,7 +70,7 @@ namespace Ghul.Repl.Host is
                 IO.Directory.create_directory(directory)
 
                 return ANALYSER_PROCESS(_compiler, directory, Collections.LIST[string](["--target", "llvm", "--cells", "@{_libraries_file()}"]))
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return null
             yrt
         si
@@ -90,7 +90,7 @@ namespace Ghul.Repl.Host is
         // One argument a line, quoted where it holds white space, as the
         // compiler reads a response file.
         _response_text(arguments: Collections.List[string]) -> string static is
-            let text = Text.STRING_BUILDER()
+            let text = Text.StringBuilder()
 
             for argument in arguments do
                 if argument.length == 0 \/ (argument |> Ghul.Pipes.any(c => c.is_white_space)) then
@@ -153,7 +153,7 @@ namespace Ghul.Repl.Host is
                     System.Diagnostics.Process.start(start_info)?.wait_for_exit()
 
                     return true
-                catch e: System.Exception
+                catch e: Ghul.Exception
                     return false
                 yrt
             fi
@@ -193,14 +193,14 @@ namespace Ghul.Repl.Host is
                         server.kill()
                     fi
                 fi
-            catch e: System.Exception
+            catch e: Ghul.Exception
             yrt
 
             try
                 _commands?.write_line("quit")
                 _commands?.flush()
                 _commands?.dispose()
-            catch e: System.Exception
+            catch e: Ghul.Exception
             yrt
 
             if let host = _host then
@@ -216,7 +216,7 @@ namespace Ghul.Repl.Host is
                 if IO.Directory.exists(_directory) then
                     IO.Directory.delete(_directory, true)
                 fi
-            catch e: System.Exception
+            catch e: Ghul.Exception
             yrt
         si
 
@@ -246,7 +246,7 @@ namespace Ghul.Repl.Host is
 
         _submit(source: string, first: CELL_REQUEST) -> SUBMIT_RESULT is
             let timing = System.Environment.get_environment_variable("GHUL_REPL_TIMING")?
-            let started = System.Diagnostics.Stopwatch.start_new()
+            let started = Time.Stopwatch.start_new()
 
             let request mut = first
             let compiled mut = _compile(request)
@@ -381,7 +381,7 @@ namespace Ghul.Repl.Host is
 
                     _note(line, diagnostics)
                 od
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return null
             yrt
         si
@@ -576,7 +576,7 @@ namespace Ghul.Repl.Host is
             commands.flush()
 
             let output = _host!.standard_output
-            let text = Text.STRING_BUILDER()
+            let text = Text.StringBuilder()
 
             let value: string? mut = null
             let status mut = -1

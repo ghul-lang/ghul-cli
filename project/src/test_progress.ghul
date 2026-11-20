@@ -115,7 +115,7 @@ namespace Ghul.Project is
             writer.write_end_object()
             writer.flush()
 
-            return System.Text.Encoding.utf8.get_string(buffer.to_array())
+            return Text.Encoding.utf8.get_string(buffer.to_array())
         si
     si
 
@@ -156,7 +156,7 @@ namespace Ghul.Project is
                     _events_path = Path.join(directory, "{_record.pid}.events")
                     _enabled = true
                 fi
-            catch ex: System.Exception
+            catch ex: Ghul.Exception
                 _enabled = false
             yrt
 
@@ -211,7 +211,7 @@ namespace Ghul.Project is
             _flush()
         si
 
-        _now() -> long static => System.DateTimeOffset.utc_now.to_unix_time_milliseconds()
+        _now() -> long static => Time.DateTimeOffset.utc_now.to_unix_time_milliseconds()
 
         _flush() is
             if !_enabled then
@@ -227,7 +227,7 @@ namespace Ghul.Project is
             try
                 File.write_all_text(_snapshot_temp_path, _record.to_json())
                 File.move(_snapshot_temp_path, _snapshot_path, true)
-            catch ex: System.Exception
+            catch ex: Ghul.Exception
                 _enabled = false
             yrt
         si
@@ -241,7 +241,7 @@ namespace Ghul.Project is
 
             try
                 File.append_all_text(_events_path, "{_now()} {kind} {_record.completed}/{_record.total}{suffix}\n")
-            catch ex: System.Exception
+            catch ex: Ghul.Exception
                 _enabled = false
             yrt
         si

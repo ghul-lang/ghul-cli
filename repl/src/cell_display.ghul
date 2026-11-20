@@ -1,6 +1,6 @@
 namespace Ghul.Repl is
     use Collections.LIST
-    use System.Text.RegularExpressions.Regex
+    use Text.Regex
 
     // One line for the value a cell ended on, or null where there is
     // nothing to show. Everything the terminal knows about rendering a
@@ -19,9 +19,9 @@ namespace Ghul.Repl is
         // is then written the way a ghūl program would write it with
         // `inspect`, and the rest of this class is the fallback for an
         // older runtime.
-        _inspect: System.Reflection.MethodInfo?
+        _inspect: Ghul.Reflection.MethodInfo?
 
-        _inspecting_runtime: System.Reflection.Assembly?
+        _inspecting_runtime: Ghul.Reflection.Assembly?
 
         // The oldest runtime whose `inspect` is used: the first that
         // leaves a type from another language to its own to_string rather
@@ -31,7 +31,7 @@ namespace Ghul.Repl is
 
         // Write values with the `inspect` of the runtime the cells run
         // against, when it is new enough.
-        use_runtime(runtime: System.Reflection.Assembly?) is
+        use_runtime(runtime: Ghul.Reflection.Assembly?) is
             if runtime == _inspecting_runtime then
                 return
             fi
@@ -137,7 +137,7 @@ namespace Ghul.Repl is
             return "({rendered |> Ghul.Pipes.join(", ")})"
         si
 
-        _pair(value: object, type: System.Type, depth: int) -> string is
+        _pair(value: object, type: Ghul.Type, depth: int) -> string is
             let key = type.get_property("Key")?.get_value(value)
             let item = type.get_property("Value")?.get_value(value)
 
@@ -146,8 +146,8 @@ namespace Ghul.Repl is
 
         // Whether a type says what it is in its own words. One that
         // does not would only give back its .NET type name.
-        _has_own_text(type: System.Type) -> bool static is
-            let to_string = type.get_method("ToString", System.Type.empty_types)
+        _has_own_text(type: Ghul.Type) -> bool static is
+            let to_string = type.get_method("ToString", Ghul.Type.empty_types)
 
             if !to_string? then
                 return true
@@ -160,7 +160,7 @@ namespace Ghul.Repl is
 
         // The type, and the public properties and fields a ghūl program
         // could read, as the constructor call that would build it reads.
-        _describe(value: object, type: System.Type, depth: int) -> string is
+        _describe(value: object, type: Ghul.Type, depth: int) -> string is
             let found = parts(value)!
             let rendered = LIST[string]()
 
@@ -217,7 +217,7 @@ namespace Ghul.Repl is
         // A type as a ghūl program names it: the built-in names for the
         // types that have one, type arguments in square brackets, and
         // with no mention of the cell a definition came from.
-        type_name(type: System.Type) -> string static is
+        type_name(type: Ghul.Type) -> string static is
             if type.is_array then
                 let element = type.get_element_type()
 
@@ -277,7 +277,7 @@ namespace Ghul.Repl is
             return if rest.success then rest.value else null fi
         si
 
-        _builtin_name(type: System.Type) -> string? static is
+        _builtin_name(type: Ghul.Type) -> string? static is
             if type == typeof(int) then return "int" fi
             if type == typeof(long) then return "long" fi
             if type == typeof(short) then return "short" fi
@@ -299,10 +299,10 @@ namespace Ghul.Repl is
             return null
         si
 
-        _instance_flags() -> System.Reflection.BindingFlags static =>
-            cast System.Reflection.BindingFlags(
-                cast int(System.Reflection.BindingFlags.PUBLIC) |
-                cast int(System.Reflection.BindingFlags.INSTANCE))
+        _instance_flags() -> Ghul.Reflection.BindingFlags static =>
+            cast Ghul.Reflection.BindingFlags(
+                cast int(Ghul.Reflection.BindingFlags.PUBLIC) |
+                cast int(Ghul.Reflection.BindingFlags.INSTANCE))
 
         // Whatever the value holds, where it holds a sequence of things:
         // the first `limit` of them, and whether there are more. At most

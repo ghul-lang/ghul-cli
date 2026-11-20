@@ -61,7 +61,7 @@ namespace Ghul.Repl.Host is
             if !process.wait_for_exit(TIMEOUT_MS) then
                 try
                     process.kill(true)
-                catch e: System.Exception
+                catch e: Ghul.Exception
                 yrt
 
                 return ERROR("restoring {package} took longer than {TIMEOUT_MS / 60000} minutes, so it was stopped")
@@ -100,11 +100,11 @@ namespace Ghul.Repl.Host is
         // puts after it.
         first_error(output: string) -> string? static is
             for line in output.split(['\n']) do
-                let at = line.index_of(": error ", System.StringComparison.ORDINAL)
+                let at = line.index_of(": error ", Text.StringComparison.ORDINAL)
 
                 if at >= 0 then
                     let message = line.substring(at + 2).trim()
-                    let project_at = message.last_index_of(" [", System.StringComparison.ORDINAL)
+                    let project_at = message.last_index_of(" [", Text.StringComparison.ORDINAL)
 
                     return if project_at > 0 then message.substring(0, project_at) else message fi
                 fi

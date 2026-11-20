@@ -142,7 +142,7 @@ namespace Ghul.Repl.Host is
         si
 
         _ends_with_word(code: string, word: string) -> bool static is
-            if !code.ends_with(word, System.StringComparison.ORDINAL) then
+            if !code.ends_with(word, Text.StringComparison.ORDINAL) then
                 return false
             fi
 

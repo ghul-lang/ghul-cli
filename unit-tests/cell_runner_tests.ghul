@@ -33,15 +33,15 @@ namespace Ghul.Cli.Tests is
 
             let interrupter: System.Threading.ThreadStart = () -> void is
                 while !runner.is_running do
-                    System.Threading.Thread.sleep(5)
+                    Tasks.Thread.sleep(5)
                 od
 
                 runner.interrupt()
             si
 
-            System.Threading.Thread(interrupter).start()
+            Tasks.Thread(interrupter).start()
 
-            let started = System.DateTime.utc_now
+            let started = Time.DateTime.utc_now
 
             let run = runner.run(() -> RUN_RESULT is
                 hang.wait()
@@ -51,7 +51,7 @@ namespace Ghul.Cli.Tests is
 
             assert run.was_interrupted;
             assert !run.value?;
-            assert (System.DateTime.utc_now - started).total_seconds < 10.0;
+            assert (Time.DateTime.utc_now - started).total_seconds < 10.0;
             assert !runner.is_running;
 
             hang.set()

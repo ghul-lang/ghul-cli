@@ -2,7 +2,7 @@ namespace Ghul.Repl.Host is
     use Ghul.Repl.RUN_RESULT
 
     use System.Threading.ManualResetEventSlim
-    use System.Threading.Thread
+    use Tasks.Thread
     use System.Threading.WaitHandle
 
     // How a cell's run ended: with the value it ended on or the error it
@@ -61,7 +61,7 @@ namespace Ghul.Repl.Host is
             let start: System.Threading.ThreadStart = () -> void is
                 try
                     outcome = body()
-                catch e: System.Exception
+                catch e: Ghul.Exception
                     outcome = RUN_RESULT(null, e.message)
                 finally
                     finished.set()

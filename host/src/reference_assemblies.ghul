@@ -41,7 +41,7 @@ namespace Ghul.Repl.Host is
                         best_version = version
                         best = framework
                     fi
-                catch e: System.Exception
+                catch e: Ghul.Exception
                     // not a version directory; skip
                 yrt
             od

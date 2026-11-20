@@ -13,7 +13,7 @@ namespace Ghul.Cli.Repl is
         type_from_hover(shown: string) -> string? static is
             let marker = "it: "
 
-            if !shown.starts_with(marker, System.StringComparison.ORDINAL) then
+            if !shown.starts_with(marker, Text.StringComparison.ORDINAL) then
                 return null
             fi
 

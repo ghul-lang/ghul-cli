@@ -40,7 +40,7 @@ namespace Ghul.Jupyter.Tests is
                 _from_assembly(kernel_assembly, connection_file)
             fi
 
-        let since_start = System.Diagnostics.Stopwatch.start_new()
+        let since_start = Time.Stopwatch.start_new()
         let started = System.Diagnostics.Process.start(start_info)
 
         if !started? then
@@ -142,7 +142,7 @@ namespace Ghul.Jupyter.Tests is
     si
 
     _expand(value: string, environment: Collections.MutableMap[string, string?]) -> string is
-        let result = System.Text.StringBuilder()
+        let result = Text.StringBuilder()
         let i mut = 0
 
         while i < value.length do
@@ -180,14 +180,14 @@ namespace Ghul.Jupyter.Tests is
     si
 
     _waited_for_exit(process: System.Diagnostics.Process, seconds: int) -> bool is
-        let deadline = System.DateTime.utc_now.add_seconds(cast double(seconds))
+        let deadline = Time.DateTime.utc_now.add_seconds(cast double(seconds))
 
-        while System.DateTime.utc_now < deadline do
+        while Time.DateTime.utc_now < deadline do
             if process.has_exited then
                 return true
             fi
 
-            System.Threading.Thread.sleep(200)
+            Tasks.Thread.sleep(200)
         od
 
         return process.has_exited
@@ -199,7 +199,7 @@ namespace Ghul.Jupyter.Tests is
     // kernel that has become unusable.
     _TIMING_CEILING_MS: long static => 60000L
 
-    _drive(client: CLIENT, since_start: System.Diagnostics.Stopwatch) -> int is
+    _drive(client: CLIENT, since_start: Time.Stopwatch) -> int is
         Std.write_line("kernel_info:")
 
         // Asks until the subscription is live, which is also what proves
@@ -222,7 +222,7 @@ namespace Ghul.Jupyter.Tests is
 
         Std.write_line("three chained cells:")
 
-        let first_cell = System.Diagnostics.Stopwatch.start_new()
+        let first_cell = Time.Stopwatch.start_new()
 
         _execute(client, "let x = 41\n", null)
 
@@ -253,7 +253,7 @@ namespace Ghul.Jupyter.Tests is
             _result_text(scalars.published) =~ "[1, 2, 3]" /\ _result_html(scalars.published) =~ "",
             "a list of scalars is its text alone, with no table")
 
-        let endless_timer = System.Diagnostics.Stopwatch.start_new()
+        let endless_timer = Time.Stopwatch.start_new()
         let endless = _execute_raw(client, "from(0)\n")
         let endless_ms = endless_timer.elapsed_milliseconds
 
@@ -299,7 +299,7 @@ namespace Ghul.Jupyter.Tests is
 
         Std.write_line("a cell that throws:")
 
-        let threw = _execute_raw(client, "throw System.Exception(\"boom\")\n")
+        let threw = _execute_raw(client, "throw Ghul.Exception(\"boom\")\n")
 
         client.check(_has(threw.published, "error"), "a cell that throws publishes an error")
 
@@ -346,13 +346,13 @@ namespace Ghul.Jupyter.Tests is
         _single_interrupt_case(
             client,
             "a loop writing a line each time round",
-            "let i mut = 0\nwhile true do\n    IO.Std.write_line(\"line {{i}}\")\n    i = i + 1\n    System.Threading.Thread.sleep(20)\nod\n",
+            "let i mut = 0\nwhile true do\n    IO.Std.write_line(\"line {{i}}\")\n    i = i + 1\n    Tasks.Thread.sleep(20)\nod\n",
             m => m.msg_type =~ "stream")
 
         _single_interrupt_case(
             client,
             "a loop updating a display",
-            "display(0, \"counter\")\nlet i mut = 0\nwhile true do\n    update_display(i, \"counter\")\n    i = i + 1\n    System.Threading.Thread.sleep(20)\nod\n",
+            "display(0, \"counter\")\nlet i mut = 0\nwhile true do\n    update_display(i, \"counter\")\n    i = i + 1\n    Tasks.Thread.sleep(20)\nod\n",
             m => m.msg_type =~ "display_data")
 
         _single_interrupt_case(
@@ -399,12 +399,12 @@ namespace Ghul.Jupyter.Tests is
                 ])))
 
         client.check(
-            client.published_within(running, System.TimeSpan.from_seconds(60.0), m => m.msg_type =~ "stream"),
+            client.published_within(running, Time.TimeSpan.from_seconds(60.0), m => m.msg_type =~ "stream"),
             "a cell is showing its value when shutdown arrives")
 
         let _ = client.send_control("shutdown_request", "{{\"restart\": true}}")
 
-        let shutdown = client.control_reply_within(System.TimeSpan.from_seconds(10.0))
+        let shutdown = client.control_reply_within(Time.TimeSpan.from_seconds(10.0))
 
         client.check(shutdown? /\ shutdown.msg_type =~ "shutdown_reply", "the kernel answers shutdown_request on control")
 
@@ -471,15 +471,15 @@ namespace Ghul.Jupyter.Tests is
 
         let _ = client.send("execute_request", content)
 
-        let deadline = System.DateTime.utc_now.add_seconds(90.0)
+        let deadline = Time.DateTime.utc_now.add_seconds(90.0)
         let reply: MESSAGE? mut = null
 
-        while System.DateTime.utc_now < deadline /\ !reply? do
+        while Time.DateTime.utc_now < deadline /\ !reply? do
             let _ = client.send_control("interrupt_request", JSON.EMPTY_OBJECT)
 
-            let _ = client.control_reply_within(System.TimeSpan.from_seconds(2.0))
+            let _ = client.control_reply_within(Time.TimeSpan.from_seconds(2.0))
 
-            reply = client.reply_within(System.TimeSpan.from_seconds(2.0))
+            reply = client.reply_within(Time.TimeSpan.from_seconds(2.0))
         od
 
         if !reply? then
@@ -520,21 +520,21 @@ namespace Ghul.Jupyter.Tests is
 
         if let wanted = running then
             client.check(
-                client.published_within(sent, System.TimeSpan.from_seconds(60.0), wanted),
+                client.published_within(sent, Time.TimeSpan.from_seconds(60.0), wanted),
                 "{label}: the cell runs")
         else
-            System.Threading.Thread.sleep(10_000)
+            Tasks.Thread.sleep(10_000)
         fi
 
         let _ = client.send_control("interrupt_request", JSON.EMPTY_OBJECT)
 
-        let control = client.control_reply_within(System.TimeSpan.from_seconds(10.0))
+        let control = client.control_reply_within(Time.TimeSpan.from_seconds(10.0))
 
         client.check(
             control? /\ control.msg_type =~ "interrupt_reply",
             "{label}: the kernel answers the one interrupt_request")
 
-        let reply = client.reply_within(System.TimeSpan.from_seconds(5.0))
+        let reply = client.reply_within(Time.TimeSpan.from_seconds(5.0))
 
         if !reply? then
             client.check(false, "{label}: one interrupt_request stops the cell within 5 seconds")

@@ -1,5 +1,5 @@
 namespace Ghul.Repl is
-    use System.Text.RegularExpressions.Regex
+    use Text.Regex
 
     // Where a cell sits in the session, and how many generated lines
     // come before what the user wrote. The last `carried_lines` of those

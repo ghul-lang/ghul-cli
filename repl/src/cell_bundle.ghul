@@ -21,7 +21,7 @@ namespace Ghul.Repl is
 
         // Write the text/plain part with the `inspect` of the runtime the
         // cells run against, when it is new enough.
-        use_runtime(runtime: System.Reflection.Assembly?) is
+        use_runtime(runtime: Ghul.Reflection.Assembly?) is
             _display.use_runtime(runtime)
         si
 
@@ -118,7 +118,7 @@ namespace Ghul.Repl is
                 return null
             fi
 
-            let html = System.Text.StringBuilder()
+            let html = Text.StringBuilder()
 
             html.append("<table>")
 

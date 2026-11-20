@@ -154,7 +154,7 @@ namespace Ghul.Jupyter is
     si
 
     version() -> string is
-        let assembly = System.Reflection.Assembly.get_entry_assembly()
+        let assembly = Ghul.Reflection.Assembly.get_entry_assembly()
 
         if let entry = assembly then
             let attribute =

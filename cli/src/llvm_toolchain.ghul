@@ -116,7 +116,7 @@ namespace Ghul.Cli is
         /// did not.
         fetch_problem() -> Result[unit, string] is
             if releases.starts_with("file://") then
-                if Directory.exists(System.Uri(releases).local_path) then
+                if Directory.exists(IO.Uri(releases).local_path) then
                     return OK(unit())
                 fi
 
@@ -125,7 +125,7 @@ namespace Ghul.Cli is
 
             let unreachable = Path.join([root, ".unreachable"])
 
-            if File.exists(unreachable) /\ System.DateTime.utc_now - File.get_last_write_time_utc(unreachable) < System.TimeSpan.from_minutes(10.0) then
+            if File.exists(unreachable) /\ Time.DateTime.utc_now - File.get_last_write_time_utc(unreachable) < Time.TimeSpan.from_minutes(10.0) then
                 let reason = File.read_all_text(unreachable).trim()
 
                 return ERROR("{_host()} could not be reached{if reason.length > 0 then " ({reason})" else "" fi}")
@@ -152,7 +152,7 @@ namespace Ghul.Cli is
             let client = System.Net.Http.HttpClient()
 
             try
-                client.timeout = System.TimeSpan.from_seconds(3.0)
+                client.timeout = Time.TimeSpan.from_seconds(3.0)
                 client.default_request_headers.user_agent.parse_add("ghul-cli")
 
                 let request = System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.head, releases)
@@ -173,10 +173,10 @@ namespace Ghul.Cli is
         si
 
         _host() -> string =>
-            if let uri: System.Uri = _uri() then uri.host else releases fi
+            if let uri: IO.Uri = _uri() then uri.host else releases fi
 
-        _uri() -> System.Uri? =>
-            if System.Uri.is_well_formed_uri_string(releases, System.UriKind.ABSOLUTE) then System.Uri(releases) else null fi
+        _uri() -> IO.Uri? =>
+            if IO.Uri.is_well_formed_uri_string(releases, System.UriKind.ABSOLUTE) then IO.Uri(releases) else null fi
 
         /// The name of the archive a release publishes for `triple`.
         ///
@@ -252,13 +252,13 @@ namespace Ghul.Cli is
         // file:// base, or the repository's tags otherwise.
         _release_tags() -> Result[Collections.List[(tag: string, version: System.Version)], string] is
             if releases.starts_with("file://") then
-                let base = System.Uri(releases).local_path
+                let base = IO.Uri(releases).local_path
 
                 if !Directory.exists(base) then
                     return ERROR("cannot list the ghul-llvm releases: {releases} does not exist")
                 fi
 
-                let listing = Text.STRING_BUILDER()
+                let listing = Text.StringBuilder()
 
                 for directory in Directory.get_directories(base) do
                     listing.append("-\trefs/tags/{Path.get_file_name(directory)}\n")
@@ -341,7 +341,7 @@ namespace Ghul.Cli is
                 return ERROR("cannot fetch ghul-llvm: {error}")
             fi
 
-            if !matches_checksum(archive!, System.Text.Encoding.utf8.get_string(checksum!)) then
+            if !matches_checksum(archive!, Text.Encoding.utf8.get_string(checksum!)) then
                 return ERROR("{url} does not match its published sha256")
             fi
 
@@ -466,7 +466,7 @@ namespace Ghul.Cli is
         /// - url: an `http`, `https` or `file` URL
         fetch(url: string) -> Result[ARRAY[ubyte], string] static is
             if url.starts_with("file://") then
-                let path = System.Uri(url).local_path
+                let path = IO.Uri(url).local_path
 
                 if !File.exists(path) then
                     return ERROR("{url} does not exist")

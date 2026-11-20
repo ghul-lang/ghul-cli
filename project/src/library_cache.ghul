@@ -197,7 +197,7 @@ namespace Ghul.Project is
         /// long URL keeps its start and adds a hash of the whole, so that the
         /// paths under it stay short enough for git to create on Windows.
         repository_directory_name(url: string) -> string static is
-            let safe = System.Text.StringBuilder()
+            let safe = Text.StringBuilder()
 
             for c in url do
                 if c.is_letter_or_digit \/ c == '-' \/ c == '.' then
@@ -213,7 +213,7 @@ namespace Ghul.Project is
                 return name
             fi
 
-            let digest = Crypto.sha256(System.Text.Encoding.utf8.get_bytes(url))
+            let digest = Crypto.sha256(Text.Encoding.utf8.get_bytes(url))
             let hash = Text.to_hex_lower(digest).substring(0, 12)
 
             return "{name.substring(0, 32)}-{hash}"

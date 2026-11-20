@@ -128,7 +128,7 @@ si
 // Stands in for a cell: a cell's namespace is its submission name.
 @suppress("non-pascal-case-name")
 namespace cell7 is
-    thrower() -> int => throw System.InvalidOperationException("empty")
+    thrower() -> int => throw Ghul.InvalidOperationException("empty")
 si
 
 namespace Ghul.Cli.Tests is
@@ -147,7 +147,7 @@ namespace Ghul.Cli.Tests is
 
             try
                 cell7.thrower();
-            catch e: System.InvalidOperationException
+            catch e: Ghul.InvalidOperationException
                 described = CELL_ERROR.describe(e)
             yrt
 

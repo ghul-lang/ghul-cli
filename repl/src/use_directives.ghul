@@ -44,7 +44,7 @@ namespace Ghul.Repl is
         // One space wherever the directive had any run of whitespace, so
         // two spellings of the same import compare equal.
         normalise(directive: string) -> string static =>
-            directive.split([' ', '\t'], System.StringSplitOptions.REMOVE_EMPTY_ENTRIES)
+            directive.split([' ', '\t'], Text.StringSplitOptions.REMOVE_EMPTY_ENTRIES)
             |> Ghul.Pipes.join(" ")
 
         // The name a directive brings into scope, or null for one that

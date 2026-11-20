@@ -8,7 +8,7 @@ namespace Ghul.Repl.Host is
     use Ghul.Repl.RUN_RESULT
     use Ghul.Repl.SESSION
     use Ghul.Repl.STRAGGLERS
-    use System.Reflection.Assembly
+    use Ghul.Reflection.Assembly
 
     // What a submission did, for a front end to report.
     // `was_interrupted` means the cell was accepted and started, then
@@ -120,7 +120,7 @@ namespace Ghul.Repl.Host is
         // DISPLAY_SINKS in the runtime the cells run against. The host's
         // own runtime is another assembly, so a sink installed through it
         // would never reach the cells.
-        _cells_display_sinks: System.Type? => runtime?.get_type("Ghul.DISPLAY_SINKS")
+        _cells_display_sinks: Ghul.Type? => runtime?.get_type("Ghul.DISPLAY_SINKS")
 
         _display_sink: Ghul.DisplaySink?
 
@@ -219,7 +219,7 @@ namespace Ghul.Repl.Host is
                 if IO.Directory.exists(directory) then
                     IO.Directory.delete(directory, true)
                 fi
-            catch e: System.Exception
+            catch e: Ghul.Exception
             yrt
         si
 
@@ -547,7 +547,7 @@ namespace Ghul.Repl.Host is
                 IO.Directory.create_directory(directory)
 
                 return ANALYSER_PROCESS(compiler, directory)
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return null
             yrt
         si
@@ -559,7 +559,7 @@ namespace Ghul.Repl.Host is
                 files.prepare()
 
                 return SERVER_PROCESS(compiler, files.directory)
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return null
             yrt
         si

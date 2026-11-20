@@ -158,7 +158,7 @@ namespace Ghul.Repl.Host is
                 return null
             fi
 
-            let age = System.DateTime.utc_now - File.get_last_write_time_utc(path)
+            let age = Time.DateTime.utc_now - File.get_last_write_time_utc(path)
 
             if age.total_seconds > cast double(window_seconds) then
                 return null

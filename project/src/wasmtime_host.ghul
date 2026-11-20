@@ -173,7 +173,7 @@ namespace Ghul.Project is
                 fi
 
                 return ERROR("the releases request answered nothing")
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return ERROR(e.message)
             finally
                 client.dispose()
@@ -181,7 +181,7 @@ namespace Ghul.Project is
         si
 
         latest_tag_in(text: string) -> string? static =>
-            System.Text.RegularExpressions.Regex
+            Text.Regex
                 .match(text, "\"tag_name\":\\s*\"v([^\"]+)\"")
                 .groups[1]
                 .value
@@ -288,7 +288,7 @@ namespace Ghul.Project is
                     File.move(scratch, Path.join([directory, "ghul-wasmtime"]))
 
                     return OK(unit())
-                catch e: System.Exception
+                catch e: Ghul.Exception
                     if File.exists(scratch) then
                         File.delete(scratch)
                     fi
@@ -316,7 +316,7 @@ namespace Ghul.Project is
             process.wait_for_exit()
 
             if process.exit_code != 0 then
-                throw System.InvalidOperationException("chmod +x {path} failed (exit {process.exit_code})")
+                throw Ghul.InvalidOperationException("chmod +x {path} failed (exit {process.exit_code})")
             fi
         si
 

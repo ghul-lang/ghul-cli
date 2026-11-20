@@ -53,7 +53,7 @@ namespace Ghul.Repl.Host is
                         else Completeness.COMPLETE
                         esac
                 fi
-            catch e: System.Exception
+            catch e: Ghul.Exception
             yrt
 
             return Completeness.COMPLETE

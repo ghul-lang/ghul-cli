@@ -74,7 +74,7 @@ namespace Ghul.Cli.Repl is
         // Text with the runs the lexer found in it coloured. Text outside
         // any run keeps the terminal's foreground.
         paint(text: string, spans: Collections.List[TOKEN_SPAN]) -> string is
-            let result = System.Text.StringBuilder()
+            let result = Text.StringBuilder()
             let written mut = 0
 
             for span in spans do
@@ -212,14 +212,14 @@ namespace Ghul.Cli.Repl is
         // query, `rgb:RRRR/GGGG/BBBB` with one to four hex digits a
         // component, is light. Null when it cannot be read.
         is_light_reply(reply: string) -> bool? static is
-            let start = reply.index_of("rgb:", System.StringComparison.ORDINAL)
+            let start = reply.index_of("rgb:", Text.StringComparison.ORDINAL)
 
             if start < 0 then
                 return null
             fi
 
             let components = LIST[double]()
-            let digits = System.Text.StringBuilder()
+            let digits = Text.StringBuilder()
             let i mut = start + 4
 
             while i <= reply.length /\ components.count < 3 do
@@ -228,7 +228,7 @@ namespace Ghul.Cli.Repl is
                 if c.is_ascii_hex_digit then
                     digits.append(c)
                 elif digits.length > 0 /\ digits.length <= 4 then
-                    let value = int.parse(digits.to_string(), System.Globalization.NumberStyles.HEX_NUMBER)
+                    let value = int.parse(digits.to_string(), Text.NumberStyles.HEX_NUMBER)
                     let maximum = (1 << (4 * digits.length)) - 1
 
                     components.add(cast double(value) / cast double(maximum))
@@ -308,10 +308,10 @@ namespace Ghul.Cli.Repl is
 
                 Std.write("\u001B]11;?\u001B\\")
 
-                let reply = System.Text.StringBuilder()
-                let deadline = System.DateTime.utc_now.add_milliseconds(cast double(timeout_milliseconds))
+                let reply = Text.StringBuilder()
+                let deadline = Time.DateTime.utc_now.add_milliseconds(cast double(timeout_milliseconds))
 
-                while System.DateTime.utc_now < deadline do
+                while Time.DateTime.utc_now < deadline do
                     if Std.key_available then
                         let c = Std.read_key(true).key_char
 
@@ -321,12 +321,12 @@ namespace Ghul.Cli.Repl is
                             return reply.to_string()
                         fi
                     else
-                        System.Threading.Thread.sleep(5)
+                        Tasks.Thread.sleep(5)
                     fi
                 od
 
                 return if reply.length > 0 then reply.to_string() else null fi
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 return null
             yrt
         si

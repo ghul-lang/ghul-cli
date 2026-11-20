@@ -10,7 +10,7 @@ namespace Ghul.Cli.Tests is
     use Ghul.Jupyter.MESSAGES
     use Ghul.Jupyter.SIGNER
 
-    use System.Text.Encoding
+    use Text.Encoding
 
     use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
     use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;

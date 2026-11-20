@@ -3,8 +3,8 @@ namespace Ghul.Project is
     use Collections.SET
     use IO.Directory
     use IO.Path
-    use System.Text.RegularExpressions.Regex
-    use System.Text.RegularExpressions.RegexOptions
+    use Text.Regex
+    use Text.RegexOptions
 
     /// The files a project's source globs match under its root directory,
     /// sorted and without duplicates.
@@ -70,7 +70,7 @@ namespace Ghul.Project is
         // A regular expression matching a relative path the glob matches,
         // with `/` between the path's parts.
         _pattern_for(glob: string) -> Regex static is
-            let result = System.Text.StringBuilder()
+            let result = Text.StringBuilder()
             let i mut = 0
 
             result.append('^')

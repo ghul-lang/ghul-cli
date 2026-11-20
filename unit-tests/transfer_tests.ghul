@@ -83,7 +83,7 @@ namespace Ghul.Cli.Tests is
 
             try
                 TRANSFER.get(client, "http://127.0.0.1:{port}/")
-            catch e: System.Exception
+            catch e: Ghul.Exception
                 threw = true
             finally
                 client.dispose()
@@ -121,12 +121,12 @@ namespace Ghul.Cli.Tests is
             _listener.start()
 
             let thread =
-                System.Threading.Thread(
+                Tasks.Thread(
                     () -> void is
                         do
                             try
                                 _answer(_listener.accept_tcp_client())
-                            catch e: System.Exception
+                            catch e: Ghul.Exception
                                 return
                             yrt
                         od
@@ -160,7 +160,7 @@ namespace Ghul.Cli.Tests is
                         return
                     fi
 
-                    header = "{header}{System.Text.Encoding.utf8.get_string(buffer, 0, read)}"
+                    header = "{header}{Text.Encoding.utf8.get_string(buffer, 0, read)}"
                 od
 
                 let index = if requests < _script.count then requests else _script.count - 1 fi
@@ -168,17 +168,17 @@ namespace Ghul.Cli.Tests is
 
                 requests = requests + 1
 
-                let body = System.Text.Encoding.utf8.get_bytes(text)
+                let body = Text.Encoding.utf8.get_bytes(text)
                 let length = if claimed >= 0 then claimed else body.count fi
 
-                let head = System.Text.Encoding.utf8.get_bytes(
+                let head = Text.Encoding.utf8.get_bytes(
                     "HTTP/1.1 {status} Scripted\r\nContent-Type: application/octet-stream\r\nConnection: close\r\nContent-Length: {length}\r\n\r\n")
 
                 stream.write(head, 0, head.count)
                 stream.write(body, 0, body.count)
 
                 client.close()
-            catch e: System.Exception
+            catch e: Ghul.Exception
             yrt
         si
     si

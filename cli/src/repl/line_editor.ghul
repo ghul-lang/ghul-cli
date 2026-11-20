@@ -109,7 +109,7 @@ namespace Ghul.Cli.Repl is
                         IO.File.write_all_lines(_path, cells |> Ghul.Pipes.map(c => encode(c)))
                     fi
                 fi
-            catch e: System.Exception
+            catch e: Ghul.Exception
             yrt
 
             return cells
@@ -119,7 +119,7 @@ namespace Ghul.Cli.Repl is
             try
                 IO.Directory.create_directory(IO.Path.get_directory_name(_path)!)
                 IO.File.append_all_text(_path, "{encode(cell)}\n")
-            catch e: System.Exception
+            catch e: Ghul.Exception
             yrt
         si
 
@@ -127,7 +127,7 @@ namespace Ghul.Cli.Repl is
             cell.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "")
 
         decode(line: string) -> string static is
-            let result = System.Text.StringBuilder()
+            let result = Text.StringBuilder()
             let i mut = 0
 
             while i < line.length do

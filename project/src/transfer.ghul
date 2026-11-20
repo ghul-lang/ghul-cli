@@ -55,18 +55,18 @@ namespace Ghul.Project is
                     if !is_transient(status) \/ attempt == attempts then
                         return HTTP_ANSWER(status, null)
                     fi
-                catch e: System.Exception
+                catch e: Ghul.Exception
                     if attempt == attempts then
                         throw e
                     fi
                 yrt
 
-                System.Threading.Thread.sleep(delay)
+                Tasks.Thread.sleep(delay)
 
                 delay = delay * 2
             od
 
-            throw System.InvalidOperationException("no attempt was made")
+            throw Ghul.InvalidOperationException("no attempt was made")
         si
 
         /// Whether an answer with `status` is worth asking again for: an error
@@ -115,6 +115,6 @@ namespace Ghul.Project is
         is_success: bool => body?
 
         /// The body as UTF-8 text, or empty where there is none.
-        text: string => if let b = body then System.Text.Encoding.utf8.get_string(b) else "" fi
+        text: string => if let b = body then Text.Encoding.utf8.get_string(b) else "" fi
     si
 si

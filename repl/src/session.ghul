@@ -407,8 +407,8 @@ namespace Ghul.Repl is
         // `impl Trait for Type`, with its whitespace collapsed, or null for
         // any other block.
         _impl_header(block: string) -> string? static is
-            let m = System.Text.RegularExpressions.Regex.match(
-                block, "^\\s*(impl\\s.*?)\\s+is\\b", System.Text.RegularExpressions.RegexOptions.SINGLELINE)
+            let m = Text.Regex.match(
+                block, "^\\s*(impl\\s.*?)\\s+is\\b", Text.RegexOptions.SINGLELINE)
 
             return if m.success then USE_DIRECTIVES.normalise(m.groups[1].value) else null fi
         si
