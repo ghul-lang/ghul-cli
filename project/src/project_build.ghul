@@ -505,6 +505,50 @@ namespace Ghul.Project is
             return (file_name = file_name, arguments = all, problem = null)
         si
 
+        /// The program that runs `output` and the arguments it is given, with
+        /// the wasm host the machine runs a wasm build under resolved to an
+        /// executable, or null with the problem reported to `say`.
+        ///
+        /// - project: the project that was built
+        /// - output: what the build wrote
+        /// - arguments: the arguments for the program being run
+        /// - global_host_wasm: the machine's global default wasm host
+        /// - say: where a problem is reported
+        resolved(
+            project: LOADED_PROJECT,
+            output: string,
+            arguments: Collections.List[string],
+            global_host_wasm: string?,
+            say: (string) -> void
+        ) -> (file_name: string, arguments: Collections.List[string])? static is
+            let wasm_host mut = (host = "", executable = "")
+
+            if project.target == BuildTarget.WASM then
+                // The host the ladder chose, resolved to an executable:
+                // node where the machine holds one that runs the target,
+                // the wasmtime host otherwise, fetched when it is missing
+                // the way the compiler download is on first use.
+                let chosen_host = WASM_HOST_SELECTION.effective(project, global_host_wasm, say)
+
+                if let (trouble): Result.ERROR = chosen_host then
+                    say(trouble)
+                    return null
+                fi
+
+                wasm_host = chosen_host!
+            fi
+
+            let to_run = command(project, output, arguments,
+                if project.target == BuildTarget.WASM then wasm_host else null fi)
+
+            if let problem: string = to_run.problem then
+                say(problem)
+                return null
+            fi
+
+            return (file_name = to_run.file_name, arguments = to_run.arguments)
+        si
+
         /// Runs the build, returning the program's exit status, or 1 where it
         /// cannot be started.
         ///
@@ -541,30 +585,13 @@ namespace Ghul.Project is
             say: (string) -> void,
             observe: ((string) -> void)?
         ) -> int static is
-            let wasm_host mut = (host = "", executable = "")
+            let found = resolved(project, output, arguments, global_host_wasm, say)
 
-            if project.target == BuildTarget.WASM then
-                // The host the ladder chose, resolved to an executable:
-                // node where the machine holds one that runs the target,
-                // the wasmtime host otherwise, fetched when it is missing
-                // the way the compiler download is on first use.
-                let chosen_host = WASM_HOST_SELECTION.effective(project, global_host_wasm, say)
-
-                if let (trouble): Result.ERROR = chosen_host then
-                    say(trouble)
-                    return 1
-                fi
-
-                wasm_host = chosen_host!
-            fi
-
-            let to_run = command(project, output, arguments,
-                if project.target == BuildTarget.WASM then wasm_host else null fi)
-
-            if let problem: string = to_run.problem then
-                say(problem)
+            if !found? then
                 return 1
             fi
+
+            let to_run = found!
 
             let start_info = System.Diagnostics.ProcessStartInfo()
 

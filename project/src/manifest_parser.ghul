@@ -75,24 +75,46 @@ namespace Ghul.Project is
         si
 
         // The `test` section, or null where there is none. It names its
-        // sources itself: nothing is assumed about where tests are.
+        // sources and its snapshot directory itself: nothing is assumed
+        // about where tests are.
         _test(root: JsonElement) -> TEST_SECTION? is
-            let section = _section(root, "test", ["sources", "dependencies"])
+            let section = _section(root, "test", ["sources", "dependencies", "snapshots"])
 
             if !section? then
                 return null
             fi
 
             let value: JsonElement mut
+            let snapshots: string? mut = null
+
+            if section.try_get_property("snapshots", value ref) then
+                snapshots = _string_option("test.snapshots", value)
+
+                if !snapshots? then
+                    return null
+                fi
+
+                if
+                    IO.Path.is_path_rooted(snapshots) \/
+                    snapshots.replace('\\', '/').split(['/']) |> Ghul.Pipes.any(part => part =~ "..")
+                then
+                    _report("test.snapshots", "'{snapshots}' is outside the project; use a directory inside it, relative to ghul-project.json, such as \"tests/snapshots\"")
+                    return null
+                fi
+            fi
 
             if !section.try_get_property("sources", value ref) then
-                _report("test.sources", "a test section lists the sources that hold the tests")
+                if snapshots? then
+                    return TEST_SECTION(LIST[string](), _dependencies(section), snapshots)
+                fi
+
+                _report("test.sources", "the test section is missing both \"sources\" and \"snapshots\"; add one or both, such as \"sources\": [\"tests/**/*.ghul\"] or \"snapshots\": \"tests/snapshots\"")
                 return null
             fi
 
             let sources = _string_list_option("test.sources", value)
 
-            return TEST_SECTION(sources, _dependencies(section))
+            return TEST_SECTION(sources, _dependencies(section), snapshots)
         si
 
         // A workspace or a collection: a directory that owns no sources and
