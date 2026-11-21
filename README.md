@@ -138,7 +138,7 @@ ghul add <name> [<git-url>]                  # depend on the newest release of a
 ghul rosetta <task>[/<part>] [<directory>]  # fetch a Rosetta Code solution as a project
 ghul build [--target <name>] [--debug] [--optimise <0-3>] [--emit <asm|ll>] [overrides]  # build the project in this directory
 ghul run [--target <name>] [--debug] [--optimise <0-3>] [overrides] [-- args...]  # build, then run it
-ghul test [--target <name>] [--debug] [--optimise <0-3>] [overrides] [-- runner args...]  # build the project with its tests, then run them
+ghul test [--target <name>] [--debug] [--optimise <0-3>] [--capture] [overrides] [-- runner args...]  # build the project with its tests, then run them
 ghul project response-file|compiler         # what editors read (see below)
 ghul install <compiler|wasmtime|node|llvm>  # install or update a component
 ghul update [--check]                     # update ghul and every installed tool to the newest release
@@ -334,10 +334,12 @@ Only `name` is required. The keys are:
   says to link dynamically instead. A library declared by more than one
   project is linked once, and each declarer's range must hold.
 - `test`: what `ghul test` adds to the project, and nothing else does:
-  `sources`, the globs naming the test sources, which is required, and
-  `dependencies`, the libraries the tests need beyond the project's own,
-  written as `dependencies` is. Nothing is assumed: a project without the
-  section has no tests, and `ghul test` says what to add. `ghul new` writes
+  `sources`, the globs naming the test sources; `dependencies`, the
+  libraries the tests need beyond the project's own, written as
+  `dependencies` is; and `snapshots`, a directory inside the project holding
+  the program's snapshot cases. A section has `sources`, `snapshots` or both.
+  Nothing is assumed: a project without the section has no tests, and
+  `ghul test` says what to add. `ghul new` writes
   one naming `tests/**/*.ghul` and the newest release of ghul-testing, with a
   first test in `tests/example_tests.ghul`.
 - `wasm.externs`: a JavaScript module whose exported functions supply the
@@ -375,6 +377,38 @@ understood or no test was selected. The arguments after `--` go to the runner:
 runs, `ghul test` publishes its progress where ghul-test publishes its own,
 in `$XDG_RUNTIME_DIR/ghul-test/<pid>.json` and `<pid>.events`;
 `GHUL_TEST_NO_PROGRESS` turns that off. `ghul test` builds for wasm and llvm.
+
+Where the `test` section has `snapshots`, `ghul test` also builds the program
+itself, as `ghul build` does, and runs it once for each snapshot case: each
+directory directly inside the snapshots directory that holds one of the files
+below, in name order. A case's files are ghul-test's:
+
+- `run.expected`: what the program prints on standard output. `run.wasm.expected`
+  or `run.llvm.expected` stands in for it on that target.
+- `run.err.expected`: what it prints on standard error, checked only where
+  this file exists.
+- `run.exit.expected`: its exit status, 0 where this file doesn't exist.
+- `run.in`: its standard input. `run.args`: its arguments, one a line.
+- `ignore-space`: compare with runs of spaces and tabs as one space and
+  trailing space dropped. Carriage returns are never compared.
+- `fixture/`: copied to a scratch directory the program runs in; otherwise it
+  runs in the project's directory.
+
+A case with `run.session` or `run.check` is skipped, as ghul-test runs those,
+and `*.png.expected` images are not compared. Each case is a TAP test in a
+report of its own after the unit tests', and what the program printed is kept
+in `out/<target>/snapshots/<case>/` for reading after a failure. The status is
+the higher of the two runs'. A program that does not finish in five minutes is
+stopped and fails its case.
+
+`ghul test --capture` writes each case's expectations from what the program
+does now, rather than comparing, and runs no unit tests. Where the snapshots
+directory has no cases it writes one, `default`, so a project's first snapshot
+is `ghul test --capture` after adding the key:
+
+```json
+"test": { "sources": ["tests/**/*.ghul"], "snapshots": "tests/snapshots" }
+```
 
 A project that lists one target builds that one. Where it lists several,
 `--target` names the one to build, or failing that `GHUL_TARGET` in the
@@ -647,10 +681,17 @@ which is where it is run from. The manifest lists the targets the solution passe
 where it builds and passes as a native executable, and `wasm` where it runs as WebAssembly. `ghul rosetta` prints the
 `ghul run` that runs it, with its command-line arguments where it takes any.
 
+The files the repository tests the solution with are fetched into the snapshot case
+`tests/snapshots/default/`, and the manifest's `test` section names that directory, so
+`ghul test` checks the program against what the repository expects of it. The manifest
+also carries the diagnostic options the repository builds its solutions with, where the
+index gives them.
+
 ```sh
 ghul rosetta 100-doors
 cd 100-doors
 ghul run --target llvm
+ghul test --target wasm
 ```
 
 ## tools for editors

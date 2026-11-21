@@ -1,0 +1,509 @@
+namespace Ghul.Project is
+    use Collections.LIST
+    use IO.Directory
+    use IO.File
+    use IO.Path
+
+    use Ghul.Pipes
+
+    /// One snapshot case: a directory inside the snapshot directory holding
+    /// what the program is given and what it is expected to do with it, in
+    /// ghul-test's file names.
+    ///
+    /// - name: the case's name as a run reports it
+    /// - directory: the case's directory, as a full path
+    class SNAPSHOT_CASE(name: string, directory: string) is si
+
+    /// The snapshot cases under a project's snapshot directory, and the
+    /// files of each one.
+    class SNAPSHOT_CASES is
+        /// The files whose presence makes a directory a case.
+        MARKERS: Collections.List[string] static =>
+            LIST[string]([
+                "run.expected", "run.dotnet.expected", "run.wasm.expected", "run.llvm.expected",
+                "run.in", "run.args", "run.session", "run.check",
+                "run.exit.expected", "run.err.expected"
+            ])
+
+        /// Whether `directory` holds any of the files a case is made of.
+        ///
+        /// - directory: the directory to look in
+        is_case(directory: string) -> bool static =>
+            MARKERS |> any(name => File.exists(Path.join([directory, name])))
+
+        /// The name of the case `ghul test --capture` writes where there is
+        /// none yet, and the one a fetched Rosetta Code solution has.
+        DEFAULT: string static => "default"
+
+        /// The cases under `root`: each directory directly inside it that
+        /// holds a case's files, in name order, named after its directory.
+        /// A directory whose name starts with a dot is not a case.
+        ///
+        /// - root: the snapshot directory
+        find(root: string) -> LIST[SNAPSHOT_CASE] static is
+            let cases = LIST[SNAPSHOT_CASE]()
+
+            if !Directory.exists(root) then
+                return cases
+            fi
+
+            let full = Path.get_full_path(root)
+
+            let directories = LIST[string](Directory.get_directories(full))
+
+            directories.sort((a: string, b: string) -> int => string.compare_ordinal(a, b))
+
+            for directory in directories do
+                let name = Path.get_file_name(directory) ?? ""
+
+                if name.starts_with(".") then
+                    continue
+                fi
+
+                if is_case(directory) then
+                    cases.add(SNAPSHOT_CASE(name, directory))
+                fi
+            od
+
+            return cases
+        si
+
+        /// The file a case holds for `what` under `target`: the one named for
+        /// the target, such as `run.wasm.expected` for `expected`, where the
+        /// case has one, and otherwise the plain one, such as
+        /// `run.expected`; null where it has neither.
+        ///
+        /// - directory: the case's directory
+        /// - what: `expected`, `exit.expected` or `err.expected`
+        /// - target: the target's name, `wasm` or `llvm`
+        expectation(directory: string, what: string, target: string) -> string? static is
+            let stem = if what.ends_with(".expected") then what.substring(0, what.length - ".expected".length) else "" fi
+            let for_target = if stem.length > 0 then "run.{stem}.{target}.expected" else "run.{target}.expected" fi
+            let plain = "run.{what}"
+
+            for name in [for_target, plain] do
+                let path = Path.join([directory, name])
+
+                if File.exists(path) then
+                    return path
+                fi
+            od
+
+            return null
+        si
+
+        /// The command line a case runs the program with: the lines of its
+        /// `run.args`, one argument a line, or none where it has no such file.
+        ///
+        /// - directory: the case's directory
+        arguments(directory: string) -> Collections.List[string] static is
+            let path = Path.join([directory, "run.args"])
+            let result = LIST[string]()
+
+            if !File.exists(path) then
+                return result
+            fi
+
+            for line in File.read_all_lines(path) do
+                result.add(line.trim_end(['\r']))
+            od
+
+            while result.count > 0 /\ result[result.count - 1].length == 0 do
+                result.remove_at(result.count - 1)
+            od
+
+            return result
+        si
+
+        /// Why `ghul test` cannot judge a case, or null where it can: a case
+        /// that drives a prompting program a line at a time, or that judges
+        /// its output with a script of its own, needs ghul-test.
+        ///
+        /// - directory: the case's directory
+        unsupported(directory: string) -> string? static is
+            if File.exists(Path.join([directory, "run.session"])) then
+                return "run.session is not supported by ghul test; ghul-test runs it"
+            fi
+
+            if File.exists(Path.join([directory, "run.check"])) then
+                return "run.check is not supported by ghul test; ghul-test runs it"
+            fi
+
+            return null
+        si
+    si
+
+    /// How a case's expected and actual output are compared.
+    class SNAPSHOT_COMPARE is
+        /// `text` as it is compared: carriage returns taken out and, where
+        /// `ignore_space`, each line's runs of spaces and tabs written as one
+        /// space and its trailing ones dropped, as `diff -b` compares.
+        ///
+        /// - text: the output or the expectation
+        /// - ignore_space: whether the amount of space is ignored
+        normalise(text: string, ignore_space: bool) -> string static is
+            let without_returns = text.replace("\r", "")
+
+            if !ignore_space then
+                return without_returns
+            fi
+
+            let lines = without_returns.split(['\n'])
+            let result = Text.StringBuilder()
+
+            for i in 0..lines.count do
+                if i > 0 then
+                    result.append('\n')
+                fi
+
+                let line = lines[i]
+                let in_space mut = false
+
+                for c in line do
+                    if c == ' ' \/ c == '\t' then
+                        in_space = true
+                    else
+                        if in_space then
+                            result.append(' ')
+                            in_space = false
+                        fi
+
+                        result.append(c)
+                    fi
+                od
+            od
+
+            return result.to_string()
+        si
+
+        /// Where `actual` first differs from `expected`, as a line saying
+        /// which line and what each holds there, or null where they are the
+        /// same.
+        ///
+        /// - expected: what the case expects, normalised
+        /// - actual: what the program did, normalised
+        difference(expected: string, actual: string) -> string? static is
+            if expected =~ actual then
+                return null
+            fi
+
+            let expected_lines = expected.split(['\n'])
+            let actual_lines = actual.split(['\n'])
+            let count = if expected_lines.count > actual_lines.count then expected_lines.count else actual_lines.count fi
+
+            for i in 0..count do
+                let wanted: string? = if i < expected_lines.count then expected_lines[i] else null fi
+                let got: string? = if i < actual_lines.count then actual_lines[i] else null fi
+
+                if wanted? /\ got? /\ wanted =~ got then
+                    continue
+                fi
+
+                return "line {i + 1}: expected {_shown(wanted)}, got {_shown(got)}"
+            od
+
+            return "the output differs only in its line endings"
+        si
+
+        _shown(line: string?) -> string static =>
+            if let text = line then Ghul.inspect([text]).substring(1, Ghul.inspect([text]).length - 2) else "the end of the output" fi
+    si
+
+    /// What one run of the program for a case did.
+    ///
+    /// - output: what it wrote to standard output
+    /// - error: what it wrote to standard error
+    /// - exit_code: the status it exited with
+    /// - timed_out: whether it was stopped for running too long
+    class SNAPSHOT_OUTCOME(output: string, error: string, exit_code: int, timed_out: bool) is si
+
+    /// Runs a built program against each of a project's snapshot cases and
+    /// reports each as a TAP test, or, under `--capture`, writes what it did
+    /// as the case's expectations.
+    class SNAPSHOT_RUN is
+        /// How long one run may take before it is stopped and fails.
+        TIMEOUT_MILLISECONDS: int static => 300_000
+
+        /// Runs `output` for every case under `snapshots`, writing TAP to
+        /// standard output, and returns 0 where every case passed, 1 where
+        /// any failed, and 2 where there was no case to run or the program
+        /// could not be started. Under `capture`, each case's expectations
+        /// are written from what the program did instead, and a snapshot
+        /// directory that holds no case yet becomes one.
+        ///
+        /// - project: the project that was built
+        /// - output: what the build wrote
+        /// - snapshots: the snapshot directory, relative to the project's
+        /// - global_host_wasm: the machine's global default wasm host
+        /// - capture: whether to write expectations rather than compare
+        /// - say: where a problem is reported
+        run(
+            project: LOADED_PROJECT,
+            output: string,
+            snapshots: string,
+            global_host_wasm: string?,
+            capture: bool,
+            say: (string) -> void
+        ) -> int static is
+            let root = Path.get_full_path(Path.join([project.directory, snapshots]))
+            let cases = SNAPSHOT_CASES.find(root)
+
+            if cases.count == 0 then
+                if !capture then
+                    let example = Path.join([snapshots, SNAPSHOT_CASES.DEFAULT, "run.expected"]).replace('\\', '/')
+
+                    if !Directory.exists(root) then
+                        say("the snapshots directory {snapshots} doesn't exist; create {example}, or run ghul test --capture to write it from the program's current output")
+                    else
+                        say("{snapshots} has no cases; add a directory holding a run.expected, such as {example}, or run ghul test --capture to write it from the program's current output")
+                    fi
+
+                    return 2
+                fi
+
+                let directory = Path.join([root, SNAPSHOT_CASES.DEFAULT])
+
+                Directory.create_directory(directory)
+                cases.add(SNAPSHOT_CASE(SNAPSHOT_CASES.DEFAULT, directory))
+            fi
+
+            let target = COMPILER_ARGUMENTS.target_name(project.target)
+            let results = Path.join([Path.get_directory_name(output)!, "snapshots"])
+            let failed mut = 0
+
+            IO.Std.write_line("TAP version 14")
+            IO.Std.write_line("1..{cases.count}")
+
+            for i in 0..cases.count do
+                let snapshot = cases[i]
+                let number = i + 1
+
+                if let reason = SNAPSHOT_CASES.unsupported(snapshot.directory) then
+                    IO.Std.write_line("ok {number} - {snapshot.name} # SKIP {reason}")
+                    continue
+                fi
+
+                let command = PROJECT_RUN.resolved(project, output, SNAPSHOT_CASES.arguments(snapshot.directory), global_host_wasm, say)
+
+                if !command? then
+                    return 2
+                fi
+
+                let outcome = _run_case(snapshot, command.file_name, command.arguments, project.directory)
+
+                if !outcome? then
+                    say("{command.file_name} could not be started")
+                    return 2
+                fi
+
+                _keep(results, snapshot, outcome)
+
+                if capture then
+                    _capture(snapshot, target, outcome)
+                    IO.Std.write_line("ok {number} - {snapshot.name} # captured")
+                    continue
+                fi
+
+                let problems = judge(snapshot.directory, target, outcome)
+
+                if problems.count == 0 then
+                    IO.Std.write_line("ok {number} - {snapshot.name}")
+                else
+                    failed = failed + 1
+
+                    IO.Std.write_line("not ok {number} - {snapshot.name}")
+                    IO.Std.write_line("  ---")
+
+                    for problem in problems do
+                        IO.Std.write_line("  - {problem}")
+                    od
+
+                    IO.Std.write_line("  output: {Path.get_relative_path(project.directory, Path.join([results, snapshot.name]))}")
+                    IO.Std.write_line("  ...")
+                fi
+
+                if Directory.get_files(snapshot.directory, "*.png.expected").count > 0 then
+                    IO.Std.write_line("# {snapshot.name}: its .png.expected images are not compared by ghul test")
+                fi
+            od
+
+            return if failed > 0 then 1 else 0 fi
+        si
+
+        /// What is wrong with what the program did for the case in
+        /// `directory` under `target`, one line a problem: its output, its
+        /// exit status and, where the case expects it, its standard error.
+        /// Empty where the run matched.
+        ///
+        /// - directory: the case's directory
+        /// - target: the target's name
+        /// - outcome: what the program did
+        judge(directory: string, target: string, outcome: SNAPSHOT_OUTCOME) -> Collections.List[string] static is
+            let problems = LIST[string]()
+
+            if outcome.timed_out then
+                problems.add("the program was stopped after {TIMEOUT_MILLISECONDS / 1000} seconds")
+                return problems
+            fi
+
+            let ignore_space = File.exists(Path.join([directory, "ignore-space"]))
+
+            if let expected = SNAPSHOT_CASES.expectation(directory, "expected", target) then
+                let difference =
+                    SNAPSHOT_COMPARE.difference(
+                        SNAPSHOT_COMPARE.normalise(File.read_all_text(expected), ignore_space),
+                        SNAPSHOT_COMPARE.normalise(outcome.output, ignore_space))
+
+                if let found = difference then
+                    problems.add("output, {Path.get_file_name(expected)}: {found}")
+                fi
+            fi
+
+            if let expected = SNAPSHOT_CASES.expectation(directory, "err.expected", target) then
+                let difference =
+                    SNAPSHOT_COMPARE.difference(
+                        SNAPSHOT_COMPARE.normalise(File.read_all_text(expected), ignore_space),
+                        SNAPSHOT_COMPARE.normalise(outcome.error, ignore_space))
+
+                if let found = difference then
+                    problems.add("standard error, {Path.get_file_name(expected)}: {found}")
+                fi
+            fi
+
+            let expected_exit =
+                if let path = SNAPSHOT_CASES.expectation(directory, "exit.expected", target) then
+                    let text = File.read_all_text(path).trim()
+                    let parsed: int mut = 0
+
+                    if int.try_parse(text, parsed ref) then parsed else -1 fi
+                else
+                    0
+                fi
+
+            if outcome.exit_code != expected_exit then
+                problems.add("exit status: expected {expected_exit}, got {outcome.exit_code}")
+            fi
+
+            return problems
+        si
+
+        // Writes what the program did as the case's expectations: its output
+        // to the expectation it compares against, its exit status where that
+        // is not 0 or the case already expects one, and its standard error
+        // where the case already expects that.
+        _capture(snapshot: SNAPSHOT_CASE, target: string, outcome: SNAPSHOT_OUTCOME) static is
+            let output = SNAPSHOT_CASES.expectation(snapshot.directory, "expected", target) ?? Path.join([snapshot.directory, "run.expected"])
+
+            File.write_all_text(output, outcome.output.replace("\r", ""))
+
+            let exit = SNAPSHOT_CASES.expectation(snapshot.directory, "exit.expected", target)
+
+            if exit? \/ outcome.exit_code != 0 then
+                File.write_all_text(exit ?? Path.join([snapshot.directory, "run.exit.expected"]), "{outcome.exit_code}\n")
+            fi
+
+            if let error = SNAPSHOT_CASES.expectation(snapshot.directory, "err.expected", target) then
+                File.write_all_text(error, outcome.error.replace("\r", ""))
+            fi
+        si
+
+        // Keeps what the program did for a case under the build's output, as
+        // run.out, run.err and run.exit, so a failure can be read in full.
+        _keep(results: string, snapshot: SNAPSHOT_CASE, outcome: SNAPSHOT_OUTCOME) static is
+            let directory = Path.join([results, snapshot.name])
+
+            Directory.create_directory(directory)
+            File.write_all_text(Path.join([directory, "run.out"]), outcome.output)
+            File.write_all_text(Path.join([directory, "run.err"]), outcome.error)
+            File.write_all_text(Path.join([directory, "run.exit"]), "{outcome.exit_code}\n")
+        si
+
+        // Runs the program once for `case`: in a fresh copy of the case's
+        // `fixture/` where it has one, and in the project's directory
+        // otherwise, with its `run.in` as standard input, closed once it is
+        // sent, or nothing at all. Null where the program cannot be started.
+        _run_case(snapshot: SNAPSHOT_CASE, file_name: string, arguments: Collections.List[string], project_directory: string) -> SNAPSHOT_OUTCOME? static is
+            let fixture = Path.join([snapshot.directory, "fixture"])
+            let copy = if Directory.exists(fixture) then _copy_fixture(fixture) else null fi
+
+            try
+                let start_info = System.Diagnostics.ProcessStartInfo()
+
+                start_info.file_name = file_name
+                start_info.use_shell_execute = false
+                start_info.redirect_standard_input = true
+                start_info.redirect_standard_output = true
+                start_info.redirect_standard_error = true
+                start_info.working_directory = copy ?? project_directory
+
+                for argument in arguments do
+                    start_info.argument_list.add(argument)
+                od
+
+                let process = PROCESS_START.start(start_info)
+
+                if !process? then
+                    return null
+                fi
+
+                let use started = process
+                let output = started.standard_output.read_to_end_async()
+                let error = started.standard_error.read_to_end_async()
+                let input = Path.join([snapshot.directory, "run.in"])
+
+                try
+                    if File.exists(input) then
+                        started.standard_input.write(File.read_all_text(input))
+                    fi
+                catch e: IO.IOException
+                    // The program ended or closed its input before reading all
+                    // of it, which is its business; what it printed is judged.
+                yrt
+
+                try
+                    started.standard_input.close()
+                catch e: IO.IOException
+                yrt
+
+                if !started.wait_for_exit(TIMEOUT_MILLISECONDS) then
+                    started.kill(true)
+                    started.wait_for_exit()
+
+                    return SNAPSHOT_OUTCOME(output.result, error.result, -1, true)
+                fi
+
+                started.wait_for_exit()
+
+                return SNAPSHOT_OUTCOME(output.result, error.result, started.exit_code, false)
+            finally
+                if let directory = copy then
+                    try
+                        Directory.delete(directory, true)
+                    catch e: IO.IOException
+                    yrt
+                fi
+            yrt
+        si
+
+        // A fresh copy of `fixture` under the system's temporary directory,
+        // leaving out the `.keep` files that hold empty directories in a
+        // repository.
+        _copy_fixture(fixture: string) -> string static is
+            let copy = Path.join([Path.get_temp_path(), "ghul-test-fixture-{System.Guid.new_guid()}"])
+
+            Directory.create_directory(copy)
+
+            for directory in Directory.get_directories(fixture, "*", IO.SearchOption.ALL_DIRECTORIES) do
+                Directory.create_directory(Path.join([copy, Path.get_relative_path(fixture, directory)]))
+            od
+
+            for file in Directory.get_files(fixture, "*", IO.SearchOption.ALL_DIRECTORIES) do
+                if (Path.get_file_name(file) ?? "") !~ ".keep" then
+                    File.copy(file, Path.join([copy, Path.get_relative_path(fixture, file)]))
+                fi
+            od
+
+            return copy
+        si
+    si
+si

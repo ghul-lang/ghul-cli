@@ -17,13 +17,16 @@ namespace Ghul.Project is
     /// - args: the command line it is run with
     /// - raster: whether it draws with ghul.raster
     /// - targets: the targets it builds for, the one to run first
+    /// - tests: the files that test it, by their path relative to its
+    ///   directory and the path of the file in the repository
     class ROSETTA_PART(
         id: string,
         source: string,
         files: Collections.List[(name: string, path: string)],
         args: Collections.List[string],
         raster: bool,
-        targets: Collections.List[BuildTarget]
+        targets: Collections.List[BuildTarget],
+        tests: Collections.List[(name: string, path: string)]
     ) is si
 
     /// What the index says about the solution `ghul rosetta` was asked for.
@@ -36,12 +39,15 @@ namespace Ghul.Project is
     ///   with, or null
     /// - raster_version: the ghul.raster release the tasks are tested with,
     ///   or null
+    /// - diagnostics: the diagnostic options the tasks are built with, each
+    ///   a manifest `diagnostics` key and the diagnostic names under it
     class ROSETTA_LOOKUP(
         part: ROSETTA_PART,
         commit: string?,
         compiler_version: string?,
         runtime_version: string?,
-        raster_version: string?
+        raster_version: string?,
+        diagnostics: Collections.List[(option: string, names: Collections.List[string])]
     ) is si
 
     /// Turns a Rosetta Code solution from ghul-rosetta-code into a project:
@@ -101,7 +107,7 @@ namespace Ghul.Project is
 
                 for part in parts do
                     if (wanted =~ wanted_slug /\ parts.count == 1) \/ ascii_name(_string(part, "id") ?? "") =~ wanted then
-                        return OK(ROSETTA_LOOKUP(_part(part), commit, compiler_version, runtime_version, raster_version))
+                        return OK(ROSETTA_LOOKUP(_part(part), commit, compiler_version, runtime_version, raster_version, _diagnostics(root)))
                     fi
                 od
 
@@ -162,7 +168,30 @@ namespace Ghul.Project is
         /// - raster_version: the ghul.raster release to compile in, or null
         /// - floors: the oldest release of each tool the project is written with, as `>=` ranges
         /// - libraries: the oldest release of ghul-runtime the project is written with, as `ghul new` writes them
-        manifest_text(name: string, part: ROSETTA_PART, targets: Collections.List[BuildTarget], raster_version: string?, floors: Collections.List[(tool: string, version: string)], libraries: Collections.List[(tool: string, version: string)]) -> string static is
+        manifest_text(name: string, part: ROSETTA_PART, targets: Collections.List[BuildTarget], raster_version: string?, floors: Collections.List[(tool: string, version: string)], libraries: Collections.List[(tool: string, version: string)]) -> string static =>
+            manifest_text(name, part, targets, raster_version, floors, libraries, LIST[(option: string, names: Collections.List[string])]())
+
+        /// The manifest `manifest_text` writes, building with `diagnostics`,
+        /// the diagnostic options the tasks are built with, and checking the
+        /// program against its snapshot under `SNAPSHOTS` where the part has
+        /// tests.
+        ///
+        /// - name: the project's name
+        /// - part: the solution
+        /// - targets: the targets the project builds for
+        /// - raster_version: the ghul.raster release to compile in, or null
+        /// - floors: the oldest release of each tool the project is written with, as `>=` ranges
+        /// - libraries: the oldest release of ghul-runtime the project is written with, as `ghul new` writes them
+        /// - diagnostics: each manifest `diagnostics` key and the diagnostic names under it
+        manifest_text(
+            name: string,
+            part: ROSETTA_PART,
+            targets: Collections.List[BuildTarget],
+            raster_version: string?,
+            floors: Collections.List[(tool: string, version: string)],
+            libraries: Collections.List[(tool: string, version: string)],
+            diagnostics: Collections.List[(option: string, names: Collections.List[string])]
+        ) -> string static is
             let raster = raster_release(raster_version, targets)
             // The first target listed is the one built where the machine can
             // build it, and a solution is built for wasm unless llvm is asked
@@ -189,12 +218,34 @@ namespace Ghul.Project is
                     ""
                 fi
 
+            let options = LIST[string]()
+
+            for (option, names) in diagnostics do
+                if names.count > 0 then
+                    options.add("\"{option}\": [{string.join(", ", names |> map(n => "\"{n}\""))}]")
+                fi
+            od
+
+            let diagnostics_text =
+                if options.count > 0 then
+                    ",\n    \"diagnostics\": {{ {string.join(", ", options)} }}"
+                else
+                    ""
+                fi
+
+            let test_text =
+                if part.tests.count > 0 then
+                    ",\n    \"test\": {{ \"snapshots\": \"{SNAPSHOTS}\" }}"
+                else
+                    ""
+                fi
+
             return
                 "{{\n"
                 "    \"name\": \"{name}\",\n"
                 "    \"kind\": \"program\",\n"
                 "    \"targets\": [{quoted}],\n"
-                "    \"sources\": [\"src/**/*.ghul\"]{tools_text}{dependencies}\n"
+                "    \"sources\": [\"src/**/*.ghul\"]{tools_text}{dependencies}{diagnostics_text}{test_text}\n"
                 "}}\n"
         si
 
@@ -212,6 +263,25 @@ namespace Ghul.Project is
             fi
 
             return floor
+        si
+
+        /// The snapshot directory of a fetched project, relative to it.
+        SNAPSHOTS: string static => "tests/snapshots"
+
+        /// Where a fetched project keeps the test file `name`, a path relative
+        /// to the part's directory in the repository: in the snapshot case
+        /// the solution's tests make, with `/` separators. Null where `name`
+        /// would reach outside that case.
+        ///
+        /// - name: the file's path relative to the part's directory
+        test_path(name: string) -> string? static is
+            let parts = name.replace('\\', '/').split(['/'])
+
+            if name.length == 0 \/ name.starts_with("/") \/ parts |> any(p => p.length == 0 \/ p =~ "." \/ p =~ "..") then
+                return null
+            fi
+
+            return "{SNAPSHOTS}/{SNAPSHOT_CASES.DEFAULT}/{string.join("/", parts)}"
         si
 
         /// The first ghul.raster release that builds for llvm.
@@ -259,7 +329,47 @@ namespace Ghul.Project is
 
             let raster = _bool(part, "raster")
 
-            return ROSETTA_PART(_string(part, "id") ?? "", _string(part, "source") ?? "", files, args, raster, _targets(part))
+            let tests = LIST[(name: string, path: string)]()
+
+            if part.try_get_property("tests", found ref) /\ found.value_kind == JsonValueKind.ARRAY then
+                for file in found.enumerate_array() do
+                    if let name = _string(file, "name"), path = _string(file, "path") then
+                        tests.add((name = name, path = path))
+                    fi
+                od
+            fi
+
+            return ROSETTA_PART(_string(part, "id") ?? "", _string(part, "source") ?? "", files, args, raster, _targets(part), tests)
+        si
+
+        // The index's `diagnostics`: an object whose keys are the manifest's
+        // `diagnostics` keys, each a list of diagnostic names. Empty where
+        // the index does not say.
+        _diagnostics(root: JsonElement) -> LIST[(option: string, names: Collections.List[string])] static is
+            let result = LIST[(option: string, names: Collections.List[string])]()
+            let section: JsonElement mut
+
+            if !root.try_get_property("diagnostics", section ref) \/ section.value_kind != JsonValueKind.OBJECT then
+                return result
+            fi
+
+            for option in ["suppress", "warn-as-error", "warn", "warn-as-hint"] do
+                let found: JsonElement mut
+
+                if section.try_get_property(option, found ref) /\ found.value_kind == JsonValueKind.ARRAY then
+                    let names = LIST[string]()
+
+                    for name in found.enumerate_array() do
+                        if name.value_kind == JsonValueKind.STRING then
+                            names.add(name.get_string() ?? "")
+                        fi
+                    od
+
+                    result.add((option = option, names = names))
+                fi
+            od
+
+            return result
         si
 
         _parse(text: string) -> JsonDocument? static is

@@ -321,6 +321,42 @@ fi
 [[ "$out" == *"not ok 2 - Tests.More.fails"* ]] || fail "ghul test did not report the failing test: $out"
 out="$(cd "$scratch/scaffolded" && dotnet "$cli" test --target wasm -- --filter 'Tests.ExampleTests.*' 2>/dev/null)" || fail "ghul test did not pass the runner's arguments on: $out"
 
+echo "project: ghul test captures and checks a program's snapshot cases on wasm..." >&2
+mkdir -p "$scratch/snapshotted/src"
+cat > "$scratch/snapshotted/ghul-project.json" <<'JSON'
+{
+    "name": "snapshotted",
+    "kind": "program",
+    "targets": ["wasm"],
+    "sources": ["src/**/*.ghul"],
+    "dependencies": { "ghul-runtime": { "version": ">=0.0.0" } },
+    "test": { "snapshots": "tests/snapshots" }
+}
+JSON
+cat > "$scratch/snapshotted/src/main.ghul" <<'GHUL'
+use default
+
+let name = IO.Std.read_line() ?? "nobody"
+write_line("hello {name}")
+GHUL
+if out="$(cd "$scratch/snapshotted" && dotnet "$cli" test 2>&1)"; then
+    fail "expected ghul test to fail with no snapshot cases: $out"
+fi
+[[ "$out" == *"the snapshots directory tests/snapshots doesn't exist"* ]] || fail "unexpected message for a missing snapshots directory: $out"
+out="$(cd "$scratch/snapshotted" && dotnet "$cli" test --capture 2>/dev/null)" || fail "ghul test --capture failed: $out"
+[[ "$out" == *"ok 1 - default # captured"* ]] || fail "ghul test --capture did not capture the default case: $out"
+check "$(cat "$scratch/snapshotted/tests/snapshots/default/run.expected")" "hello nobody" "captured snapshot"
+mkdir -p "$scratch/snapshotted/tests/snapshots/alice"
+echo alice > "$scratch/snapshotted/tests/snapshots/alice/run.in"
+echo "hello alice" > "$scratch/snapshotted/tests/snapshots/alice/run.expected"
+out="$(cd "$scratch/snapshotted" && dotnet "$cli" test 2>/dev/null)" || fail "ghul test of matching snapshots failed: $out"
+[[ "$out" == *"ok 1 - alice"* && "$out" == *"ok 2 - default"* ]] || fail "ghul test did not run both snapshot cases: $out"
+echo "hello bob" > "$scratch/snapshotted/tests/snapshots/alice/run.expected"
+if out="$(cd "$scratch/snapshotted" && dotnet "$cli" test 2>/dev/null)"; then
+    fail "expected ghul test to fail on a mismatched snapshot: $out"
+fi
+[[ "$out" == *"not ok 1 - alice"* && "$out" == *'line 1: expected "hello bob", got "hello alice"'* ]] || fail "ghul test did not report the mismatch: $out"
+
 echo "project: ghul new refuses a directory that is not empty..." >&2
 if err="$(cd "$scratch" && dotnet "$cli" new scaffolded 2>&1)"; then
     fail "expected ghul new to refuse a non-empty directory"

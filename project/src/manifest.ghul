@@ -115,14 +115,18 @@ namespace Ghul.Project is
 
     /// The manifest's `test` section: the sources that hold the project's
     /// tests and the libraries they need, both added to the project's own
-    /// for a `ghul test` build and left out of every other.
+    /// for a `ghul test` build and left out of every other, and the
+    /// directory holding what the program itself is expected to print.
     ///
     /// - sources: the globs naming the test sources, relative to the
-    ///   manifest's directory
+    ///   manifest's directory; empty where the section names only snapshots
     /// - dependencies: the libraries the tests need beyond the project's own
+    /// - snapshots: the directory, relative to the manifest's, holding the
+    ///   cases `ghul test` runs the program against, or null for none
     class TEST_SECTION(
         sources: Collections.List[string],
-        dependencies: Collections.Map[string, DEPENDENCY]
+        dependencies: Collections.Map[string, DEPENDENCY],
+        snapshots: string?
     ) is si
 
     // Whether the project is something to run or something to depend on, or

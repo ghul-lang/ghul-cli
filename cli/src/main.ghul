@@ -614,6 +614,26 @@ namespace Ghul.Cli is
             fetched.add((path = file.name, bytes = read!))
         od
 
+        // What tests the solution goes in its snapshot case, so `ghul test`
+        // checks the program against what the repository expects of it.
+        for file in part.tests do
+            let path = Ghul.Project.ROSETTA_TASK.test_path(file.name)
+
+            if !path? then
+                LOG.say("{part.id} has a test file {file.name} outside its directory, which is not fetched")
+                return 1
+            fi
+
+            let read = LLVM_TOOLCHAIN.fetch(url(file.path))
+
+            if let (error): ERROR = read then
+                LOG.say("{file.name}, which tests {part.id}, cannot be fetched: {error}")
+                return 1
+            fi
+
+            fetched.add((path = path!, bytes = read!))
+        od
+
         // The compiler and runtime the tasks are tested with are the oldest
         // the project accepts. An index that does not say leaves the compiler
         // free and takes the newest runtime, as `ghul new` does.
@@ -630,7 +650,7 @@ namespace Ghul.Cli is
                 new_project_libraries()
             fi
 
-        let manifest = Ghul.Project.ROSETTA_TASK.manifest_text(name, part, part.targets, found!.raster_version, floors, libraries)
+        let manifest = Ghul.Project.ROSETTA_TASK.manifest_text(name, part, part.targets, found!.raster_version, floors, libraries, found!.diagnostics)
         let check = Ghul.Project.MANIFEST_READER.read(manifest, Path.join([directory, Ghul.Project.MANIFEST_LOCATION.FILE_NAME]))
 
         if let problems: Ghul.Project.ReadOutcome.PROBLEMS = check then
@@ -645,10 +665,17 @@ namespace Ghul.Cli is
         File.write_all_text(Path.join([directory, ".gitignore"]), "out/\n")
 
         for file in fetched do
-            File.write_all_bytes(Path.join([directory, file.path]), file.bytes)
+            let target = Path.join([directory, file.path])
+
+            Directory.create_directory(Path.get_directory_name(target)!)
+            File.write_all_bytes(target, file.bytes)
         od
 
-        LOG.say("fetched {part.id} into {directory}")
+        if part.tests.count > 0 then
+            LOG.say("fetched {part.id} into {directory}; ghul test there checks it against {Ghul.Project.ROSETTA_TASK.SNAPSHOTS}/{Ghul.Project.SNAPSHOT_CASES.DEFAULT}")
+        else
+            LOG.say("fetched {part.id} into {directory}")
+        fi
 
         return 0
     si
@@ -1469,11 +1496,68 @@ namespace Ghul.Cli is
 
     // `ghul test`: the project built with its test section and an entry
     // that finds and runs its tests, then run, with its progress published
-    // where ghul-test publishes its own.
-    cmd_test(rest: Collections.List[string]) -> int =>
-        cmd_project(rest, true, true)
+    // where ghul-test publishes its own; and, where the test section names
+    // a snapshot directory, the program itself built and run against each
+    // case there. `--capture`, before any `--`, writes the cases'
+    // expectations from what the program does instead of comparing.
+    cmd_test(rest: Collections.List[string]) -> int is
+        let arguments = Collections.LIST[string]()
+        let capture mut = false
+        let after_separator mut = false
 
-    cmd_project(rest: Collections.List[string], wants_run: bool, for_tests: bool) -> int is
+        for argument in rest do
+            if !after_separator /\ argument =~ "--capture" then
+                capture = true
+            else
+                after_separator = after_separator \/ argument =~ "--"
+                arguments.add(argument)
+            fi
+        od
+
+        let manifest = Ghul.Project.PROJECT_LOADER.read_manifest(Path.get_full_path(Directory.get_current_directory())).manifest
+        let section = manifest?.test
+
+        let snapshots = section?.snapshots
+
+        if !snapshots? then
+            if capture then
+                LOG.say("--capture needs a snapshots directory, and ghul-project.json doesn't set one; add \"snapshots\": \"tests/snapshots\" to its test section")
+                return 2
+            fi
+
+            return cmd_project(arguments, true, true, null, false)
+        fi
+
+        let status mut = 0
+
+        if section!.sources.count > 0 /\ !capture then
+            status = cmd_project(arguments, true, true, null, false)
+        fi
+
+        // The runner's arguments are for the unit tests: the program runs
+        // with each case's own.
+        let build_arguments = Collections.LIST[string]()
+
+        for argument in arguments do
+            if argument =~ "--" then
+                break
+            fi
+
+            build_arguments.add(argument)
+        od
+
+        let snapshot_status = cmd_project(build_arguments, true, false, snapshots, capture)
+
+        return if snapshot_status > status then snapshot_status else status fi
+    si
+
+    cmd_project(rest: Collections.List[string], wants_run: bool, for_tests: bool) -> int =>
+        cmd_project(rest, wants_run, for_tests, null, false)
+
+    // As `cmd_project`, and where `snapshots` names a snapshot directory,
+    // runs the program against its cases rather than once, capturing
+    // their expectations where `capture`.
+    cmd_project(rest: Collections.List[string], wants_run: bool, for_tests: bool, snapshots: string?, capture: bool) -> int is
         let say = (message: string) -> void => LOG.say("{message}")
         let command_line = Ghul.Project.PROJECT_COMMAND_LINE.parse(rest, wants_run)
 
@@ -1540,6 +1624,10 @@ namespace Ghul.Cli is
         fi
 
         let start = (output: string) -> int is
+            if let directory = snapshots then
+                return Ghul.Project.SNAPSHOT_RUN.run(project, output, directory, global_defaults.host_wasm, capture, say)
+            fi
+
             if !for_tests then
                 return Ghul.Project.PROJECT_RUN.run(project, output, command_line.program_arguments, global_defaults.host_wasm, say)
             fi
