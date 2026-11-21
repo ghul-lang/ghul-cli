@@ -1,0 +1,190 @@
+namespace Ghul.Cli.Tests is
+    use Collections.LIST
+    use IO.Directory
+    use IO.File
+    use IO.Path
+
+    use Ghul.Project.SNAPSHOT_CASES
+    use Ghul.Project.SNAPSHOT_COMPARE
+    use Ghul.Project.SNAPSHOT_OUTCOME
+    use Ghul.Project.SNAPSHOT_RUN
+
+    use TestClass = Microsoft.VisualStudio.TestTools.UnitTesting.TestClassAttribute;
+    use Test = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
+
+    // How `ghul test` finds a project's snapshot cases, reads each one, and
+    // judges what the program did against it.
+    @TestClass()
+    class SNAPSHOT_TESTS_TESTS is
+        init() is si
+
+        _root() -> string is
+            let root = Path.combine(Path.get_temp_path(), "ghul-snapshots-{System.Guid.new_guid().to_string("N")}")
+
+            Directory.create_directory(root)
+
+            return root
+        si
+
+        _case(root: string, name: string, files: Collections.List[(name: string, text: string)]) -> string is
+            let directory = Path.combine(root, name)
+
+            Directory.create_directory(directory)
+
+            for file in files do
+                File.write_all_text(Path.combine(directory, file.name), file.text)
+            od
+
+            return directory
+        si
+
+        _files(name: string, text: string) -> Collections.List[(name: string, text: string)] =>
+            LIST[(name: string, text: string)]([(name = name, text = text)])
+
+        @Test()
+        each_directory_holding_a_run_file_is_a_case_in_name_order() is
+            let root = _root()
+
+            _case(root, "two", _files("run.in", "x\n"))
+            _case(root, "one", _files("run.expected", "hello\n"))
+            _case(root, "notes", _files("readme.txt", "not a case\n"))
+            _case(root, ".hidden", _files("run.expected", "hidden\n"))
+            File.write_all_text(Path.combine(root, "run.expected"), "the directory itself is not a case\n")
+
+            let names = string.join(",", SNAPSHOT_CASES.find(root) |> Ghul.Pipes.map(c => c.name))
+
+            assert names =~ "one,two" else names
+
+            Directory.delete(root, true)
+        si
+
+        @Test()
+        a_snapshots_directory_that_does_not_exist_has_no_cases() is
+            assert SNAPSHOT_CASES.find(Path.combine(Path.get_temp_path(), "ghul-no-such-{System.Guid.new_guid().to_string("N")}")).count == 0
+        si
+
+        @Test()
+        an_expectation_for_the_target_stands_in_for_the_plain_one() is
+            let root = _root()
+            let directory = _case(root, "default", _files("run.expected", "plain\n"))
+
+            File.write_all_text(Path.combine(directory, "run.wasm.expected"), "wasm\n")
+
+            assert (Path.get_file_name(SNAPSHOT_CASES.expectation(directory, "expected", "wasm") ?? "") ?? "") =~ "run.wasm.expected"
+            assert (Path.get_file_name(SNAPSHOT_CASES.expectation(directory, "expected", "llvm") ?? "") ?? "") =~ "run.expected"
+            assert !SNAPSHOT_CASES.expectation(directory, "exit.expected", "llvm")?
+
+            Directory.delete(root, true)
+        si
+
+        @Test()
+        a_target_named_exit_expectation_is_found_by_its_stem() is
+            let root = _root()
+            let directory = _case(root, "default", _files("run.exit.llvm.expected", "3\n"))
+
+            assert (Path.get_file_name(SNAPSHOT_CASES.expectation(directory, "exit.expected", "llvm") ?? "") ?? "") =~ "run.exit.llvm.expected"
+            assert !SNAPSHOT_CASES.expectation(directory, "exit.expected", "wasm")?
+
+            Directory.delete(root, true)
+        si
+
+        @Test()
+        run_args_holds_one_argument_a_line() is
+            let root = _root()
+            let directory = _case(root, "default", _files("run.args", "first\nwith space\n\n"))
+
+            let arguments = SNAPSHOT_CASES.arguments(directory)
+
+            assert arguments.count == 2 else "{arguments.count}"
+            assert arguments[1] =~ "with space"
+
+            Directory.delete(root, true)
+        si
+
+        @Test()
+        a_session_or_a_check_script_is_left_to_ghul_test() is
+            let root = _root()
+            let session = _case(root, "session", _files("run.session", "1\n"))
+            let check = _case(root, "check", _files("run.check", "#!/bin/sh\n"))
+            let plain = _case(root, "plain", _files("run.expected", "x\n"))
+
+            assert SNAPSHOT_CASES.unsupported(session)?
+            assert SNAPSHOT_CASES.unsupported(check)?
+            assert !SNAPSHOT_CASES.unsupported(plain)?
+
+            Directory.delete(root, true)
+        si
+
+        @Test()
+        output_is_compared_without_carriage_returns() is
+            assert !SNAPSHOT_COMPARE.difference(SNAPSHOT_COMPARE.normalise("a\nb\n", false), SNAPSHOT_COMPARE.normalise("a\r\nb\r\n", false))?
+        si
+
+        @Test()
+        spacing_counts_unless_the_case_ignores_it() is
+            assert SNAPSHOT_COMPARE.difference(SNAPSHOT_COMPARE.normalise("a  b\n", false), SNAPSHOT_COMPARE.normalise("a b\n", false))?
+            assert !SNAPSHOT_COMPARE.difference(SNAPSHOT_COMPARE.normalise("a  b\n", true), SNAPSHOT_COMPARE.normalise("a\tb   \n", true))?
+        si
+
+        @Test()
+        a_difference_names_the_first_line_that_differs() is
+            let found = SNAPSHOT_COMPARE.difference("one\ntwo\n", "one\nthree\n") ?? ""
+
+            assert found =~ "line 2: expected \"two\", got \"three\"" else found
+        si
+
+        @Test()
+        missing_output_is_reported_as_the_end_of_it() is
+            let found = SNAPSHOT_COMPARE.difference("one\ntwo", "one") ?? ""
+
+            assert found =~ "line 2: expected \"two\", got the end of the output" else found
+        si
+
+        @Test()
+        a_run_passes_when_its_output_and_status_match() is
+            let root = _root()
+            let directory = _case(root, "default", _files("run.expected", "hello\n"))
+
+            assert SNAPSHOT_RUN.judge(directory, "wasm", SNAPSHOT_OUTCOME("hello\n", "", 0, false)).count == 0
+
+            Directory.delete(root, true)
+        si
+
+        @Test()
+        a_non_zero_status_fails_a_case_that_does_not_expect_it() is
+            let root = _root()
+            let directory = _case(root, "default", _files("run.expected", "hello\n"))
+
+            let problems = SNAPSHOT_RUN.judge(directory, "wasm", SNAPSHOT_OUTCOME("hello\n", "", 1, false))
+
+            assert problems.count == 1 /\ problems[0] =~ "exit status: expected 0, got 1" else string.join("; ", problems)
+
+            Directory.delete(root, true)
+        si
+
+        @Test()
+        an_expected_status_and_standard_error_are_checked() is
+            let root = _root()
+            let directory = _case(root, "default", _files("run.exit.expected", "2\n"))
+
+            File.write_all_text(Path.combine(directory, "run.err.expected"), "bad\n")
+
+            assert SNAPSHOT_RUN.judge(directory, "llvm", SNAPSHOT_OUTCOME("", "bad\n", 2, false)).count == 0
+            assert SNAPSHOT_RUN.judge(directory, "llvm", SNAPSHOT_OUTCOME("", "worse\n", 2, false)).count == 1
+
+            Directory.delete(root, true)
+        si
+
+        @Test()
+        a_run_stopped_for_time_fails_with_that_alone() is
+            let root = _root()
+            let directory = _case(root, "default", _files("run.expected", "hello\n"))
+
+            let problems = SNAPSHOT_RUN.judge(directory, "wasm", SNAPSHOT_OUTCOME("", "", -1, true))
+
+            assert problems.count == 1 /\ problems[0].contains("stopped") else string.join("; ", problems)
+
+            Directory.delete(root, true)
+        si
+    si
+si

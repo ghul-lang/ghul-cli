@@ -75,6 +75,29 @@ namespace Ghul.Cli.Tests is
         si
 
         @Test()
+        a_test_section_may_name_only_a_snapshots_directory() is
+            let test = _manifest(", \"test\": {{ \"snapshots\": \"tests/snapshots\" }}").test!
+
+            assert test.sources.count == 0
+            assert (test.snapshots ?? "") =~ "tests/snapshots"
+        si
+
+        @Test()
+        a_test_section_may_name_sources_and_snapshots_together() is
+            let test = _manifest(", \"test\": {{ \"sources\": [\"tests/**/*.ghul\"], \"snapshots\": \"tests/snapshots\" }}").test!
+
+            assert test.sources.count == 1
+            assert (test.snapshots ?? "") =~ "tests/snapshots"
+        si
+
+        @Test()
+        a_snapshots_directory_outside_the_project_is_a_problem() is
+            let problems = _problems(", \"test\": {{ \"snapshots\": \"../elsewhere\" }}")
+
+            assert problems.contains("test.snapshots: '../elsewhere' is outside the project") else problems
+        si
+
+        @Test()
         an_unknown_key_in_the_test_section_is_a_problem() is
             let problems = _problems(", \"test\": {{ \"sources\": [], \"runner\": \"x\" }}")
 

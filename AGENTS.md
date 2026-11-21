@@ -230,6 +230,9 @@ looks for them.
   each after the libraries it depends on. `TEST_BUILD` turns a project into
   what `ghul test` builds: its `test` section's sources and libraries added,
   reflection on, and a generated entry chosen with `--entry`;
+  `SNAPSHOT_RUN` runs the program against the `test.snapshots` cases that
+  `SNAPSHOT_CASES` finds, judging each with `SNAPSHOT_COMPARE`, or writes
+  their expectations for `--capture`;
   `TEST_PROGRESS` reads the runner's TAP from `PROJECT_RUN`'s line observer
   and writes ghul-test's progress files. `FILE_LOCK` is the advisory lock
   the cache and the CLI's script cache share. `EDITOR_FILES` writes what

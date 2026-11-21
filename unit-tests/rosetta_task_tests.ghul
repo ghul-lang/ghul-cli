@@ -50,6 +50,43 @@ namespace Ghul.Cli.Tests is
             "    {{ \"id\": \"erdős-woods-numbers\", \"source\": \"tasks/erdős-woods-numbers/erdős-woods-numbers.ghul\", \"wasm\": true, \"native\": true }} ] }}\n"
             "] }}\n"
 
+        _tested_index: string =>
+            "{{ \"version\": 1, \"commit\": \"abc123\", \"diagnostics\": {{ \"suppress\": [\"file-private-function\"], \"warn-as-error\": [\"null-deref\"] }}, \"tasks\": [\n"
+            "  {{ \"slug\": \"doors\", \"parts\": [\n"
+            "    {{ \"id\": \"doors\", \"source\": \"tasks/doors/doors.ghul\", \"wasm\": true, \"native\": true,\n"
+            "      \"tests\": [{{ \"name\": \"run.expected\", \"path\": \"tasks/doors/run.expected\" }}, {{ \"name\": \"run.in\", \"path\": \"tasks/doors/run.in\" }}] }} ] }}\n"
+            "] }}\n"
+
+        @Test()
+        a_part_with_tests_is_checked_against_them_with_the_tasks_diagnostics() is
+            let found = ROSETTA_TASK.find(_tested_index, "doors")
+
+            assert found? else (cast Result.ERROR(found)).error
+
+            assert found!.part.tests.count == 2
+            assert found!.diagnostics.count == 2
+
+            let text = ROSETTA_TASK.manifest_text("doors", found!.part, found!.part.targets, null, _no_floors(), _libraries(), found!.diagnostics)
+
+            assert text.contains("\"test\": {{ \"snapshots\": \"tests/snapshots\" }}") else text
+            assert text.contains("\"diagnostics\": {{ \"suppress\": [\"file-private-function\"], \"warn-as-error\": [\"null-deref\"] }}") else text
+        si
+
+        @Test()
+        a_part_without_tests_has_no_test_section() is
+            let found = ROSETTA_TASK.find(_index, "fern")
+
+            assert !ROSETTA_TASK.manifest_text("fern", found!.part, found!.part.targets, null, _no_floors(), _libraries()).contains("\"test\"")
+        si
+
+        @Test()
+        a_test_file_goes_in_the_default_case_and_never_outside_it() is
+            _same("tests/snapshots/default/run.expected", ROSETTA_TASK.test_path("run.expected") ?? "")
+            _same("tests/snapshots/default/fixture/data.txt", ROSETTA_TASK.test_path("fixture/data.txt") ?? "")
+            assert !ROSETTA_TASK.test_path("../run.expected")?
+            assert !ROSETTA_TASK.test_path("/etc/passwd")?
+        si
+
         @Test()
         a_slug_finds_its_only_part_with_its_files_and_arguments() is
             let found = ROSETTA_TASK.find(_index, "abc-words")
