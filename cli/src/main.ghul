@@ -614,6 +614,26 @@ namespace Ghul.Cli is
             fetched.add((path = file.name, bytes = read!))
         od
 
+        // What tests the solution goes in its snapshot case, so `ghul test`
+        // checks the program against what the repository expects of it.
+        for file in part.tests do
+            let path = Ghul.Project.ROSETTA_TASK.test_path(file.name)
+
+            if !path? then
+                LOG.say("{part.id} has a test file {file.name} outside its directory, which is not fetched")
+                return 1
+            fi
+
+            let read = LLVM_TOOLCHAIN.fetch(url(file.path))
+
+            if let (error): ERROR = read then
+                LOG.say("{file.name}, which tests {part.id}, cannot be fetched: {error}")
+                return 1
+            fi
+
+            fetched.add((path = path!, bytes = read!))
+        od
+
         // The compiler and runtime the tasks are tested with are the oldest
         // the project accepts. An index that does not say leaves the compiler
         // free and takes the newest runtime, as `ghul new` does.
@@ -630,7 +650,7 @@ namespace Ghul.Cli is
                 new_project_libraries()
             fi
 
-        let manifest = Ghul.Project.ROSETTA_TASK.manifest_text(name, part, part.targets, found!.raster_version, floors, libraries)
+        let manifest = Ghul.Project.ROSETTA_TASK.manifest_text(name, part, part.targets, found!.raster_version, floors, libraries, found!.diagnostics)
         let check = Ghul.Project.MANIFEST_READER.read(manifest, Path.join([directory, Ghul.Project.MANIFEST_LOCATION.FILE_NAME]))
 
         if let problems: Ghul.Project.ReadOutcome.PROBLEMS = check then
@@ -645,10 +665,17 @@ namespace Ghul.Cli is
         File.write_all_text(Path.join([directory, ".gitignore"]), "out/\n")
 
         for file in fetched do
-            File.write_all_bytes(Path.join([directory, file.path]), file.bytes)
+            let target = Path.join([directory, file.path])
+
+            Directory.create_directory(Path.get_directory_name(target)!)
+            File.write_all_bytes(target, file.bytes)
         od
 
-        LOG.say("fetched {part.id} into {directory}")
+        if part.tests.count > 0 then
+            LOG.say("fetched {part.id} into {directory}; ghul test there checks it against {Ghul.Project.ROSETTA_TASK.SNAPSHOTS}/{Ghul.Project.SNAPSHOT_CASES.DEFAULT}")
+        else
+            LOG.say("fetched {part.id} into {directory}")
+        fi
 
         return 0
     si
