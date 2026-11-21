@@ -329,6 +329,7 @@ cat > "$scratch/snapshotted/ghul-project.json" <<'JSON'
     "kind": "program",
     "targets": ["wasm"],
     "sources": ["src/**/*.ghul"],
+    "dependencies": { "ghul-runtime": { "version": ">=0.0.0" } },
     "test": { "snapshots": "tests/snapshots" }
 }
 JSON
