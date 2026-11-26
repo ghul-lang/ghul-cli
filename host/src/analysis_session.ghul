@@ -28,7 +28,7 @@ namespace Ghul.Repl.Host is
     // its own.
     class ANALYSER_PROCESS: AnalyserConnection is
         _process: System.Diagnostics.Process
-        _next: Tasks.TASK[string?]?
+        _next: Concurrency.Future[string?]?
 
         init(compiler: COMPILER_COMMAND, directory: string) is
             self.init(compiler, directory, Collections.LIST[string]())

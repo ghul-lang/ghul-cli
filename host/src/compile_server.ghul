@@ -31,7 +31,7 @@ namespace Ghul.Repl.Host is
     // ends and the tool does not.
     class SERVER_PROCESS: ServerConnection is
         _process: System.Diagnostics.Process
-        _ready: Tasks.TASK[string?]
+        _ready: Concurrency.Future[string?]
 
         init(compiler: COMPILER_COMMAND, directory: string) is
             let start_info = DETACHED_START.of(compiler.file_name)
@@ -80,7 +80,7 @@ namespace Ghul.Repl.Host is
             return _wait(_process.standard_output.read_line_async(), timeout_ms)
         si
 
-        _wait(line: Tasks.TASK[string?], timeout_ms: int) -> string? is
+        _wait(line: Concurrency.Future[string?], timeout_ms: int) -> string? is
             try
                 if line.wait(timeout_ms) then
                     return line.result
@@ -174,8 +174,8 @@ namespace Ghul.Repl.Host is
         // Compiles a throwaway cell in the background, so that the
         // compiler's first compile, which takes most of a second, is paid
         // while the first cell is being typed rather than after it.
-        warm_up() -> Tasks.TASK =>
-            Tasks.TASK.run(() -> void is
+        warm_up() -> Concurrency.Future =>
+            Concurrency.Future.run(() -> void is
                 System.Threading.Monitor.enter(_exchange_lock)
 
                 try
