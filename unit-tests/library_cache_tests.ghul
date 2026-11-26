@@ -210,10 +210,10 @@ namespace Ghul.Cli.Tests is
                 let commit = _commit_of(repository, "v1")
                 let cache = LIBRARY_CACHE(Path.combine(scratch, "cache"))
                 let problems = System.Collections.Concurrent.ConcurrentBag[string]()
-                let tasks = LIST[Tasks.TASK]()
+                let tasks = LIST[Concurrency.Future]()
 
                 for worker in 0..8 do
-                    tasks.add(Tasks.TASK.run(() -> void is
+                    tasks.add(Concurrency.Future.run(() -> void is
                         for attempt in 0..20 do
                             let outcome = cache.fetch_tag(url, "v1")
 
@@ -228,7 +228,7 @@ namespace Ghul.Cli.Tests is
                     si))
                 od
 
-                Tasks.TASK.wait_all(tasks.to_array())
+                Concurrency.Future.wait_all(tasks.to_array())
 
                 assert problems.count == 0 else string.join("; ", problems)
             finally
