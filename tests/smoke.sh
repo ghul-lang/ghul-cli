@@ -386,8 +386,8 @@ repl_generated_in="$scratch/repl-generated-in.txt"
 cat > "$repl_generated_in" <<'REPL'
 let up = ["ann"] |> map(n => n.to_upper()) |> collect_mutable()
 
-count_async() -> Tasks.TASK[int] is
-    await Tasks.TASK.delay(1)
+count_async() -> Concurrency.Future[int] is
+    await Concurrency.Future.delay(1)
     return 7
 si
 
