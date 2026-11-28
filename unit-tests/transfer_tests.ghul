@@ -121,7 +121,7 @@ namespace Ghul.Cli.Tests is
             _listener.start()
 
             let thread =
-                Tasks.Thread(
+                System.Threading.Thread(
                     () -> void is
                         do
                             try

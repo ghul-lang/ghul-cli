@@ -111,7 +111,7 @@ namespace Ghul.Jupyter is
             let shell_stopped = System.Threading.ManualResetEventSlim(false)
 
             let control_thread =
-                Tasks.Thread(
+                System.Threading.Thread(
                     System.Threading.ThreadStart(
                         () -> void is
                             while _is_running do

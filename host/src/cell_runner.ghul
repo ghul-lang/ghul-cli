@@ -2,7 +2,7 @@ namespace Ghul.Repl.Host is
     use Ghul.Repl.RUN_RESULT
 
     use System.Threading.ManualResetEventSlim
-    use Tasks.Thread
+    use System.Threading.Thread
     use System.Threading.WaitHandle
 
     // How a cell's run ended: with the value it ended on or the error it
