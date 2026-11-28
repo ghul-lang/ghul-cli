@@ -33,13 +33,13 @@ namespace Ghul.Cli.Tests is
 
             let interrupter: System.Threading.ThreadStart = () -> void is
                 while !runner.is_running do
-                    Tasks.Thread.sleep(5)
+                    System.Threading.Thread.sleep(5)
                 od
 
                 runner.interrupt()
             si
 
-            Tasks.Thread(interrupter).start()
+            System.Threading.Thread(interrupter).start()
 
             let started = Time.DateTime.utc_now
 

@@ -602,7 +602,7 @@ namespace Ghul.Cli.Repl is
                     return true
                 fi
 
-                Tasks.Thread.sleep(1)
+                System.Threading.Thread.sleep(1)
             od
 
             return false

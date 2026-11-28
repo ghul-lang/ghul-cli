@@ -22,13 +22,13 @@ namespace Ghul.Jupyter is
     // this, and where it does not, a parent that has become init says
     // the same thing: whoever started this kernel is gone.
     class PARENT_WATCH(_stop: (string) -> void) is
-        _thread: Tasks.Thread?
+        _thread: System.Threading.Thread?
         _is_watching: bool
 
         start() is
             _is_watching = true
 
-            let thread = Tasks.Thread(System.Threading.ThreadStart(() -> void => _watch()))
+            let thread = System.Threading.Thread(System.Threading.ThreadStart(() -> void => _watch()))
 
             thread.is_background = true
 
@@ -53,7 +53,7 @@ namespace Ghul.Jupyter is
             let started_orphaned = !parent? /\ _was_reparented()
 
             while _is_watching do
-                Tasks.Thread.sleep(1000)
+                System.Threading.Thread.sleep(1000)
 
                 if !_is_watching then
                     return

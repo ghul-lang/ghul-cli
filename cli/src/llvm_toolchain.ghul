@@ -162,7 +162,7 @@ namespace Ghul.Cli is
             catch e: Ghul.Exception
                 let cause = e.get_base_exception()
 
-                if isa Tasks.TaskCanceledException(cause) then
+                if isa System.Threading.Tasks.TaskCanceledException(cause) then
                     return ERROR("no answer within 3 seconds")
                 fi
 

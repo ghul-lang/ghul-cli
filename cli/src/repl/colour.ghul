@@ -321,7 +321,7 @@ namespace Ghul.Cli.Repl is
                             return reply.to_string()
                         fi
                     else
-                        Tasks.Thread.sleep(5)
+                        System.Threading.Thread.sleep(5)
                     fi
                 od
 

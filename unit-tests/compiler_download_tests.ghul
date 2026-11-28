@@ -256,7 +256,7 @@ namespace Ghul.Cli.Tests is
     class FEED_SERVER is
         _handler: (string) -> ARRAY[ubyte]?
         _listener: System.Net.Sockets.TcpListener
-        _thread: Tasks.Thread?
+        _thread: System.Threading.Thread?
 
         init(handler: (string) -> ARRAY[ubyte]?) is
             _handler = handler
@@ -273,7 +273,7 @@ namespace Ghul.Cli.Tests is
         // Serves until stopped.
         start() is
             let thread =
-                Tasks.Thread(
+                System.Threading.Thread(
                     () -> void is
                         do
                             try

@@ -187,7 +187,7 @@ namespace Ghul.Jupyter.Tests is
                 return true
             fi
 
-            Tasks.Thread.sleep(200)
+            System.Threading.Thread.sleep(200)
         od
 
         return process.has_exited
@@ -346,13 +346,13 @@ namespace Ghul.Jupyter.Tests is
         _single_interrupt_case(
             client,
             "a loop writing a line each time round",
-            "let i mut = 0\nwhile true do\n    IO.Std.write_line(\"line {{i}}\")\n    i = i + 1\n    Tasks.Thread.sleep(20)\nod\n",
+            "let i mut = 0\nwhile true do\n    IO.Std.write_line(\"line {{i}}\")\n    i = i + 1\n    System.Threading.Thread.sleep(20)\nod\n",
             m => m.msg_type =~ "stream")
 
         _single_interrupt_case(
             client,
             "a loop updating a display",
-            "display(0, \"counter\")\nlet i mut = 0\nwhile true do\n    update_display(i, \"counter\")\n    i = i + 1\n    Tasks.Thread.sleep(20)\nod\n",
+            "display(0, \"counter\")\nlet i mut = 0\nwhile true do\n    update_display(i, \"counter\")\n    i = i + 1\n    System.Threading.Thread.sleep(20)\nod\n",
             m => m.msg_type =~ "display_data")
 
         _single_interrupt_case(
@@ -523,7 +523,7 @@ namespace Ghul.Jupyter.Tests is
                 client.published_within(sent, Time.TimeSpan.from_seconds(60.0), wanted),
                 "{label}: the cell runs")
         else
-            Tasks.Thread.sleep(10_000)
+            System.Threading.Thread.sleep(10_000)
         fi
 
         let _ = client.send_control("interrupt_request", JSON.EMPTY_OBJECT)

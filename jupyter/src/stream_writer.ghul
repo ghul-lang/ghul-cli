@@ -62,13 +62,13 @@ namespace Ghul.Jupyter is
     // thread of its own so that a kernel busy running a cell still
     // answers and the front end does not decide it has died.
     class HEARTBEAT(_address: string) is
-        _thread: Tasks.Thread?
+        _thread: System.Threading.Thread?
         _is_running: bool
 
         start() is
             _is_running = true
 
-            let thread = Tasks.Thread(System.Threading.ThreadStart(() -> void => _serve()))
+            let thread = System.Threading.Thread(System.Threading.ThreadStart(() -> void => _serve()))
 
             thread.is_background = true
 
